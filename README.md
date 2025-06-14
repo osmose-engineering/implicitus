@@ -83,28 +83,3 @@ make example
 ## Contributing
 
 Please read **CONTRIBUTING.md** for guidelines on how to help out.
-# Implicitus
-
-
-
-
-
-
-
-## Getting Started
-
-**Prerequisites**  
-- Rust >=1.60  
-- Python 3.8+  
-- Node.js 14+
-
-**Quickstart**  
-```bash
-git clone https://github.com/your-org/implicitus.git
-cd implicitus
-cd core_engine && cargo build
-cd ../ai_adapter && pip install -r requirements.txt
-cd ../canvas_api && npm install
-# Run the example pipeline
-make example
-```
