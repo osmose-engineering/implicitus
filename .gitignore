@@ -1,0 +1,43 @@
+# macOS
+.DS_Store
+
+# Windows
+Thumbs.db
+
+# Editor directories and files
+.vscode/
+*.swp
+*~
+
+# Rust build artifacts
+/core_engine/target/
+**/*.rs.bk
+core_engine/Cargo.lock
+
+# Generated Protobuf bindings
+/core_engine/OUT_DIR/
+/core_engine/src/**/implicitus.rs
+
+# Python artifacts
+/ai_adapter/__pycache__/
+/ai_adapter/*.pyc
+/ai_adapter/env/
+/ai_adapter/venv/
+/ai_adapter/*.egg-info/
+
+# Node.js dependencies and environment
+/canvas_api/node_modules/
+/canvas_api/.env
+canvas_api/package-lock.json
+
+# Logs and reports
+logs/
+*.log
+coverage/
+*.coverage
+
+# Test artifacts
+*.pytest_cache/
+
+# General
+*.backup

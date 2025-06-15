@@ -1,85 +1,66 @@
-
-
 # Implicitus
 
-**From Prompt to Production: A Continuous Implicit Modeling Platform**
+**From Prompt to Print: A Continuous Implicit Modeling Platform**
 
 Implicitus provides a fully implicit pipeline for manufacturing design, enabling seamless integration between text prompts, AI agents, and slicing engines—without intermediate mesh conversions.
 
----
+## Current Capabilities
 
-## Core Capabilities
+- **Protobuf Schema & Bindings**  
+  Versioned `.proto` definitions for primitives (Box, Sphere, Cylinder) and transforms (Translate, Scale), with auto-generated Rust and Python bindings and JSON interoperability.
 
-- **Text-to-Implicit Conversion**: Transform plain-language prompts into parametric implicit models via LLM integration.
-- **SDF Evaluation**: Sample signed distance fields at arbitrary points with high-performance CPU and GPU kernels.
-- **Native Slicing**: Generate layer contours and toolpaths directly from implicit functions, bypassing lossy mesh workflows.
-- **AI Agent API**: Offer an HTTP/JSON interface for conversational model creation, sampling, slicing, and iterative refinement.
-- **Extensible Schema**: Define primitives, transforms, Boolean operations, and manufacturing-aware constraints in a versioned protobuf schema, with JSON interoperability.
-- **Validation Pipeline**: Ensure model correctness and manufacturability through schema enforcement and sample-based diagnostics.
-- **Exporters & SDKs**: Provide G-code, CNC and robotic motion plan exporters, plus client libraries for Python and JavaScript.
+- **SDF Evaluation Engine**  
+  High-performance Rust core library to evaluate signed-distance fields for loaded implicit models.
 
-**Inital Goal**  
-Deliver a minimal end-to-end text→implicit→slice pipeline showcasing:
+- **AI Adapter Stub**  
+  Python module to transform text prompts into placeholder implicit models via protobuf messages.
 
-- A basic `.proto` schema for primitives and transforms.
-- Core engine stub capable of loading schema and evaluating SDF at sample points.
-- AI adapter stub reading prompts and generating placeholder implicit models.
-- Canvas API stub with `POST /models` and `GET /models/{id}/slices?layer=` end-points.
-- Example prompt and automated example script demonstrating the flow.
+- **Rust Slicer Service**  
+  Warp-based microservice exposing `POST /slice` to compute layer contours using a marching-squares algorithm, then sorts and closes the loop into ordered contours.
 
-**Deliverables**  
-- `schema/implicitus.proto` with minimal primitives.
-- `core_engine` stub with SDF evaluator API.
-- `ai_adapter` stub with mock LLM call.
-- `canvas_api` stub server.
-- `examples/hello_world.json` and placeholder slice output.
-- README documenting setup and example usage.
+- **Canvas API**  
+  Express.js server providing:
+  - `POST /models` to store implicit models in-memory.  
+  - `GET /models/:id` to retrieve stored models.  
+  - `GET /models/:id/slices?layer=<z>&...` to proxy slice requests to the Rust slicer and return JSON contours.
 
----
+- **End-to-End Workflow**  
+  Complete prompt → model storage → slicing pipeline validated via curl and Python scripts.
 
 ## Getting Started
 
 **Prerequisites**  
-- Rust >=1.60 (for `core_engine`)  
-- Python 3.8+ (for `ai_adapter` & examples)  
-- Node.js 14+ (for `canvas_api`)  
+- Rust ≥ 1.60  
+- Python 3.8+  
+- Node.js 14+
 
-**Setup**  
+**Setup & Run**
+
 ```bash
-# Clone the repo
-git clone https://github.com/your-org/implicitus.git
-cd implicitus
-
-# Build core engine
+# 1) Start the Rust slicer service
 cd core_engine
 cargo build
+cargo run --bin slicer_server   # listens on port 4000
 
-# Install Python dependencies
-cd ../ai_adapter
-pip install -r requirements.txt
-
-# Install Node dependencies for API
+# 2) Start the Canvas API
 cd ../canvas_api
 npm install
-```
+node server.js                  # listens on port 3000
 
-**Running the Example**  
-```bash
-# From project root
-make example
-```
+# 3) Run the AI adapter stub (Python)
+cd ../ai_adapter
+pip install -r requirements.txt
+python3 - << 'EOF'
+from ai_adapter.adapter import generate_model
+print(generate_model("unit sphere"))
+EOF
 
----
+# 4) Test slicing end-to-end via curl
+curl -X POST http://localhost:3000/models \
+     -H 'Content-Type: application/json' \
+     -d '{"id":"test_sphere","root":{"primitive":{"sphere":{"radius":1.0}}}}'
+curl "http://localhost:3000/models/test_sphere/slices?layer=0.0&nx=5&ny=5"
 
-## Next Steps
-
-- Flesh out schema with transforms and Booleans  
-- Implement real LLM integration  
-- Expand validation pipeline  
-- Implement slice exporter  
-
----
-
-## Contributing
-
-Please read **CONTRIBUTING.md** for guidelines on how to help out.
+# Or run the Python test script
+cd ../
+python3 test_slice.py
