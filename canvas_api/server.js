@@ -4,6 +4,8 @@ const axios = require('axios');
 
 const app = express();
 const port = process.env.PORT || 3000;
+const DESIGN_API = process.env.DESIGN_API || 'http://127.0.0.1:5000';
+
 
 // Middleware to parse JSON bodies
 app.use(bodyParser.json());
@@ -37,6 +39,16 @@ app.get('/models/:id', (req, res) => {
   res.json(model);
 });
 
+// Design API endpoint
+app.post('/design', async (req, res) => {
+  try {
+    const { data } = await axios.post(`${DESIGN_API}/design`, req.body);
+    res.json(data);
+  } catch (err) {
+    console.error('Design API error:', err.message);
+    res.status(500).json({ error: 'Design service failure', details: err.message });
+  }
+});
 
 /**
  * Slice a stored model at a given layer.
