@@ -6,41 +6,19 @@ def map_primitive(spec: dict) -> dict:
     shape = spec.get("shape", "").lower()
     if shape == "sphere":
         radius = spec["size_mm"] / 2
-        primitive_dict = {"primitive": {"sphere": {"radius": str(radius)}}}
-        return {
-            "id": id_str,
-            "root": primitive_dict
-        }
-    elif shape == "cube":
-        size_mm = spec["size_mm"]
-        primitive_dict = {"primitive": {"box": {"size": {"x": str(size_mm), "y": str(size_mm), "z": str(size_mm)}}}}
-        return {
-            "id": id_str,
-            "root": primitive_dict
-        }
-    elif shape == "box":
-        size = spec.get("size_mm") or spec.get("size")
+        primitive = {"sphere": {"radius": radius}}
+    elif shape in ("cube", "box"):
+        size = spec.get("size_mm", spec.get("size", 0))
         if isinstance(size, (int, float)):
-            size_list = [str(size), str(size), str(size)]
-        elif isinstance(size, (list, tuple)) and len(size) == 3:
-            size_list = [str(x) for x in size]
+            size_dict = {"x": size, "y": size, "z": size}
         else:
-            raise ValueError(f"Invalid size for box: {size}")
-        primitive_dict = {"primitive": {"box": {"size": {"x": size_list[0], "y": size_list[1], "z": size_list[2]}}}}
-        return {
-            "id": id_str,
-            "root": primitive_dict
-        }
+            size_dict = {"x": size[0], "y": size[1], "z": size[2]}
+        primitive = {"box": {"size": size_dict}}
     elif shape == "cylinder":
-        radius_mm = spec["radius_mm"]
-        height_mm = spec["height_mm"]
-        primitive_dict = {"primitive": {"cylinder": {"radius": str(radius_mm), "height": str(height_mm)}}}
-        return {
-            "id": id_str,
-            "root": primitive_dict
-        }
+        primitive = {"cylinder": {"radius": spec["radius_mm"], "height": spec["height_mm"]}}
     else:
         raise ValueError(f"Unknown shape: {shape}")
+    return {"id": id_str, "root": {"primitive": primitive}}
 
 def get_response_fields(proto_model):
     """
@@ -51,21 +29,22 @@ def get_response_fields(proto_model):
         params (dict): keys are dimension names and numeric values
     """
     primitive = proto_model.root.primitive
-    # Sphere
-    if primitive.HasField("sphere"):
-        radius = primitive.sphere.radius
+    primitive_type = primitive.type
+    params = {}
+    if primitive_type == "sphere":
+        radius = primitive.params.get("radius", 0)
         return "sphere", {"size_mm": radius * 2}
-    # Box / Cube
-    if primitive.HasField("box"):
-        size = primitive.box.size
-        # if all equal, treat as cube
-        if size.x == size.y == size.z:
-            return "cube", {"size_mm": size.x}
+    elif primitive_type in ("cube", "box"):
+        x = primitive.params.get("x", 0)
+        y = primitive.params.get("y", 0)
+        z = primitive.params.get("z", 0)
+        if x == y == z:
+            return "cube", {"size_mm": x}
         else:
-            return "box", {"size_x_mm": size.x, "size_y_mm": size.y, "size_z_mm": size.z}
-    # Cylinder
-    if primitive.HasField("cylinder"):
-        cyl = primitive.cylinder
-        return "cylinder", {"radius_mm": cyl.radius, "height_mm": cyl.height}
-    # Fallback: unknown
-    raise ValueError(f"Unsupported primitive type in proto: {primitive.WhichOneof('type')}")
+            return "box", {"size_x_mm": x, "size_y_mm": y, "size_z_mm": z}
+    elif primitive_type == "cylinder":
+        radius = primitive.params.get("radius", 0)
+        height = primitive.params.get("height", 0)
+        return "cylinder", {"radius_mm": radius, "height_mm": height}
+    else:
+        raise ValueError(f"Unsupported primitive type in proto: {primitive_type}")

@@ -14,7 +14,7 @@ from json.decoder import JSONDecodeError
 import uuid
 from design_api.services.json_cleaner import clean_llm_output
 from design_api.services.llm_service import generate_design_spec
-from design_api.services.mapping import map_primitive as map_to_proto_dict, get_response_fields
+from design_api.services.mapping import map_primitive as map_to_proto_dict
 from design_api.services.validator import validate_model_spec as validate_proto
 
 app = FastAPI(title="Implicitus Design API", debug=True)
@@ -31,14 +31,7 @@ app.add_middleware(
 class DesignRequest(BaseModel):
     prompt: str
 
-class DesignModel(BaseModel):
-    id: str
-    shape: str = ""
-    size_mm: float = 0.0
-    radius_mm: float = 0.0
-    # ... extend with other fields as needed
-
-@app.post("/design", response_model=DesignModel)
+@app.post("/design", response_model=dict)
 async def design(req: DesignRequest):
     try:
         # 0. Invoke LLM
@@ -55,13 +48,8 @@ async def design(req: DesignRequest):
         # 3. Validate against the Protobuf schema
         proto_spec = validate_proto(spec_dict)
 
-        # 4. Build and return the API model using mapping helper
-        response_shape, response_params = get_response_fields(proto_spec)
-        return {
-            "id": proto_spec.id,
-            "shape": response_shape,
-            **response_params,
-        }
+        # 4. Return full spec dict
+        return spec_dict
 
     except HTTPException:
         # pass through validation errors

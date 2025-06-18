@@ -69,9 +69,25 @@ function App() {
         </div>
       )}
       {error && <div className="error">{error}</div>}
-      {spec && (
+      {spec && spec.root?.primitive && (
         <div>
-          
+          {(() => {
+            const primitive = spec.root.primitive;
+            return (
+              <div style={{ textAlign: 'left', margin: '1em' }}>
+                <strong>Primitive Type:</strong> {primitive.type}
+                <br />
+                <strong>Parameters:</strong>
+                <ul>
+                  {Object.entries(primitive.params || {}).map(([key, value]) => (
+                    <li key={key}>
+                      {key}: {typeof value === 'object' ? JSON.stringify(value) : String(value)}
+                    </li>
+                  ))}
+                </ul>
+              </div>
+            );
+          })()}
           <Preview spec={spec} />
         </div>
       )}
