@@ -1,5 +1,3 @@
-
-
 syntax = "proto3";
 package implicitus;
 
@@ -8,6 +6,12 @@ message Vector3 {
   double x = 1;
   double y = 2;
   double z = 3;
+}
+
+// A 2D vector for profile points
+message Vector2 {
+  double x = 1;
+  double y = 2;
 }
 
 // Basic primitive shapes
@@ -24,12 +28,97 @@ message Cylinder {
   double height = 2;
 }
 
+message Cone {
+  double baseRadius = 1;
+  double topRadius = 2;
+  double height = 3;
+}
+
+message Torus {
+  double ringRadius = 1;  // distance from center to tube center
+  double tubeRadius = 2;  // radius of the tube
+}
+
+message Cube {
+  double size = 1;  // uniform edge length
+}
+
+// Geometric primitives for field-driven design
+message Point {
+  Vector3 position = 1;  // single point in space
+}
+
+message Line {
+  Vector3 start = 1;     // line start point
+  Vector3 end = 2;       // line end point
+}
+
+message Plane {
+  Vector3 origin = 1;    // a point on the plane
+  Vector3 normal = 2;    // unit normal vector defining plane orientation
+}
+
+message Extrude2D {
+  repeated Vector2 profilePoints = 1;
+  double depth = 2;
+}
+
+message Revolve2D {
+  repeated Vector2 profilePoints = 1;
+  double startAngle = 2;
+  double endAngle = 3;
+}
+
+message Loft {
+  // a section of a loft: 2D profile at a given position along the loft axis
+  message Section {
+    repeated Vector2 profilePoints = 1;
+    double position = 2;
+  }
+  repeated Section sections = 1;
+}
+
+message Sweep {
+  repeated Vector3 path = 1;
+  repeated Vector2 profilePoints = 2;
+}
+
+// Boolean operations for combining primitives and other nodes
+message BooleanOp {
+  // Types of boolean operations
+  message Union {
+    repeated Node nodes = 1;
+  }
+  message Difference {
+    Node a = 1;
+    repeated Node b = 2;
+  }
+  message Intersection {
+    repeated Node nodes = 1;
+  }
+  oneof op {
+    Union union = 1;
+    Difference difference = 2;
+    Intersection intersection = 3;
+  }
+}
+
 // A generic primitive wrapper
 message Primitive {
   oneof shape {
     Box box = 1;
     Sphere sphere = 2;
     Cylinder cylinder = 3;
+    Cone cone = 4;
+    Torus torus = 5;
+    Extrude2D extrude2D = 6;
+    Revolve2D revolve2D = 7;
+    Loft loft = 8;
+    Sweep sweep = 9;
+    Point point = 10;
+    Line line = 11;
+    Plane plane = 12;
+    Cube cube = 13;
   }
 }
 
@@ -52,14 +141,53 @@ message Transform {
 // A node in the implicit scene graph
 message Node {
   oneof body {
-    Primitive primitive = 1;
-    Transform transform = 2;
+    Primitive primitive      = 1;
+    Transform transform      = 2;
+    BooleanOp boolean_op     = 3;
+    Infill infill            = 4;
+    Shell shell              = 5;
+    ShellFill shell_fill     = 6;
   }
-  repeated Node children = 3;
+  repeated Node children = 7;
 }
 
 // Top-level model definition
 message Model {
   string id = 1;
   Node root = 2;
+  // Optional design constraints
+  repeated Constraint constraints = 3;
+}
+
+// Hollow‐shell operation: wraps a model in a uniform shell
+message Shell {
+  double thickness = 1;
+}
+
+// Combined shell + infill operation
+message ShellFill {
+  Shell shell = 1;
+  Infill infill = 2;
+}
+
+// Design constraints for generative workflows
+message Constraint {
+  oneof type {
+    DimensionConstraint dimension = 1;
+    LoadConstraint load = 2;
+    // custom or other constraint types
+    string custom = 3;
+  }
+}
+
+// Enforce part size limits
+message DimensionConstraint {
+  Vector3 min = 1;  // minimum allowed dimensions
+  Vector3 max = 2;  // maximum allowed dimensions
+}
+
+// Enforce load or strength requirements
+message LoadConstraint {
+  double force = 1;     // magnitude in newtons
+  Vector3 direction = 2; // load vector direction
 }

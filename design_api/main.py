@@ -1,96 +1,66 @@
-# design_api/main.py
+import logging
+
+logging.basicConfig(
+    level=logging.DEBUG,
+    format="%(asctime)s %(levelname)s %(name)s %(message)s"
+)
+
 from fastapi import FastAPI, HTTPException
+from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from ai_adapter.inference_pipeline import generate  # your LLM pipeline
-from ai_adapter.schema.implicitus_pb2 import Model as ImplicitSpec
-from google.protobuf.json_format import ParseDict, ParseError
 import json
 import traceback
 from json.decoder import JSONDecodeError
 import uuid
-import re
+from design_api.services.json_cleaner import clean_llm_output
+from design_api.services.llm_service import generate_design_spec
+from design_api.services.mapping import map_primitive as map_to_proto_dict, get_response_fields
+from design_api.services.validator import validate_model_spec as validate_proto
 
 app = FastAPI(title="Implicitus Design API", debug=True)
+
+# Allow local front-end to call this API
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=["http://localhost:3000"],
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
+)
 
 class DesignRequest(BaseModel):
     prompt: str
 
 class DesignModel(BaseModel):
     id: str
-    shape: str
-    size_mm: float
+    shape: str = ""
+    size_mm: float = 0.0
+    radius_mm: float = 0.0
     # ... extend with other fields as needed
 
 @app.post("/design", response_model=DesignModel)
 async def design(req: DesignRequest):
     try:
-        # 0. Invoke LLM to get JSON output
-        json_output = generate(req.prompt)
-        # (Optional) debug print of raw LLM output
-        # print(f"LLM raw output: {json_output}")
-        # 1. Clean up LLM output: strip whitespace and headers
-        raw_lines = json_output.strip().splitlines()
-        # drop a leading "Something:" header
-        if raw_lines and raw_lines[0].strip().lower().endswith(':'):
-            raw_lines = raw_lines[1:]
-        # drop any code fence lines (``` or ```lang)
-        raw_lines = [line for line in raw_lines if not line.strip().startswith('```')]
-        # drop a standalone "json" or "json:" line
-        if raw_lines and raw_lines[0].strip().lower().rstrip(':') == 'json':
-            raw_lines = raw_lines[1:]
-        # rebuild cleaned JSON string
-        cleaned = '\n'.join(raw_lines).strip()
-
-        # 2. Parse into a dict
+        # 0. Invoke LLM
+        raw_output = generate_design_spec(req.prompt)
+        # 1. Clean and parse JSON
+        cleaned = clean_llm_output(raw_output)
+        logging.debug(f"Cleaned output repr: {cleaned}")
         try:
             spec_dict = json.loads(cleaned)
         except JSONDecodeError as je:
-            print(f"JSONDecodeError: raw json_output: {json_output}")
-            print(f"JSONDecodeError: cleaned string: {cleaned}")
-            raise HTTPException(status_code=502, detail=f"Failed to parse JSON from LLM. Cleaned: {cleaned}. Raw output: {json_output}")
-
-        # 2.5. Ensure an 'id' field is present
-        if 'id' not in spec_dict or not spec_dict['id']:
-            spec_dict['id'] = str(uuid.uuid4())
-
-        # Normalize keys to match Protobuf JSON field names
-        if 'size_mm' in spec_dict:
-            spec_dict['sizeMm'] = spec_dict.pop('size_mm')
-
-        # 2.6. Map simple shape/size to Protobuf CSG root node
-        shape = spec_dict.pop('shape', None)
-        size_mm = spec_dict.pop('sizeMm', None)
-        if shape:
-            if shape.lower() == 'sphere' and size_mm is not None:
-                # Protobuf expects Node.primitive.sphere.radius
-                spec_dict['root'] = {
-                    'primitive': {
-                        'sphere': {'radius': size_mm / 2}
-                    }
-                }
-            else:
-                # TODO: extend for other primitives (cube, cylinder, etc.)
-                spec_dict['root'] = {
-                    'primitive': {}
-                }
-
+            raise HTTPException(status_code=502, detail=f"Failed to parse JSON from LLM. Cleaned: {cleaned}")
+        # 2. Map and normalize into protobuf dict
+        spec_dict = map_to_proto_dict(spec_dict)
         # 3. Validate against the Protobuf schema
-        proto_spec = ImplicitSpec()
-        try:
-            ParseDict(spec_dict, proto_spec)
-        except ParseError as pe:
-            detail_msg = f"Schema validation error: {pe}. Spec dict was: {spec_dict}. Raw output: {json_output}. Cleaned string: {cleaned}"
-            print(f"ParseError: {detail_msg}")
-            raise HTTPException(status_code=400, detail=detail_msg)
+        proto_spec = validate_proto(spec_dict)
 
-        # 4. Build and return the API model
-        # Derive shape and size_mm for response
-        response_shape = shape or ""
-        response_size_mm = size_mm or 0
+        # 4. Build and return the API model using mapping helper
+        response_shape, response_params = get_response_fields(proto_spec)
         return {
             "id": proto_spec.id,
             "shape": response_shape,
-            "size_mm": response_size_mm,
+            **response_params,
         }
 
     except HTTPException:

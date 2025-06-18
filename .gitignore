@@ -24,6 +24,7 @@ core_engine/Cargo.lock
 /ai_adapter/env/
 /ai_adapter/venv/
 /ai_adapter/*.egg-info/
+*__pycache__*
 
 # Node.js dependencies and environment
 /canvas_api/node_modules/
@@ -41,3 +42,19 @@ coverage/
 
 # General
 *.backup
+
+# Python virtual environments
+.venv/
+.venv_llm/
+design_api/.venv/
+
+# Frontend UI
+implicitus-ui/node_modules/
+implicitus-ui/.env
+implicitus-ui/dist/
+
+# Editor configs
+.idea/
+*.iml
+
+/node_modules/*
