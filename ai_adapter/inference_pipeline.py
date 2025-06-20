@@ -14,30 +14,49 @@ SYSTEM_PROMPT = {
     )
 }
 
-# Ensure the Rust-backed tokenizers library is installed (pip install tokenizers)
-tokenizer = AutoTokenizer.from_pretrained(
-    "mistralai/Mistral-7B-Instruct-v0.3",
-    use_fast=True
-)
+_chat = None
 
-chat = pipeline(
-    "text-generation",
-    model="mistralai/Mistral-7B-Instruct-v0.3",
-    tokenizer=tokenizer,
-    device_map="auto",
-    torch_dtype="auto",
-    return_full_text=False,
-)
+def _init_chat():
+    global _chat
+    if _chat is None:
+        tokenizer = AutoTokenizer.from_pretrained(
+            "mistralai/Mistral-7B-Instruct-v0.3",
+            use_fast=True
+        )
+        _chat = pipeline(
+            "text-generation",
+            model="mistralai/Mistral-7B-Instruct-v0.3",
+            tokenizer=tokenizer,
+            device_map="auto",
+            torch_dtype="auto",
+            return_full_text=False,
+        )
+    return _chat
 
 def generate(prompt: str) -> str:
     """
     Generate a structured JSON response from the model for the given prompt.
+    The pipeline expects a list of messages as input.
     Returns the raw JSON string.
     """
-    prompt_text = SYSTEM_PROMPT["content"] + "\nUser: " + prompt
-    print(f"DEBUG prompt_text: {prompt_text}")
-    # call text-generation pipeline with the combined prompt text
-    response = chat(prompt_text, max_new_tokens=128)
-    # extract generated text from the first result entry
-    json_str = response[0]["generated_text"].strip()
-    return json_str
+    pipe = _init_chat()
+    messages = [
+        SYSTEM_PROMPT,
+        {"role": "user", "content": prompt}
+    ]
+
+    # try with max_new_tokens, but fall back if not supported
+    try:
+        resp = pipe(messages, max_new_tokens=128)
+    except TypeError:
+        resp = pipe(messages)
+
+    # normalize pipeline output
+    if isinstance(resp, list) and resp and isinstance(resp[0], dict) and "generated_text" in resp[0]:
+        raw = resp[0]["generated_text"]
+    elif isinstance(resp, str):
+        raw = resp
+    else:
+        raise RuntimeError(f"Unexpected pipeline return type: {resp!r}")
+
+    return raw.strip()

@@ -1,0 +1,1241 @@
+============================= test session starts ==============================
+platform darwin -- Python 3.13.5, pytest-8.4.1, pluggy-1.6.0
+rootdir: /Users/danielgonzalez/Dropbox (Personal)/concepts/osmose/R&D/implicit/implicitus
+configfile: pytest.ini
+plugins: anyio-4.9.0
+collected 2 items
+
+test_csg_adapter.py F.                                                   [100%]
+
+=================================== FAILURES ===================================
+___________________________ test_parse_sphere_model ____________________________
+
+self = <google.protobuf.json_format._Parser object at 0x105530c20>
+js = {'radiusMm': 5.0}, message = , path = 'Model.root.primitive.sphere'
+
+    def _ConvertFieldValuePair(self, js, message, path):
+      """Convert field value pairs into regular message.
+    
+      Args:
+        js: A JSON object to convert the field value pairs.
+        message: A regular protocol message to record the data.
+        path: parent path to log parse error info.
+    
+      Raises:
+        ParseError: In case of problems converting.
+      """
+      names = []
+      message_descriptor = message.DESCRIPTOR
+      fields_by_json_name = dict(
+          (f.json_name, f) for f in message_descriptor.fields
+      )
+      for name in js:
+        try:
+          field = fields_by_json_name.get(name, None)
+          if not field:
+            field = message_descriptor.fields_by_name.get(name, None)
+          if not field and _VALID_EXTENSION_NAME.match(name):
+            if not message_descriptor.is_extendable:
+              raise ParseError(
+                  'Message type {0} does not have extensions at {1}'.format(
+                      message_descriptor.full_name, path
+                  )
+              )
+            identifier = name[1:-1]  # strip [] brackets
+            # pylint: disable=protected-access
+            field = message.Extensions._FindExtensionByName(identifier)
+            # pylint: enable=protected-access
+            if not field:
+              # Try looking for extension by the message type name, dropping the
+              # field name following the final . separator in full_name.
+              identifier = '.'.join(identifier.split('.')[:-1])
+              # pylint: disable=protected-access
+              field = message.Extensions._FindExtensionByName(identifier)
+              # pylint: enable=protected-access
+          if not field:
+            if self.ignore_unknown_fields:
+              continue
+>           raise ParseError(
+                (
+                    'Message type "{0}" has no field named "{1}" at "{2}".\n'
+                    ' Available Fields(except extensions): "{3}"'
+                ).format(
+                    message_descriptor.full_name,
+                    name,
+                    path,
+                    [f.json_name for f in message_descriptor.fields],
+                )
+            )
+E           google.protobuf.json_format.ParseError: Message type "implicitus.Sphere" has no field named "radiusMm" at "Model.root.primitive.sphere".
+E            Available Fields(except extensions): "['radius']"
+
+/Users/danielgonzalez/miniforge3/envs/llm/lib/python3.13/site-packages/google/protobuf/json_format.py:585: ParseError
+
+The above exception was the direct cause of the following exception:
+
+self = <google.protobuf.json_format._Parser object at 0x105530c20>
+js = {'sphere': {'radiusMm': 5.0}}, message = sphere {
+}
+
+path = 'Model.root.primitive'
+
+    def _ConvertFieldValuePair(self, js, message, path):
+      """Convert field value pairs into regular message.
+    
+      Args:
+        js: A JSON object to convert the field value pairs.
+        message: A regular protocol message to record the data.
+        path: parent path to log parse error info.
+    
+      Raises:
+        ParseError: In case of problems converting.
+      """
+      names = []
+      message_descriptor = message.DESCRIPTOR
+      fields_by_json_name = dict(
+          (f.json_name, f) for f in message_descriptor.fields
+      )
+      for name in js:
+        try:
+          field = fields_by_json_name.get(name, None)
+          if not field:
+            field = message_descriptor.fields_by_name.get(name, None)
+          if not field and _VALID_EXTENSION_NAME.match(name):
+            if not message_descriptor.is_extendable:
+              raise ParseError(
+                  'Message type {0} does not have extensions at {1}'.format(
+                      message_descriptor.full_name, path
+                  )
+              )
+            identifier = name[1:-1]  # strip [] brackets
+            # pylint: disable=protected-access
+            field = message.Extensions._FindExtensionByName(identifier)
+            # pylint: enable=protected-access
+            if not field:
+              # Try looking for extension by the message type name, dropping the
+              # field name following the final . separator in full_name.
+              identifier = '.'.join(identifier.split('.')[:-1])
+              # pylint: disable=protected-access
+              field = message.Extensions._FindExtensionByName(identifier)
+              # pylint: enable=protected-access
+          if not field:
+            if self.ignore_unknown_fields:
+              continue
+            raise ParseError(
+                (
+                    'Message type "{0}" has no field named "{1}" at "{2}".\n'
+                    ' Available Fields(except extensions): "{3}"'
+                ).format(
+                    message_descriptor.full_name,
+                    name,
+                    path,
+                    [f.json_name for f in message_descriptor.fields],
+                )
+            )
+          if name in names:
+            raise ParseError(
+                'Message type "{0}" should not have multiple '
+                '"{1}" fields at "{2}".'.format(
+                    message.DESCRIPTOR.full_name, name, path
+                )
+            )
+          names.append(name)
+          value = js[name]
+          # Check no other oneof field is parsed.
+          if field.containing_oneof is not None and value is not None:
+            oneof_name = field.containing_oneof.name
+            if oneof_name in names:
+              raise ParseError(
+                  'Message type "{0}" should not have multiple '
+                  '"{1}" oneof fields at "{2}".'.format(
+                      message.DESCRIPTOR.full_name, oneof_name, path
+                  )
+              )
+            names.append(oneof_name)
+    
+          if value is None:
+            if (
+                field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE
+                and field.message_type.full_name == 'google.protobuf.Value'
+            ):
+              sub_message = getattr(message, field.name)
+              sub_message.null_value = 0
+            elif (
+                field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_ENUM
+                and field.enum_type.full_name == 'google.protobuf.NullValue'
+            ):
+              setattr(message, field.name, 0)
+            else:
+              message.ClearField(field.name)
+            continue
+    
+          # Parse field value.
+          if _IsMapEntry(field):
+            message.ClearField(field.name)
+            self._ConvertMapFieldValue(
+                value, message, field, '{0}.{1}'.format(path, name)
+            )
+          elif field.label == descriptor.FieldDescriptor.LABEL_REPEATED:
+            message.ClearField(field.name)
+            if not isinstance(value, _LIST_LIKE):
+              raise ParseError(
+                  'repeated field {0} must be in [] which is {1} at {2}'.format(
+                      name, value, path
+                  )
+              )
+            if field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE:
+              # Repeated message field.
+              for index, item in enumerate(value):
+                sub_message = getattr(message, field.name).add()
+                # None is a null_value in Value.
+                if (
+                    item is None
+                    and sub_message.DESCRIPTOR.full_name
+                    != 'google.protobuf.Value'
+                ):
+                  raise ParseError(
+                      'null is not allowed to be used as an element'
+                      ' in a repeated field at {0}.{1}[{2}]'.format(
+                          path, name, index
+                      )
+                  )
+                self.ConvertMessage(
+                    item, sub_message, '{0}.{1}[{2}]'.format(path, name, index)
+                )
+            else:
+              # Repeated scalar field.
+              for index, item in enumerate(value):
+                if item is None:
+                  raise ParseError(
+                      'null is not allowed to be used as an element'
+                      ' in a repeated field at {0}.{1}[{2}]'.format(
+                          path, name, index
+                      )
+                  )
+                self._ConvertAndAppendScalar(
+                  message, field, item, '{0}.{1}[{2}]'.format(path, name, index))
+          elif field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE:
+            if field.is_extension:
+              sub_message = message.Extensions[field]
+            else:
+              sub_message = getattr(message, field.name)
+            sub_message.SetInParent()
+>           self.ConvertMessage(value, sub_message, '{0}.{1}'.format(path, name))
+
+/Users/danielgonzalez/miniforge3/envs/llm/lib/python3.13/site-packages/google/protobuf/json_format.py:684: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/Users/danielgonzalez/miniforge3/envs/llm/lib/python3.13/site-packages/google/protobuf/json_format.py:540: in ConvertMessage
+    self._ConvertFieldValuePair(value, message, path)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <google.protobuf.json_format._Parser object at 0x105530c20>
+js = {'radiusMm': 5.0}, message = , path = 'Model.root.primitive.sphere'
+
+    def _ConvertFieldValuePair(self, js, message, path):
+      """Convert field value pairs into regular message.
+    
+      Args:
+        js: A JSON object to convert the field value pairs.
+        message: A regular protocol message to record the data.
+        path: parent path to log parse error info.
+    
+      Raises:
+        ParseError: In case of problems converting.
+      """
+      names = []
+      message_descriptor = message.DESCRIPTOR
+      fields_by_json_name = dict(
+          (f.json_name, f) for f in message_descriptor.fields
+      )
+      for name in js:
+        try:
+          field = fields_by_json_name.get(name, None)
+          if not field:
+            field = message_descriptor.fields_by_name.get(name, None)
+          if not field and _VALID_EXTENSION_NAME.match(name):
+            if not message_descriptor.is_extendable:
+              raise ParseError(
+                  'Message type {0} does not have extensions at {1}'.format(
+                      message_descriptor.full_name, path
+                  )
+              )
+            identifier = name[1:-1]  # strip [] brackets
+            # pylint: disable=protected-access
+            field = message.Extensions._FindExtensionByName(identifier)
+            # pylint: enable=protected-access
+            if not field:
+              # Try looking for extension by the message type name, dropping the
+              # field name following the final . separator in full_name.
+              identifier = '.'.join(identifier.split('.')[:-1])
+              # pylint: disable=protected-access
+              field = message.Extensions._FindExtensionByName(identifier)
+              # pylint: enable=protected-access
+          if not field:
+            if self.ignore_unknown_fields:
+              continue
+            raise ParseError(
+                (
+                    'Message type "{0}" has no field named "{1}" at "{2}".\n'
+                    ' Available Fields(except extensions): "{3}"'
+                ).format(
+                    message_descriptor.full_name,
+                    name,
+                    path,
+                    [f.json_name for f in message_descriptor.fields],
+                )
+            )
+          if name in names:
+            raise ParseError(
+                'Message type "{0}" should not have multiple '
+                '"{1}" fields at "{2}".'.format(
+                    message.DESCRIPTOR.full_name, name, path
+                )
+            )
+          names.append(name)
+          value = js[name]
+          # Check no other oneof field is parsed.
+          if field.containing_oneof is not None and value is not None:
+            oneof_name = field.containing_oneof.name
+            if oneof_name in names:
+              raise ParseError(
+                  'Message type "{0}" should not have multiple '
+                  '"{1}" oneof fields at "{2}".'.format(
+                      message.DESCRIPTOR.full_name, oneof_name, path
+                  )
+              )
+            names.append(oneof_name)
+    
+          if value is None:
+            if (
+                field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE
+                and field.message_type.full_name == 'google.protobuf.Value'
+            ):
+              sub_message = getattr(message, field.name)
+              sub_message.null_value = 0
+            elif (
+                field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_ENUM
+                and field.enum_type.full_name == 'google.protobuf.NullValue'
+            ):
+              setattr(message, field.name, 0)
+            else:
+              message.ClearField(field.name)
+            continue
+    
+          # Parse field value.
+          if _IsMapEntry(field):
+            message.ClearField(field.name)
+            self._ConvertMapFieldValue(
+                value, message, field, '{0}.{1}'.format(path, name)
+            )
+          elif field.label == descriptor.FieldDescriptor.LABEL_REPEATED:
+            message.ClearField(field.name)
+            if not isinstance(value, _LIST_LIKE):
+              raise ParseError(
+                  'repeated field {0} must be in [] which is {1} at {2}'.format(
+                      name, value, path
+                  )
+              )
+            if field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE:
+              # Repeated message field.
+              for index, item in enumerate(value):
+                sub_message = getattr(message, field.name).add()
+                # None is a null_value in Value.
+                if (
+                    item is None
+                    and sub_message.DESCRIPTOR.full_name
+                    != 'google.protobuf.Value'
+                ):
+                  raise ParseError(
+                      'null is not allowed to be used as an element'
+                      ' in a repeated field at {0}.{1}[{2}]'.format(
+                          path, name, index
+                      )
+                  )
+                self.ConvertMessage(
+                    item, sub_message, '{0}.{1}[{2}]'.format(path, name, index)
+                )
+            else:
+              # Repeated scalar field.
+              for index, item in enumerate(value):
+                if item is None:
+                  raise ParseError(
+                      'null is not allowed to be used as an element'
+                      ' in a repeated field at {0}.{1}[{2}]'.format(
+                          path, name, index
+                      )
+                  )
+                self._ConvertAndAppendScalar(
+                  message, field, item, '{0}.{1}[{2}]'.format(path, name, index))
+          elif field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE:
+            if field.is_extension:
+              sub_message = message.Extensions[field]
+            else:
+              sub_message = getattr(message, field.name)
+            sub_message.SetInParent()
+            self.ConvertMessage(value, sub_message, '{0}.{1}'.format(path, name))
+          else:
+            if field.is_extension:
+              self._ConvertAndSetScalarExtension(message, field, value, '{0}.{1}'.format(path, name))
+            else:
+              self._ConvertAndSetScalar(message, field, value, '{0}.{1}'.format(path, name))
+        except ParseError as e:
+          if field and field.containing_oneof is None:
+            raise ParseError(
+                'Failed to parse {0} field: {1}.'.format(name, e)
+            ) from e
+          else:
+>           raise ParseError(str(e)) from e
+E           google.protobuf.json_format.ParseError: Message type "implicitus.Sphere" has no field named "radiusMm" at "Model.root.primitive.sphere".
+E            Available Fields(except extensions): "['radius']"
+
+/Users/danielgonzalez/miniforge3/envs/llm/lib/python3.13/site-packages/google/protobuf/json_format.py:696: ParseError
+
+The above exception was the direct cause of the following exception:
+
+self = <google.protobuf.json_format._Parser object at 0x105530c20>
+js = {'primitive': {'sphere': {'radiusMm': 5.0}}}
+message = primitive {
+  sphere {
+  }
+}
+, path = 'Model.root'
+
+    def _ConvertFieldValuePair(self, js, message, path):
+      """Convert field value pairs into regular message.
+    
+      Args:
+        js: A JSON object to convert the field value pairs.
+        message: A regular protocol message to record the data.
+        path: parent path to log parse error info.
+    
+      Raises:
+        ParseError: In case of problems converting.
+      """
+      names = []
+      message_descriptor = message.DESCRIPTOR
+      fields_by_json_name = dict(
+          (f.json_name, f) for f in message_descriptor.fields
+      )
+      for name in js:
+        try:
+          field = fields_by_json_name.get(name, None)
+          if not field:
+            field = message_descriptor.fields_by_name.get(name, None)
+          if not field and _VALID_EXTENSION_NAME.match(name):
+            if not message_descriptor.is_extendable:
+              raise ParseError(
+                  'Message type {0} does not have extensions at {1}'.format(
+                      message_descriptor.full_name, path
+                  )
+              )
+            identifier = name[1:-1]  # strip [] brackets
+            # pylint: disable=protected-access
+            field = message.Extensions._FindExtensionByName(identifier)
+            # pylint: enable=protected-access
+            if not field:
+              # Try looking for extension by the message type name, dropping the
+              # field name following the final . separator in full_name.
+              identifier = '.'.join(identifier.split('.')[:-1])
+              # pylint: disable=protected-access
+              field = message.Extensions._FindExtensionByName(identifier)
+              # pylint: enable=protected-access
+          if not field:
+            if self.ignore_unknown_fields:
+              continue
+            raise ParseError(
+                (
+                    'Message type "{0}" has no field named "{1}" at "{2}".\n'
+                    ' Available Fields(except extensions): "{3}"'
+                ).format(
+                    message_descriptor.full_name,
+                    name,
+                    path,
+                    [f.json_name for f in message_descriptor.fields],
+                )
+            )
+          if name in names:
+            raise ParseError(
+                'Message type "{0}" should not have multiple '
+                '"{1}" fields at "{2}".'.format(
+                    message.DESCRIPTOR.full_name, name, path
+                )
+            )
+          names.append(name)
+          value = js[name]
+          # Check no other oneof field is parsed.
+          if field.containing_oneof is not None and value is not None:
+            oneof_name = field.containing_oneof.name
+            if oneof_name in names:
+              raise ParseError(
+                  'Message type "{0}" should not have multiple '
+                  '"{1}" oneof fields at "{2}".'.format(
+                      message.DESCRIPTOR.full_name, oneof_name, path
+                  )
+              )
+            names.append(oneof_name)
+    
+          if value is None:
+            if (
+                field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE
+                and field.message_type.full_name == 'google.protobuf.Value'
+            ):
+              sub_message = getattr(message, field.name)
+              sub_message.null_value = 0
+            elif (
+                field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_ENUM
+                and field.enum_type.full_name == 'google.protobuf.NullValue'
+            ):
+              setattr(message, field.name, 0)
+            else:
+              message.ClearField(field.name)
+            continue
+    
+          # Parse field value.
+          if _IsMapEntry(field):
+            message.ClearField(field.name)
+            self._ConvertMapFieldValue(
+                value, message, field, '{0}.{1}'.format(path, name)
+            )
+          elif field.label == descriptor.FieldDescriptor.LABEL_REPEATED:
+            message.ClearField(field.name)
+            if not isinstance(value, _LIST_LIKE):
+              raise ParseError(
+                  'repeated field {0} must be in [] which is {1} at {2}'.format(
+                      name, value, path
+                  )
+              )
+            if field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE:
+              # Repeated message field.
+              for index, item in enumerate(value):
+                sub_message = getattr(message, field.name).add()
+                # None is a null_value in Value.
+                if (
+                    item is None
+                    and sub_message.DESCRIPTOR.full_name
+                    != 'google.protobuf.Value'
+                ):
+                  raise ParseError(
+                      'null is not allowed to be used as an element'
+                      ' in a repeated field at {0}.{1}[{2}]'.format(
+                          path, name, index
+                      )
+                  )
+                self.ConvertMessage(
+                    item, sub_message, '{0}.{1}[{2}]'.format(path, name, index)
+                )
+            else:
+              # Repeated scalar field.
+              for index, item in enumerate(value):
+                if item is None:
+                  raise ParseError(
+                      'null is not allowed to be used as an element'
+                      ' in a repeated field at {0}.{1}[{2}]'.format(
+                          path, name, index
+                      )
+                  )
+                self._ConvertAndAppendScalar(
+                  message, field, item, '{0}.{1}[{2}]'.format(path, name, index))
+          elif field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE:
+            if field.is_extension:
+              sub_message = message.Extensions[field]
+            else:
+              sub_message = getattr(message, field.name)
+            sub_message.SetInParent()
+>           self.ConvertMessage(value, sub_message, '{0}.{1}'.format(path, name))
+
+/Users/danielgonzalez/miniforge3/envs/llm/lib/python3.13/site-packages/google/protobuf/json_format.py:684: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/Users/danielgonzalez/miniforge3/envs/llm/lib/python3.13/site-packages/google/protobuf/json_format.py:540: in ConvertMessage
+    self._ConvertFieldValuePair(value, message, path)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <google.protobuf.json_format._Parser object at 0x105530c20>
+js = {'sphere': {'radiusMm': 5.0}}, message = sphere {
+}
+
+path = 'Model.root.primitive'
+
+    def _ConvertFieldValuePair(self, js, message, path):
+      """Convert field value pairs into regular message.
+    
+      Args:
+        js: A JSON object to convert the field value pairs.
+        message: A regular protocol message to record the data.
+        path: parent path to log parse error info.
+    
+      Raises:
+        ParseError: In case of problems converting.
+      """
+      names = []
+      message_descriptor = message.DESCRIPTOR
+      fields_by_json_name = dict(
+          (f.json_name, f) for f in message_descriptor.fields
+      )
+      for name in js:
+        try:
+          field = fields_by_json_name.get(name, None)
+          if not field:
+            field = message_descriptor.fields_by_name.get(name, None)
+          if not field and _VALID_EXTENSION_NAME.match(name):
+            if not message_descriptor.is_extendable:
+              raise ParseError(
+                  'Message type {0} does not have extensions at {1}'.format(
+                      message_descriptor.full_name, path
+                  )
+              )
+            identifier = name[1:-1]  # strip [] brackets
+            # pylint: disable=protected-access
+            field = message.Extensions._FindExtensionByName(identifier)
+            # pylint: enable=protected-access
+            if not field:
+              # Try looking for extension by the message type name, dropping the
+              # field name following the final . separator in full_name.
+              identifier = '.'.join(identifier.split('.')[:-1])
+              # pylint: disable=protected-access
+              field = message.Extensions._FindExtensionByName(identifier)
+              # pylint: enable=protected-access
+          if not field:
+            if self.ignore_unknown_fields:
+              continue
+            raise ParseError(
+                (
+                    'Message type "{0}" has no field named "{1}" at "{2}".\n'
+                    ' Available Fields(except extensions): "{3}"'
+                ).format(
+                    message_descriptor.full_name,
+                    name,
+                    path,
+                    [f.json_name for f in message_descriptor.fields],
+                )
+            )
+          if name in names:
+            raise ParseError(
+                'Message type "{0}" should not have multiple '
+                '"{1}" fields at "{2}".'.format(
+                    message.DESCRIPTOR.full_name, name, path
+                )
+            )
+          names.append(name)
+          value = js[name]
+          # Check no other oneof field is parsed.
+          if field.containing_oneof is not None and value is not None:
+            oneof_name = field.containing_oneof.name
+            if oneof_name in names:
+              raise ParseError(
+                  'Message type "{0}" should not have multiple '
+                  '"{1}" oneof fields at "{2}".'.format(
+                      message.DESCRIPTOR.full_name, oneof_name, path
+                  )
+              )
+            names.append(oneof_name)
+    
+          if value is None:
+            if (
+                field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE
+                and field.message_type.full_name == 'google.protobuf.Value'
+            ):
+              sub_message = getattr(message, field.name)
+              sub_message.null_value = 0
+            elif (
+                field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_ENUM
+                and field.enum_type.full_name == 'google.protobuf.NullValue'
+            ):
+              setattr(message, field.name, 0)
+            else:
+              message.ClearField(field.name)
+            continue
+    
+          # Parse field value.
+          if _IsMapEntry(field):
+            message.ClearField(field.name)
+            self._ConvertMapFieldValue(
+                value, message, field, '{0}.{1}'.format(path, name)
+            )
+          elif field.label == descriptor.FieldDescriptor.LABEL_REPEATED:
+            message.ClearField(field.name)
+            if not isinstance(value, _LIST_LIKE):
+              raise ParseError(
+                  'repeated field {0} must be in [] which is {1} at {2}'.format(
+                      name, value, path
+                  )
+              )
+            if field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE:
+              # Repeated message field.
+              for index, item in enumerate(value):
+                sub_message = getattr(message, field.name).add()
+                # None is a null_value in Value.
+                if (
+                    item is None
+                    and sub_message.DESCRIPTOR.full_name
+                    != 'google.protobuf.Value'
+                ):
+                  raise ParseError(
+                      'null is not allowed to be used as an element'
+                      ' in a repeated field at {0}.{1}[{2}]'.format(
+                          path, name, index
+                      )
+                  )
+                self.ConvertMessage(
+                    item, sub_message, '{0}.{1}[{2}]'.format(path, name, index)
+                )
+            else:
+              # Repeated scalar field.
+              for index, item in enumerate(value):
+                if item is None:
+                  raise ParseError(
+                      'null is not allowed to be used as an element'
+                      ' in a repeated field at {0}.{1}[{2}]'.format(
+                          path, name, index
+                      )
+                  )
+                self._ConvertAndAppendScalar(
+                  message, field, item, '{0}.{1}[{2}]'.format(path, name, index))
+          elif field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE:
+            if field.is_extension:
+              sub_message = message.Extensions[field]
+            else:
+              sub_message = getattr(message, field.name)
+            sub_message.SetInParent()
+            self.ConvertMessage(value, sub_message, '{0}.{1}'.format(path, name))
+          else:
+            if field.is_extension:
+              self._ConvertAndSetScalarExtension(message, field, value, '{0}.{1}'.format(path, name))
+            else:
+              self._ConvertAndSetScalar(message, field, value, '{0}.{1}'.format(path, name))
+        except ParseError as e:
+          if field and field.containing_oneof is None:
+            raise ParseError(
+                'Failed to parse {0} field: {1}.'.format(name, e)
+            ) from e
+          else:
+>           raise ParseError(str(e)) from e
+E           google.protobuf.json_format.ParseError: Message type "implicitus.Sphere" has no field named "radiusMm" at "Model.root.primitive.sphere".
+E            Available Fields(except extensions): "['radius']"
+
+/Users/danielgonzalez/miniforge3/envs/llm/lib/python3.13/site-packages/google/protobuf/json_format.py:696: ParseError
+
+The above exception was the direct cause of the following exception:
+
+self = <google.protobuf.json_format._Parser object at 0x105530c20>
+js = {'id': 'c7826f23-6c91-4ead-b137-0b760fbfb203', 'root': {'primitive': {'sphere': {'radiusMm': 5.0}}}}
+message = id: "c7826f23-6c91-4ead-b137-0b760fbfb203"
+root {
+  primitive {
+    sphere {
+    }
+  }
+}
+
+path = 'Model'
+
+    def _ConvertFieldValuePair(self, js, message, path):
+      """Convert field value pairs into regular message.
+    
+      Args:
+        js: A JSON object to convert the field value pairs.
+        message: A regular protocol message to record the data.
+        path: parent path to log parse error info.
+    
+      Raises:
+        ParseError: In case of problems converting.
+      """
+      names = []
+      message_descriptor = message.DESCRIPTOR
+      fields_by_json_name = dict(
+          (f.json_name, f) for f in message_descriptor.fields
+      )
+      for name in js:
+        try:
+          field = fields_by_json_name.get(name, None)
+          if not field:
+            field = message_descriptor.fields_by_name.get(name, None)
+          if not field and _VALID_EXTENSION_NAME.match(name):
+            if not message_descriptor.is_extendable:
+              raise ParseError(
+                  'Message type {0} does not have extensions at {1}'.format(
+                      message_descriptor.full_name, path
+                  )
+              )
+            identifier = name[1:-1]  # strip [] brackets
+            # pylint: disable=protected-access
+            field = message.Extensions._FindExtensionByName(identifier)
+            # pylint: enable=protected-access
+            if not field:
+              # Try looking for extension by the message type name, dropping the
+              # field name following the final . separator in full_name.
+              identifier = '.'.join(identifier.split('.')[:-1])
+              # pylint: disable=protected-access
+              field = message.Extensions._FindExtensionByName(identifier)
+              # pylint: enable=protected-access
+          if not field:
+            if self.ignore_unknown_fields:
+              continue
+            raise ParseError(
+                (
+                    'Message type "{0}" has no field named "{1}" at "{2}".\n'
+                    ' Available Fields(except extensions): "{3}"'
+                ).format(
+                    message_descriptor.full_name,
+                    name,
+                    path,
+                    [f.json_name for f in message_descriptor.fields],
+                )
+            )
+          if name in names:
+            raise ParseError(
+                'Message type "{0}" should not have multiple '
+                '"{1}" fields at "{2}".'.format(
+                    message.DESCRIPTOR.full_name, name, path
+                )
+            )
+          names.append(name)
+          value = js[name]
+          # Check no other oneof field is parsed.
+          if field.containing_oneof is not None and value is not None:
+            oneof_name = field.containing_oneof.name
+            if oneof_name in names:
+              raise ParseError(
+                  'Message type "{0}" should not have multiple '
+                  '"{1}" oneof fields at "{2}".'.format(
+                      message.DESCRIPTOR.full_name, oneof_name, path
+                  )
+              )
+            names.append(oneof_name)
+    
+          if value is None:
+            if (
+                field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE
+                and field.message_type.full_name == 'google.protobuf.Value'
+            ):
+              sub_message = getattr(message, field.name)
+              sub_message.null_value = 0
+            elif (
+                field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_ENUM
+                and field.enum_type.full_name == 'google.protobuf.NullValue'
+            ):
+              setattr(message, field.name, 0)
+            else:
+              message.ClearField(field.name)
+            continue
+    
+          # Parse field value.
+          if _IsMapEntry(field):
+            message.ClearField(field.name)
+            self._ConvertMapFieldValue(
+                value, message, field, '{0}.{1}'.format(path, name)
+            )
+          elif field.label == descriptor.FieldDescriptor.LABEL_REPEATED:
+            message.ClearField(field.name)
+            if not isinstance(value, _LIST_LIKE):
+              raise ParseError(
+                  'repeated field {0} must be in [] which is {1} at {2}'.format(
+                      name, value, path
+                  )
+              )
+            if field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE:
+              # Repeated message field.
+              for index, item in enumerate(value):
+                sub_message = getattr(message, field.name).add()
+                # None is a null_value in Value.
+                if (
+                    item is None
+                    and sub_message.DESCRIPTOR.full_name
+                    != 'google.protobuf.Value'
+                ):
+                  raise ParseError(
+                      'null is not allowed to be used as an element'
+                      ' in a repeated field at {0}.{1}[{2}]'.format(
+                          path, name, index
+                      )
+                  )
+                self.ConvertMessage(
+                    item, sub_message, '{0}.{1}[{2}]'.format(path, name, index)
+                )
+            else:
+              # Repeated scalar field.
+              for index, item in enumerate(value):
+                if item is None:
+                  raise ParseError(
+                      'null is not allowed to be used as an element'
+                      ' in a repeated field at {0}.{1}[{2}]'.format(
+                          path, name, index
+                      )
+                  )
+                self._ConvertAndAppendScalar(
+                  message, field, item, '{0}.{1}[{2}]'.format(path, name, index))
+          elif field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE:
+            if field.is_extension:
+              sub_message = message.Extensions[field]
+            else:
+              sub_message = getattr(message, field.name)
+            sub_message.SetInParent()
+>           self.ConvertMessage(value, sub_message, '{0}.{1}'.format(path, name))
+
+/Users/danielgonzalez/miniforge3/envs/llm/lib/python3.13/site-packages/google/protobuf/json_format.py:684: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+/Users/danielgonzalez/miniforge3/envs/llm/lib/python3.13/site-packages/google/protobuf/json_format.py:540: in ConvertMessage
+    self._ConvertFieldValuePair(value, message, path)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <google.protobuf.json_format._Parser object at 0x105530c20>
+js = {'primitive': {'sphere': {'radiusMm': 5.0}}}
+message = primitive {
+  sphere {
+  }
+}
+, path = 'Model.root'
+
+    def _ConvertFieldValuePair(self, js, message, path):
+      """Convert field value pairs into regular message.
+    
+      Args:
+        js: A JSON object to convert the field value pairs.
+        message: A regular protocol message to record the data.
+        path: parent path to log parse error info.
+    
+      Raises:
+        ParseError: In case of problems converting.
+      """
+      names = []
+      message_descriptor = message.DESCRIPTOR
+      fields_by_json_name = dict(
+          (f.json_name, f) for f in message_descriptor.fields
+      )
+      for name in js:
+        try:
+          field = fields_by_json_name.get(name, None)
+          if not field:
+            field = message_descriptor.fields_by_name.get(name, None)
+          if not field and _VALID_EXTENSION_NAME.match(name):
+            if not message_descriptor.is_extendable:
+              raise ParseError(
+                  'Message type {0} does not have extensions at {1}'.format(
+                      message_descriptor.full_name, path
+                  )
+              )
+            identifier = name[1:-1]  # strip [] brackets
+            # pylint: disable=protected-access
+            field = message.Extensions._FindExtensionByName(identifier)
+            # pylint: enable=protected-access
+            if not field:
+              # Try looking for extension by the message type name, dropping the
+              # field name following the final . separator in full_name.
+              identifier = '.'.join(identifier.split('.')[:-1])
+              # pylint: disable=protected-access
+              field = message.Extensions._FindExtensionByName(identifier)
+              # pylint: enable=protected-access
+          if not field:
+            if self.ignore_unknown_fields:
+              continue
+            raise ParseError(
+                (
+                    'Message type "{0}" has no field named "{1}" at "{2}".\n'
+                    ' Available Fields(except extensions): "{3}"'
+                ).format(
+                    message_descriptor.full_name,
+                    name,
+                    path,
+                    [f.json_name for f in message_descriptor.fields],
+                )
+            )
+          if name in names:
+            raise ParseError(
+                'Message type "{0}" should not have multiple '
+                '"{1}" fields at "{2}".'.format(
+                    message.DESCRIPTOR.full_name, name, path
+                )
+            )
+          names.append(name)
+          value = js[name]
+          # Check no other oneof field is parsed.
+          if field.containing_oneof is not None and value is not None:
+            oneof_name = field.containing_oneof.name
+            if oneof_name in names:
+              raise ParseError(
+                  'Message type "{0}" should not have multiple '
+                  '"{1}" oneof fields at "{2}".'.format(
+                      message.DESCRIPTOR.full_name, oneof_name, path
+                  )
+              )
+            names.append(oneof_name)
+    
+          if value is None:
+            if (
+                field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE
+                and field.message_type.full_name == 'google.protobuf.Value'
+            ):
+              sub_message = getattr(message, field.name)
+              sub_message.null_value = 0
+            elif (
+                field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_ENUM
+                and field.enum_type.full_name == 'google.protobuf.NullValue'
+            ):
+              setattr(message, field.name, 0)
+            else:
+              message.ClearField(field.name)
+            continue
+    
+          # Parse field value.
+          if _IsMapEntry(field):
+            message.ClearField(field.name)
+            self._ConvertMapFieldValue(
+                value, message, field, '{0}.{1}'.format(path, name)
+            )
+          elif field.label == descriptor.FieldDescriptor.LABEL_REPEATED:
+            message.ClearField(field.name)
+            if not isinstance(value, _LIST_LIKE):
+              raise ParseError(
+                  'repeated field {0} must be in [] which is {1} at {2}'.format(
+                      name, value, path
+                  )
+              )
+            if field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE:
+              # Repeated message field.
+              for index, item in enumerate(value):
+                sub_message = getattr(message, field.name).add()
+                # None is a null_value in Value.
+                if (
+                    item is None
+                    and sub_message.DESCRIPTOR.full_name
+                    != 'google.protobuf.Value'
+                ):
+                  raise ParseError(
+                      'null is not allowed to be used as an element'
+                      ' in a repeated field at {0}.{1}[{2}]'.format(
+                          path, name, index
+                      )
+                  )
+                self.ConvertMessage(
+                    item, sub_message, '{0}.{1}[{2}]'.format(path, name, index)
+                )
+            else:
+              # Repeated scalar field.
+              for index, item in enumerate(value):
+                if item is None:
+                  raise ParseError(
+                      'null is not allowed to be used as an element'
+                      ' in a repeated field at {0}.{1}[{2}]'.format(
+                          path, name, index
+                      )
+                  )
+                self._ConvertAndAppendScalar(
+                  message, field, item, '{0}.{1}[{2}]'.format(path, name, index))
+          elif field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE:
+            if field.is_extension:
+              sub_message = message.Extensions[field]
+            else:
+              sub_message = getattr(message, field.name)
+            sub_message.SetInParent()
+            self.ConvertMessage(value, sub_message, '{0}.{1}'.format(path, name))
+          else:
+            if field.is_extension:
+              self._ConvertAndSetScalarExtension(message, field, value, '{0}.{1}'.format(path, name))
+            else:
+              self._ConvertAndSetScalar(message, field, value, '{0}.{1}'.format(path, name))
+        except ParseError as e:
+          if field and field.containing_oneof is None:
+            raise ParseError(
+                'Failed to parse {0} field: {1}.'.format(name, e)
+            ) from e
+          else:
+>           raise ParseError(str(e)) from e
+E           google.protobuf.json_format.ParseError: Message type "implicitus.Sphere" has no field named "radiusMm" at "Model.root.primitive.sphere".
+E            Available Fields(except extensions): "['radius']"
+
+/Users/danielgonzalez/miniforge3/envs/llm/lib/python3.13/site-packages/google/protobuf/json_format.py:696: ParseError
+
+The above exception was the direct cause of the following exception:
+
+    def test_parse_sphere_model():
+        raw = '{"shape":"sphere","size_mm":10}'
+>       model = csg_adapter.parse_and_build_model(raw)
+                ^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^^
+
+test_csg_adapter.py:8: 
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+../../ai_adapter/csg_adapter.py:49: in parse_and_build_model
+    json_format.ParseDict(model_dict, proto)
+/Users/danielgonzalez/miniforge3/envs/llm/lib/python3.13/site-packages/google/protobuf/json_format.py:494: in ParseDict
+    parser.ConvertMessage(js_dict, message, '')
+/Users/danielgonzalez/miniforge3/envs/llm/lib/python3.13/site-packages/google/protobuf/json_format.py:540: in ConvertMessage
+    self._ConvertFieldValuePair(value, message, path)
+_ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ _ 
+
+self = <google.protobuf.json_format._Parser object at 0x105530c20>
+js = {'id': 'c7826f23-6c91-4ead-b137-0b760fbfb203', 'root': {'primitive': {'sphere': {'radiusMm': 5.0}}}}
+message = id: "c7826f23-6c91-4ead-b137-0b760fbfb203"
+root {
+  primitive {
+    sphere {
+    }
+  }
+}
+
+path = 'Model'
+
+    def _ConvertFieldValuePair(self, js, message, path):
+      """Convert field value pairs into regular message.
+    
+      Args:
+        js: A JSON object to convert the field value pairs.
+        message: A regular protocol message to record the data.
+        path: parent path to log parse error info.
+    
+      Raises:
+        ParseError: In case of problems converting.
+      """
+      names = []
+      message_descriptor = message.DESCRIPTOR
+      fields_by_json_name = dict(
+          (f.json_name, f) for f in message_descriptor.fields
+      )
+      for name in js:
+        try:
+          field = fields_by_json_name.get(name, None)
+          if not field:
+            field = message_descriptor.fields_by_name.get(name, None)
+          if not field and _VALID_EXTENSION_NAME.match(name):
+            if not message_descriptor.is_extendable:
+              raise ParseError(
+                  'Message type {0} does not have extensions at {1}'.format(
+                      message_descriptor.full_name, path
+                  )
+              )
+            identifier = name[1:-1]  # strip [] brackets
+            # pylint: disable=protected-access
+            field = message.Extensions._FindExtensionByName(identifier)
+            # pylint: enable=protected-access
+            if not field:
+              # Try looking for extension by the message type name, dropping the
+              # field name following the final . separator in full_name.
+              identifier = '.'.join(identifier.split('.')[:-1])
+              # pylint: disable=protected-access
+              field = message.Extensions._FindExtensionByName(identifier)
+              # pylint: enable=protected-access
+          if not field:
+            if self.ignore_unknown_fields:
+              continue
+            raise ParseError(
+                (
+                    'Message type "{0}" has no field named "{1}" at "{2}".\n'
+                    ' Available Fields(except extensions): "{3}"'
+                ).format(
+                    message_descriptor.full_name,
+                    name,
+                    path,
+                    [f.json_name for f in message_descriptor.fields],
+                )
+            )
+          if name in names:
+            raise ParseError(
+                'Message type "{0}" should not have multiple '
+                '"{1}" fields at "{2}".'.format(
+                    message.DESCRIPTOR.full_name, name, path
+                )
+            )
+          names.append(name)
+          value = js[name]
+          # Check no other oneof field is parsed.
+          if field.containing_oneof is not None and value is not None:
+            oneof_name = field.containing_oneof.name
+            if oneof_name in names:
+              raise ParseError(
+                  'Message type "{0}" should not have multiple '
+                  '"{1}" oneof fields at "{2}".'.format(
+                      message.DESCRIPTOR.full_name, oneof_name, path
+                  )
+              )
+            names.append(oneof_name)
+    
+          if value is None:
+            if (
+                field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE
+                and field.message_type.full_name == 'google.protobuf.Value'
+            ):
+              sub_message = getattr(message, field.name)
+              sub_message.null_value = 0
+            elif (
+                field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_ENUM
+                and field.enum_type.full_name == 'google.protobuf.NullValue'
+            ):
+              setattr(message, field.name, 0)
+            else:
+              message.ClearField(field.name)
+            continue
+    
+          # Parse field value.
+          if _IsMapEntry(field):
+            message.ClearField(field.name)
+            self._ConvertMapFieldValue(
+                value, message, field, '{0}.{1}'.format(path, name)
+            )
+          elif field.label == descriptor.FieldDescriptor.LABEL_REPEATED:
+            message.ClearField(field.name)
+            if not isinstance(value, _LIST_LIKE):
+              raise ParseError(
+                  'repeated field {0} must be in [] which is {1} at {2}'.format(
+                      name, value, path
+                  )
+              )
+            if field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE:
+              # Repeated message field.
+              for index, item in enumerate(value):
+                sub_message = getattr(message, field.name).add()
+                # None is a null_value in Value.
+                if (
+                    item is None
+                    and sub_message.DESCRIPTOR.full_name
+                    != 'google.protobuf.Value'
+                ):
+                  raise ParseError(
+                      'null is not allowed to be used as an element'
+                      ' in a repeated field at {0}.{1}[{2}]'.format(
+                          path, name, index
+                      )
+                  )
+                self.ConvertMessage(
+                    item, sub_message, '{0}.{1}[{2}]'.format(path, name, index)
+                )
+            else:
+              # Repeated scalar field.
+              for index, item in enumerate(value):
+                if item is None:
+                  raise ParseError(
+                      'null is not allowed to be used as an element'
+                      ' in a repeated field at {0}.{1}[{2}]'.format(
+                          path, name, index
+                      )
+                  )
+                self._ConvertAndAppendScalar(
+                  message, field, item, '{0}.{1}[{2}]'.format(path, name, index))
+          elif field.cpp_type == descriptor.FieldDescriptor.CPPTYPE_MESSAGE:
+            if field.is_extension:
+              sub_message = message.Extensions[field]
+            else:
+              sub_message = getattr(message, field.name)
+            sub_message.SetInParent()
+            self.ConvertMessage(value, sub_message, '{0}.{1}'.format(path, name))
+          else:
+            if field.is_extension:
+              self._ConvertAndSetScalarExtension(message, field, value, '{0}.{1}'.format(path, name))
+            else:
+              self._ConvertAndSetScalar(message, field, value, '{0}.{1}'.format(path, name))
+        except ParseError as e:
+          if field and field.containing_oneof is None:
+>           raise ParseError(
+                'Failed to parse {0} field: {1}.'.format(name, e)
+            ) from e
+E           google.protobuf.json_format.ParseError: Failed to parse root field: Message type "implicitus.Sphere" has no field named "radiusMm" at "Model.root.primitive.sphere".
+E            Available Fields(except extensions): "['radius']".
+
+/Users/danielgonzalez/miniforge3/envs/llm/lib/python3.13/site-packages/google/protobuf/json_format.py:692: ParseError
+=============================== warnings summary ===============================
+../../../../../../../../miniforge3/envs/llm/lib/python3.13/site-packages/_pytest/config/__init__.py:1474
+  /Users/danielgonzalez/miniforge3/envs/llm/lib/python3.13/site-packages/_pytest/config/__init__.py:1474: PytestConfigWarning: Unknown config option: python_paths
+  
+    self._warn_or_fail_if_strict(f"Unknown config option: {key}\n")
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ============================
+FAILED test_csg_adapter.py::test_parse_sphere_model - google.protobuf.json_fo...
+==================== 1 failed, 1 passed, 1 warning in 0.09s ====================
