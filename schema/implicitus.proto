@@ -83,6 +83,13 @@ message Sweep {
   repeated Vector2 profilePoints = 2;
 }
 
+// Defines how to fill the interior of a solid primitive
+message Infill {
+  string pattern = 1;  // name of the infill pattern, e.g., "grid", "hex"
+  double density = 2;  // fill density, between 0 (empty) and 1 (solid)
+}
+
+
 // Boolean operations for combining primitives and other nodes
 message BooleanOp {
   // Types of boolean operations

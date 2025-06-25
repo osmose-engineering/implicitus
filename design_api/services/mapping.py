@@ -2,6 +2,35 @@ import uuid
 from ai_adapter.schema.implicitus_pb2 import Primitive
 
 def map_primitive(spec: dict) -> dict:
+    # unwrap wrapper nodes with 'primitive'
+    if isinstance(spec, dict) and 'primitive' in spec:
+        inner = spec['primitive']
+        prim_type, prim_vals = next(iter(inner.items()))
+        if prim_type == 'sphere':
+            spec = {'shape': 'sphere', 'size_mm': prim_vals['radius'] * 2}
+        elif prim_type == 'box':
+            size_dict = prim_vals['size']
+            # uniform cube
+            if size_dict['x'] == size_dict['y'] == size_dict['z']:
+                spec = {'shape': 'box', 'size_mm': size_dict['x']}
+            else:
+                spec = {'shape': 'box', 'size': (size_dict['x'], size_dict['y'], size_dict['z'])}
+        elif prim_type == 'cylinder':
+            spec = {
+                'shape': 'cylinder',
+                'radius_mm': prim_vals['radius'],
+                'height_mm': prim_vals['height']
+            }
+        else:
+            raise ValueError(f"Unknown primitive type: {prim_type}")
+    # handle grouping nodes with 'children'
+    if isinstance(spec, dict) and 'children' in spec:
+        # flatten all children primitives
+        children = spec['children']
+        return [map_primitive(child) for child in children]
+    # Handle a list of primitive specs by mapping each element
+    if isinstance(spec, list):
+        return [map_primitive(s) for s in spec]
     id_str = str(uuid.uuid4())
     shape = spec.get("shape", "").lower()
     if shape == "sphere":
@@ -48,3 +77,24 @@ def get_response_fields(proto_model):
         return "cylinder", {"radius_mm": radius, "height_mm": height}
     else:
         raise ValueError(f"Unsupported primitive type in proto: {primitive_type}")
+
+
+# New function for mapping spec to proto dict model
+def map_to_proto_dict(spec):
+    """
+    Convert a spec (dict or list of specs) into a full Model dict ready for JSON-to-proto.
+    If multiple primitives, wraps them in a union booleanOp under root.
+    """
+    mapped = map_primitive(spec)
+    # If map_primitive returned a list, wrap in a union op
+    if isinstance(mapped, list):
+        model_id = str(uuid.uuid4())
+        return {
+            "id": model_id,
+            "root": {
+                "booleanOp": {"union": {}},
+                "children": mapped
+            }
+        }
+    # Otherwise it's already a single-node dict
+    return mapped
