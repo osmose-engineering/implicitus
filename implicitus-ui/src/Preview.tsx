@@ -67,10 +67,10 @@ const Geometry: React.FC<{ primitive: { type: string; params: Record<string, num
 };
 
 const Preview: React.FC<PreviewProps> = ({ spec }) => {
-  console.log('[Preview] component rendered, spec prop:', spec);
+  //console.log('[Preview] component rendered, spec prop:', spec);
   // Accept either a single node or an array of nodes
   const nodes = Array.isArray(spec) ? spec : [spec];
-  console.log('[Preview] nodes:', nodes);
+  //console.log('[Preview] nodes:', nodes);
   // if any node does not yet have a confirmed primitive, prompt for confirmation
   const allConfirmed = nodes.every(node => {
     if (node.primitive || node.root?.primitive) return true;
@@ -90,7 +90,7 @@ const Preview: React.FC<PreviewProps> = ({ spec }) => {
   }
 
   const primitives: { type: string; params: Record<string, number>; infill?: { pattern: string; density: number } }[] = useMemo(() => {
-    console.log('[Preview] computing primitives from spec:', spec);
+    //console.log('[Preview] computing primitives from spec:', spec);
     return nodes.map((node: any) => {
       let raw = {};
       if (node.primitive) {
@@ -106,7 +106,7 @@ const Preview: React.FC<PreviewProps> = ({ spec }) => {
       const pattern = infillRaw.pattern ?? infillRaw.infill_pattern ?? infillRaw.infill_shape;
       const density = infillRaw.density ?? infillRaw.infill_thickness_mm ?? infillRaw.infill_mm;
       const infill = pattern && density != null ? { pattern, density } : undefined;
-      console.log('[Preview] raw primitive data:', raw);
+      //console.log('[Preview] raw primitive data:', raw);
       if (raw.type && raw.params) {
         return { ...raw, infill };
       }
@@ -135,7 +135,7 @@ const Preview: React.FC<PreviewProps> = ({ spec }) => {
     });
   }, [spec]);
 
-  console.log('[Preview] computed primitives:', primitives);
+  //console.log('[Preview] computed primitives:', primitives);
   // if no primitives have been resolved yet, prompt for confirmation
   if (primitives.length === 0) {
     return (
@@ -144,7 +144,7 @@ const Preview: React.FC<PreviewProps> = ({ spec }) => {
       </div>
     );
   }
-  console.log('[Preview] about to render Canvas, primitives:', primitives);
+  //console.log('[Preview] about to render Canvas, primitives:', primitives);
 
   return (
     <div style={{ width: '100%', height: '400px' }}>
