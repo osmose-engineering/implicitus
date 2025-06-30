@@ -16,6 +16,8 @@
 - Session-based update flow: follow-up prompts mutate existing spec.
 
 ## To-Do
+- **Basic solver** to capture early user activity for training
+- **Optimiser loop** to capture diff between model built and desired model.
 - **Primitive expansion** to fully encompass range of possible shapes/actions.
 - **SDF‑based GPU ray‑marching** for interactive infill preview (gyroid, Voronoi lattices).
 - **Adaptive sampling & LOD** strategies for complex lattices and scanned parts.

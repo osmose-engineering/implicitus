@@ -6,9 +6,61 @@ from ai_adapter.schema.implicitus_pb2 import Model
 import uuid
 from google.protobuf import json_format
 
+
 import logging
 logging.basicConfig(level=logging.DEBUG)
 from ai_adapter.inference_pipeline import generate as llm_generate
+
+# declarative requirements for primitives and modifiers
+PRIMITIVE_REQUIREMENTS = {
+    "sphere": {"oneOf": [["size_mm"], ["radius_mm"]]},
+    "cube":   {"required": ["size_mm"]},
+    "box":    {"required": ["size_mm"]},
+    "cylinder": {"oneOf": [["size_mm"], ["radius_mm", "height_mm"]]},
+    # extend with more primitives as needed...
+}
+
+MODIFIER_REQUIREMENTS = {
+    "infill": {"required": ["pattern", "density"]},
+    # extend with more modifiers (shell, boolean, etc.) as needed...
+}
+
+def _check_requirements(raw_spec: dict, shape: str) -> list[str]:
+    """
+    Return a list of missing parameter descriptions for the given primitive shape.
+    """
+    req = PRIMITIVE_REQUIREMENTS.get(shape.lower())
+    if not req:
+        return [f"unknown primitive '{shape}'"]
+    missing = []
+    for key in req.get("required", []):
+        if key not in raw_spec:
+            missing.append(key)
+    for group in req.get("oneOf", []):
+        if not any(k in raw_spec for k in group):
+            missing.append(f"one of {group}")
+    return missing
+
+def _find_missing_fields(raw_spec):
+    """
+    Inspect one or more raw spec dict(s) and return a list of missing key descriptions.
+    """
+    missing = []
+    specs = raw_spec if isinstance(raw_spec, list) else [raw_spec]
+    for spec in specs:
+        shape = spec.get("shape")
+        if not shape:
+            missing.append("shape")
+            continue
+        # primitive‐level checks
+        missing += _check_requirements(spec, shape)
+        # modifier‐level checks
+        for mod, mod_req in MODIFIER_REQUIREMENTS.items():
+            if mod in spec and isinstance(spec[mod], dict):
+                for key in mod_req.get("required", []):
+                    if key not in spec[mod]:
+                        missing.append(f"{shape} {mod}: missing {key}")
+    return missing
 
 def _build_modifier_dict(raw_spec: dict) -> dict:
     """
@@ -75,17 +127,23 @@ def _build_primitive_dict(spec):
 
 def parse_raw_spec(llm_output):
     logging.debug(f"parse_raw_spec received input: {repr(llm_output)}")
-    # If the input is already a list of nodes (each with 'primitive' or 'infill'), assume it's our internal format.
-    if isinstance(llm_output, list) and all(
-        isinstance(item, dict) and ('primitive' in item or 'infill' in item)
-        for item in llm_output
-    ):
+    # If the input is already a list of nodes in our internal format, return as is.
+    def _is_internal_node_dict(d):
+        # Only a dict with exactly key "primitive", or with exactly keys "infill" and "children"
+        if not isinstance(d, dict):
+            return False
+        keys = set(d.keys())
+        if keys == {"primitive"}:
+            return True
+        if keys == {"infill", "children"}:
+            return True
+        return False
+
+    if isinstance(llm_output, list) and all(_is_internal_node_dict(item) for item in llm_output):
         return llm_output
 
-    # If the input is already a single node dict, wrap it in a list.
-    if isinstance(llm_output, dict) and (
-        'primitive' in llm_output or 'infill' in llm_output
-    ):
+    # If the input is already a single node dict in internal format, wrap it in a list.
+    if _is_internal_node_dict(llm_output):
         return [llm_output]
 
     # If input is a string, attempt to parse JSON
@@ -155,6 +213,19 @@ def interpret_llm_request(llm_output):
             logging.debug("interpret_llm_request received generated JSON: %r", generated)
             raw = json.loads(generated)
             logging.debug("interpret_llm_request parsed generated JSON into dict: %r", raw)
+
+    # Check for any required fields that are still missing
+    missing = _find_missing_fields(raw)
+    if missing:
+        # Ask the LLM to generate exactly one clarification question
+        prompt = (
+            f"You have this incomplete CSG spec:\n{json.dumps(raw, indent=2)}\n"
+            f"The following data is missing: {', '.join(missing)}.\n"
+            "Please ask the user exactly one clear, concise question to obtain the missing information."
+        )
+        question = llm_generate(prompt)
+        logging.debug("interpret_llm_request clarification question: %r", question)
+        return {"needsClarification": True, "question": question}
 
     # Apply our unified infill normalization
     if isinstance(raw, dict):
@@ -232,12 +303,17 @@ def generate_summary(spec):
         if 'infill' in action:
             infill = action['infill']
             pattern = infill.get('pattern')
-            if 'density' in infill:
-                segments.append(f"infill pattern {pattern} density {infill['density']}")
-            elif 'thickness_mm' in infill:
-                segments.append(f"infill pattern {pattern} thickness {infill['thickness_mm']}")
+            density = infill.get('density')
+            # determine primary shape name
+            if 'children' in action and action['children']:
+                child = action['children'][0]
+                prim = child.get('primitive', {})
+                shape = next(iter(prim.keys()), '')
+            elif 'primitive' in action:
+                shape = next(iter(action['primitive'].keys()), '')
             else:
-                segments.append(f"infill pattern {pattern}")
+                shape = ''
+            segments.append(f"{shape} infill pattern {pattern} density {density}")
     return "; ".join(segments)
 
 def review_request(request_data):
@@ -246,6 +322,9 @@ def review_request(request_data):
     normalizes it, runs it through our existing interpret_llm_request pipeline,
     and returns the primitive-spec list plus a human-readable summary.
     """
+    # If our adapter asked a clarification question, propagate it back to the UI
+    if isinstance(request_data, dict) and request_data.get("needsClarification"):
+        return {"needsClarification": True, "question": request_data["question"]}
     # Follow-up update: apply a new raw instruction to an existing spec
     if isinstance(request_data, dict) and "spec" in request_data and "raw" in request_data:
         interpreted = interpret_llm_request(request_data)

@@ -108,46 +108,38 @@ async def update(req: UpdateRequest):
     return {"sid": req.sid, "spec": new_spec, "summary": new_summary}
 
 
-# New endpoint: /design/submit
+# New endpoint: submit final model
 @app.post("/design/submit", response_model=dict)
 async def submit(req: dict, sid: str):
-    logging.debug(f"Received /design/submit request for session {sid}: raw request body={req}")
-    try:
-        if sid not in design_states:
-            raise HTTPException(status_code=400, detail=f"Unknown session id {sid}")
-        # 0. Accept spec directly from stored draft_spec
-        spec_dict = design_states[sid].draft_spec
-        logging.debug(f"Received spec for submission from sid {sid}: {spec_dict}")
-        # Determine children nodes: accept either raw primitive specs or already-mapped Node dicts
-        entries = spec_dict if isinstance(spec_dict, list) else spec_dict.get('primitives', [])
-        # If entries look like protobuf Node dicts (contain 'primitive', 'booleanOp', etc.), use directly;
-        # otherwise map raw user specs with shape keys.
-        def is_proto_node(e):
-            return isinstance(e, dict) and any(k in e for k in ['primitive','booleanOp','infill','shell','shellFill','children'])
-        if all(is_proto_node(e) for e in entries):
-            children = entries
-        else:
-            # raw user specs with 'shape' -> map through map_to_proto_dict
-            children = [map_to_proto_dict(e) for e in entries]
-
-        # Assemble Model JSON
-        proto_dict = {
-            'id': str(uuid.uuid4()),
-            'root': {
-                'children': children
-            }
+    """
+    Finalize and lock in the current draft spec for the given session.
+    """
+    logging.debug(f"Received /design/submit request for session {sid}: body={req}")
+    if sid not in design_states:
+        raise HTTPException(status_code=400, detail=f"Unknown session id {sid}")
+    # Retrieve the draft spec
+    spec_dict = design_states[sid].draft_spec
+    logging.debug(f"Draft spec for submission: {spec_dict}")
+    # Normalize entries: if they look like proto Nodes, use as-is; else map primitives
+    entries = spec_dict if isinstance(spec_dict, list) else spec_dict.get('primitives', [])
+    def is_proto_node(e):
+        return isinstance(e, dict) and any(k in e for k in ['primitive','booleanOp','infill','shell','shellFill','children'])
+    if all(is_proto_node(e) for e in entries):
+        children = entries
+    else:
+        children = [map_to_proto_dict(e) for e in entries]
+    # Build the root model dict
+    proto_dict = {
+        'id': str(uuid.uuid4()),
+        'root': {
+            'children': children
         }
-        # 2. Validate against the Protobuf schema
-        proto_spec = validate_proto(proto_dict)
-        # store the final locked model
-        design_states[sid].locked_model = proto_dict
-        # 3. Return validated spec dict
-        return {"sid": sid, "locked_model": proto_dict}
-    except HTTPException:
-        raise
-    except Exception as e:
-        logging.exception("Error in submit endpoint")
-        raise HTTPException(status_code=500, detail=str(e))
+    }
+    # Validate against protobuf
+    validated = validate_proto(proto_dict)
+    # Store locked model
+    design_states[sid].locked_model = proto_dict
+    return {"sid": sid, "locked_model": proto_dict}
 
 if __name__ == "__main__":
     import uvicorn
