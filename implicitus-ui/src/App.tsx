@@ -116,13 +116,31 @@ function App() {
         setLoading(false);
         return;
       }
+      if (data.response) {
+        // Apply LLM-provided spec update
+        const resp = data.response;
+        setSpec([resp]);
+        setSpecText(JSON.stringify([resp], null, 2));
+        setMessages(prev => [...prev, { speaker: 'assistant', text: data.confirmation ?? 'Updated the model as requested.' }]);
+        setPrompt('');
+        setLoading(false);
+        return;
+      }
       setSummary(data.summary);
       if (Array.isArray(data.spec)) {
         setSpec(data.spec);
         setSpecText(JSON.stringify(data.spec, null, 2));
         setIsDirty(false);
       }
-      setMessages(prev => [...prev, { speaker: 'assistant', text: data.summary }]);
+      // Updated block per instructions
+      const isInitial = !sessionId;
+      let assistantText: string;
+      if (isInitial && data.summary) {
+        assistantText = `Created a ${data.summary}`;
+      } else {
+        assistantText = data.confirmation ?? data.summary;
+      }
+      setMessages(prev => [...prev, { speaker: 'assistant', text: assistantText }]);
       // on first review, capture whichever key the server returned (sessionId or sid)
       const newSid = data.sessionId ?? data.sid;
       if (!sessionId && newSid) {
@@ -205,7 +223,7 @@ function App() {
           </div>
           <div style={{ flex: 1, overflow: 'auto' }}>
             {/* Editable JSON window */}
-            {summary && (
+            {specText && (
               <div style={{ textAlign: 'left', margin: '1em', padding: '1em', border: '1px dashed #888' }}>
                 <strong>JSON Spec:</strong>
                 <Editor

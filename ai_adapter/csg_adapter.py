@@ -34,10 +34,10 @@ def _check_requirements(raw_spec: dict, shape: str) -> list[str]:
         return [f"unknown primitive '{shape}'"]
     missing = []
     for key in req.get("required", []):
-        if key not in raw_spec:
+        if key not in raw_spec or raw_spec.get(key) is None:
             missing.append(key)
     for group in req.get("oneOf", []):
-        if not any(k in raw_spec for k in group):
+        if not any(k in raw_spec and raw_spec.get(k) is not None for k in group):
             missing.append(f"one of {group}")
     return missing
 
@@ -414,11 +414,13 @@ def update_request(sid: str, spec: list, raw: str):
     """
     Apply a follow-up instruction `raw` to an existing spec list,
     then confirm what changed.
+    Returns a tuple: (new_spec, new_summary, confirmation)
     """
     old_spec = spec
-    # Reuse review_request to get updated spec and summary
+    # Reuse review_request to get updated spec
     request_data = {"raw": raw, "spec": old_spec, "sid": sid}
-    new_spec, new_summary = review_request(request_data)
+    new_spec, _ = review_request(request_data)
+    new_summary = generate_summary(new_spec)
     # Ask the LLM to confirm what changed
     confirmation = confirm_change(old_spec, new_spec, raw)
     return new_spec, new_summary, confirmation

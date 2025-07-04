@@ -1,5 +1,6 @@
 import logging
 from pydantic import Field
+import time
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -28,6 +29,21 @@ class DesignState:
 
 # session store: session_id -> DesignState
 design_states: dict[str, DesignState] = {}
+
+def log_turn(session_id: str, turn_type: str, raw: str, spec: list, summary: Optional[str] = None, question: Optional[str] = None):
+    entry = {
+        "session": session_id,
+        "timestamp": time.time(),
+        "type": turn_type,
+        "raw": raw,
+        "spec": spec,
+    }
+    if summary is not None:
+        entry["summary"] = summary
+    if question is not None:
+        entry["question"] = question
+    with open("conversation_log.jsonl", "a") as f:
+        f.write(json.dumps(entry) + "\n")
 
 app = FastAPI(title="Implicitus Design API", debug=True)
 
@@ -81,10 +97,13 @@ async def review(req: dict, sid: Optional[str] = None):
         result = review_request(req)
         # If the adapter returned a clarification question, surface it
         if isinstance(result, dict) and "question" in result:
-            return {"sid": sid, "question": result["question"]}
+            question = result["question"]
+            log_turn(sid, "clarify", req.get("raw", ""), [], question=question)
+            return {"sid": sid, "question": question}
         # Otherwise we have a spec and summary tuple
         spec, summary = result
         design_states[sid].draft_spec = spec
+        log_turn(sid, "review", req.get("raw", ""), spec, summary=summary)
         return {"sid": sid, "spec": spec, "summary": summary}
     except Exception as e:
         logging.exception("Error in review endpoint")
@@ -107,9 +126,15 @@ async def update(req: UpdateRequest):
     sid = req.sid
     if sid not in design_states:
         raise HTTPException(status_code=400, detail=f"Unknown session id {sid}")
-    # Apply the user's raw update instruction to the existing spec
-    new_spec, new_summary, confirmation = update_request(req.sid, req.spec, req.raw)
+    result = update_request(req.sid, req.spec, req.raw)
+    # if adapter returned a clarification question, forward it
+    if isinstance(result, dict) and "question" in result:
+        question = result["question"]
+        log_turn(req.sid, "clarify", req.raw, design_states[req.sid].draft_spec, question=question)
+        return {"sid": req.sid, "question": question}
+    new_spec, new_summary, confirmation = result
     design_states[req.sid].draft_spec = new_spec
+    log_turn(req.sid, "update", req.raw, new_spec)
     return {"sid": req.sid, "spec": new_spec, "summary": new_summary, "confirmation": confirmation}
 
 
