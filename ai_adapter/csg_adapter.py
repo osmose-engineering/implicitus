@@ -13,7 +13,7 @@ from ai_adapter.inference_pipeline import generate as llm_generate
 
 # declarative requirements for primitives and modifiers
 PRIMITIVE_REQUIREMENTS = {
-    "sphere": {"oneOf": [["size_mm"], ["radius_mm"]]},
+    "sphere": {"oneOf": [["size_mm", "radius_mm"]]},
     "cube":   {"required": ["size_mm"]},
     "box":    {"required": ["size_mm"]},
     "cylinder": {"oneOf": [["size_mm"], ["radius_mm", "height_mm"]]},
@@ -118,6 +118,15 @@ def _build_primitive_dict(spec):
         radius = float(spec.get('radius_mm', spec.get('radiusMm', 0)))
         height = float(spec.get('height_mm', spec.get('heightMm', 0)))
         return {'cylinder': {'radius': radius, 'height': height}}
+    # Special handling for sphere: use radius_mm directly if given, otherwise treat size_mm as diameter
+    if raw_shape == 'sphere':
+        # prefer explicit radius
+        if 'radius_mm' in spec or 'radiusMm' in spec:
+            radius = float(spec.get('radius_mm') or spec.get('radiusMm'))
+        else:
+            diameter = float(spec.get('size_mm') or spec.get('sizeMm'))
+            radius = diameter / 2.0
+        return {'sphere': {'radius': radius}}
     if raw_shape not in _SHAPE_FIELD_MAP:
         raise ValueError(f"Unknown shape '{raw_shape}' in spec")
     field_name, build_fields = _SHAPE_FIELD_MAP[raw_shape]
@@ -195,8 +204,14 @@ def interpret_llm_request(llm_output):
         )
         generated = llm_generate(prompt)
         logging.debug("interpret_llm_request received update-generated JSON: %r", generated)
-        raw = json.loads(generated)
-        logging.debug("interpret_llm_request parsed update-generated JSON into dict: %r", raw)
+        try:
+            update_list = json.loads(generated)
+        except json.JSONDecodeError:
+            raise RuntimeError(f"Failed to parse LLM update JSON: {generated}")
+        logging.debug("interpret_llm_request parsed update-generated JSON into dict: %r", update_list)
+        # Immediately return the updated primitives list, skipping missing-field checks
+        nodes = parse_raw_spec(update_list)
+        return {"primitives": nodes}
     else:
         raw = llm_output
 
@@ -225,7 +240,12 @@ def interpret_llm_request(llm_output):
         )
         question = llm_generate(prompt)
         logging.debug("interpret_llm_request clarification question: %r", question)
-        return {"needsClarification": True, "question": question}
+        # Parse the LLM's JSON response for the question
+        try:
+            q_dict = json.loads(question)
+            return {"needsClarification": True, **q_dict}
+        except json.JSONDecodeError:
+            return {"needsClarification": True, "question": question}
 
     # Apply our unified infill normalization
     if isinstance(raw, dict):
@@ -316,6 +336,22 @@ def generate_summary(spec):
             segments.append(f"{shape} infill pattern {pattern} density {density}")
     return "; ".join(segments)
 
+
+# Helper: confirm_change
+def confirm_change(old_nodes, new_nodes, instruction):
+    """
+    Compare the old and new primitive lists and
+    ask the LLM to produce a one-line confirmation of what changed.
+    """
+    prompt = (
+        f"I had this CSG spec:\n{json.dumps(old_nodes, indent=2)}\n"
+        f"Then you applied: {instruction}\n"
+        f"New spec is:\n{json.dumps(new_nodes, indent=2)}\n"
+        "Please confirm back to me in one sentence what changed."
+    )
+    confirmation = llm_generate(prompt)
+    return confirmation.strip()
+
 def review_request(request_data):
     """
     Takes the user's original request (either as raw JSON or wrapped in a single-key dict),
@@ -359,6 +395,16 @@ def review_request(request_data):
 
     # Interpret through our standard pipeline
     interpreted = interpret_llm_request(raw)
+    if isinstance(interpreted, dict) and interpreted.get("needsClarification"):
+        response = {
+            "needsClarification": True,
+            "question": interpreted["question"]
+        }
+        # Include sid if present in the original request
+        sid = request_data.get("sid") if isinstance(request_data, dict) else None
+        if sid:
+            response["sid"] = sid
+        return response
     spec = interpreted.get("primitives", [])
     summary = generate_summary(spec)
     return spec, summary
@@ -366,9 +412,13 @@ def review_request(request_data):
 
 def update_request(sid: str, spec: list, raw: str):
     """
-    Apply a follow-up instruction `raw` to an existing spec list.
-    For now, reuse review_request logic by packaging spec and raw into a single request dict.
+    Apply a follow-up instruction `raw` to an existing spec list,
+    then confirm what changed.
     """
-    # Build a request dict combining the new raw prompt with the existing spec and session id
-    request_data = {"raw": raw, "spec": spec, "sid": sid}
-    return review_request(request_data)
+    old_spec = spec
+    # Reuse review_request to get updated spec and summary
+    request_data = {"raw": raw, "spec": old_spec, "sid": sid}
+    new_spec, new_summary = review_request(request_data)
+    # Ask the LLM to confirm what changed
+    confirmation = confirm_change(old_spec, new_spec, raw)
+    return new_spec, new_summary, confirmation

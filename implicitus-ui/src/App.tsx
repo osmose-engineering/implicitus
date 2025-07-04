@@ -23,13 +23,14 @@ const handleEditorDidMount = (editor: monaco.editor.IStandaloneCodeEditor, monac
 };
 
 function App() {
+  const [isDirty, setIsDirty] = useState(false);
   const [prompt, setPrompt] = useState('');
-  const [spec, setSpec] = useState<any>(null);
+  const [spec, setSpec] = useState<any[]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<string>('');
   const [specText, setSpecText] = useState<string>('');
-  const [modelProto, setModelProto] = useState<any>(null);
+  const [modelProto, setModelProto] = useState<any | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<{speaker: 'user'|'assistant'; text: string}[]>([]);
 
@@ -37,26 +38,14 @@ function App() {
     e.preventDefault();
     // keep existing sessionId for follow-up updates
     setError(null);
-    if (!sessionId) {
-      setSpec(null);
-      setSummary('');
-      setSpecText('');
-      setModelProto(null);
-    }
     setLoading(true);
     setMessages(prev => [...prev, { speaker: 'user', text: prompt }]);
     console.log('[UI] Sending prompt →', prompt);
     let bodyData: any = {};
-    // For updates (existing session), always send raw prompt and edited spec
+    // For updates (existing session), always send raw prompt and current spec
     if (sessionId) {
       bodyData.raw = prompt;
-      try {
-        bodyData.spec = JSON.parse(specText);
-      } catch (parseError: any) {
-        setError(`Failed to parse edited spec JSON: ${parseError.message || parseError}`);
-        setLoading(false);
-        return;
-      }
+      bodyData.spec = spec;
       bodyData.sid = sessionId;
     } else if (prompt.trim()) {
       // New design request: send only the raw prompt
@@ -102,9 +91,37 @@ function App() {
         throw new Error(`Failed to parse JSON spec: ${parseError}`);
       }
       console.log('[UI] Received parsed response data →', data);
+      if (data.question) {
+        // Extract plain question text from the JSON-wrapped response
+        let questionText: string;
+        if (typeof data.question === 'string') {
+          try {
+            const parsedQ = JSON.parse(data.question);
+            questionText = parsedQ.question ?? parsedQ.query ?? data.question;
+          } catch {
+            questionText = data.question;
+          }
+        } else {
+          const qObj = data.question as any;
+          questionText = qObj.question ?? qObj.query ?? String(data.question);
+        }
+        // Display the LLM's follow-up question to the user
+        setMessages(prev => [...prev, { speaker: 'assistant', text: questionText }]);
+        // Pre-fill the prompt input with the LLM question
+        setPrompt(questionText);
+        const newSid = data.sessionId ?? data.sid;
+        if (!sessionId && newSid) {
+          setSessionId(newSid);
+        }
+        setLoading(false);
+        return;
+      }
       setSummary(data.summary);
-      setSpec(data.spec);
-      setSpecText(JSON.stringify(data.spec, null, 2));
+      if (Array.isArray(data.spec)) {
+        setSpec(data.spec);
+        setSpecText(JSON.stringify(data.spec, null, 2));
+        setIsDirty(false);
+      }
       setMessages(prev => [...prev, { speaker: 'assistant', text: data.summary }]);
       // on first review, capture whichever key the server returned (sessionId or sid)
       const newSid = data.sessionId ?? data.sid;
@@ -173,13 +190,13 @@ function App() {
               <form onSubmit={handleSubmit} style={{ borderTop: '1px solid #ccc', padding: '0.5em' }}>
                 <input
                   type="text"
-                  value={prompt}
-                  onChange={e => setPrompt(e.target.value)}
+                  value={prompt ?? ''}
+                  onChange={e => setPrompt(e.target.value || '')}
                   placeholder="What do you want to design?"
                   disabled={loading}
                   style={{ width: '80%', marginRight: '0.5em' }}
                 />
-                <button type="submit" disabled={loading || !prompt.trim()}>
+                <button type="submit" disabled={loading || !(prompt?.trim())}>
                   Generate
                 </button>
               </form>
@@ -195,7 +212,10 @@ function App() {
                   height="300px"
                   defaultLanguage="json"
                   value={specText}
-                  onChange={value => setSpecText(value!)}
+                  onChange={value => {
+                    setSpecText(value!);
+                    setIsDirty(true);
+                  }}
                   onMount={handleEditorDidMount}
                   options={{
                     readOnly: modelProto !== null,

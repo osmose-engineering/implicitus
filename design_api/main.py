@@ -77,8 +77,13 @@ async def review(req: dict, sid: Optional[str] = None):
         if sid is None or sid not in design_states:
             sid = str(uuid.uuid4())
             design_states[sid] = DesignState(draft_spec=[])
-        # interpret and summarize the user's spec
-        spec, summary = review_request(req)
+        # interpret and summarize the user's spec (or ask clarification)
+        result = review_request(req)
+        # If the adapter returned a clarification question, surface it
+        if isinstance(result, dict) and "question" in result:
+            return {"sid": sid, "question": result["question"]}
+        # Otherwise we have a spec and summary tuple
+        spec, summary = result
         design_states[sid].draft_spec = spec
         return {"sid": sid, "spec": spec, "summary": summary}
     except Exception as e:
@@ -103,9 +108,9 @@ async def update(req: UpdateRequest):
     if sid not in design_states:
         raise HTTPException(status_code=400, detail=f"Unknown session id {sid}")
     # Apply the user's raw update instruction to the existing spec
-    new_spec, new_summary = update_request(req.sid, req.spec, req.raw)
+    new_spec, new_summary, confirmation = update_request(req.sid, req.spec, req.raw)
     design_states[req.sid].draft_spec = new_spec
-    return {"sid": req.sid, "spec": new_spec, "summary": new_summary}
+    return {"sid": req.sid, "spec": new_spec, "summary": new_summary, "confirmation": confirmation}
 
 
 # New endpoint: submit final model
