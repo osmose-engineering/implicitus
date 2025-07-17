@@ -13,3 +13,12 @@
 {"session": "7da1aceb-0b9f-4462-9461-1b10727abeef", "timestamp": 1751596989.5658948, "type": "review", "raw": "Can you make me a cube?", "spec": [{"primitive": {"cube": {"size": 10.0}}}], "summary": "cube"}
 {"session": "7da1aceb-0b9f-4462-9461-1b10727abeef", "timestamp": 1751597016.876113, "type": "update", "raw": "Ok can you change the size to 15mm?", "spec": [{"primitive": {"cube": {"size": 15}}}]}
 {"session": "7da1aceb-0b9f-4462-9461-1b10727abeef", "timestamp": 1751597053.405768, "type": "update", "raw": "Great. Can you add a 2mm gyroid infill? ", "spec": [{"primitive": {"cube": {"size": 15}, "gyroid": {"size": 15, "infill_mm": 2}}}]}
+{"session": "b03d4e79-9081-4a4d-8af0-fe8456bfb9e8", "timestamp": 1751982430.098166, "type": "review", "raw": "Can you make me a sphere?", "spec": [{"primitive": {"sphere": {"radius": 5.0}}}], "summary": "sphere radius 5.0"}
+{"session": "2b4fa436-f7c6-4aaf-a3b1-d841eb6a8786", "timestamp": 1751982518.6136389, "type": "clarify", "raw": "Can you make me a cube?", "spec": [], "question": "What is the edge length of the cube in millimeters?"}
+{"session": "2b4fa436-f7c6-4aaf-a3b1-d841eb6a8786", "timestamp": 1751982530.907706, "type": "update", "raw": "10mm", "spec": [{"primitive": {"sphere": {"radius": 5.0}}}]}
+{"session": "e2f4e5ee-68ec-42a5-8e45-9cb889d3ba53", "timestamp": 1751982551.9825149, "type": "review", "raw": "Can you make me a sphere?", "spec": [{"primitive": {"sphere": {"radius": 5.0}}}], "summary": "sphere radius 5.0"}
+{"session": "e2f4e5ee-68ec-42a5-8e45-9cb889d3ba53", "timestamp": 1751982566.804807, "type": "update", "raw": "Can you change the radius to 10mm?", "spec": [{"primitive": {"sphere": {"radius": 10}}}]}
+{"session": "e2f4e5ee-68ec-42a5-8e45-9cb889d3ba53", "timestamp": 1751982592.266243, "type": "update", "raw": "Please add a 2mm gyroid infill", "spec": [{"primitive": {"sphere": {"radius": 10}, "gyroid": {"cell_size_mm": 2}}}]}
+{"session": "7276b0fb-3bb6-4968-89e3-050edfb8cbaf", "timestamp": 1752686887.2806349, "type": "review", "raw": "Can you make me a sphere?", "spec": [{"primitive": {"sphere": {"radius": 5.0}}}], "summary": "sphere radius 5.0"}
+{"session": "7276b0fb-3bb6-4968-89e3-050edfb8cbaf", "timestamp": 1752686909.9675899, "type": "update", "raw": "Please change the radius to 10mm", "spec": [{"primitive": {"sphere": {"radius": 10}}}]}
+{"session": "7276b0fb-3bb6-4968-89e3-050edfb8cbaf", "timestamp": 1752686929.778628, "type": "update", "raw": "Can you add a 2mm gyroid infill?", "spec": [{"primitive": {"sphere": {"radius": 10}, "gyroid": {"cell_size_mm": 2}}}]}
