@@ -154,6 +154,7 @@ message Node {
     Infill infill            = 4;
     Shell shell              = 5;
     ShellFill shell_fill     = 6;
+    VoronoiLattice voronoi   = 8;
   }
   repeated Node children = 7;
 }
@@ -175,6 +176,45 @@ message Shell {
 message ShellFill {
   Shell shell = 1;
   Infill infill = 2;
+}
+
+// Voronoi lattice generation parameters
+message VoronoiLattice {
+  // Seed-point sampling
+  double min_dist = 1;              // fixed Poisson-disk radius
+  string density_field = 2;         // reference to a user-defined density function
+  string scale_field = 3;           // reference to an anisotropic scale function
+
+  // Adaptive octree grid resolution
+  bool adaptive = 4;                // whether to use adaptive octree
+  int32 max_depth = 5;              // maximum subdivision depth
+  double threshold = 6;             // error threshold for subdivision
+  string error_metric = 7;          // reference to a custom error metric function
+
+  // Uniform grid resolution if not adaptive
+  repeated int32 resolution = 8;    // [nx, ny, nz] resolution of grid
+
+  // Lattice parameters
+  double wall_thickness = 9;
+  double shell_offset = 10;
+  string blend_curve = 11;          // reference to a blend-weight function
+
+  // CSG operations
+  message CSGOp {
+    enum Type {
+      UNION = 0;
+      INTERSECTION = 1;
+      DIFFERENCE = 2;
+    }
+    Type op = 1;
+    string sdf = 2;                 // reference to an SDF function
+    double r = 3;                   // blend radius
+  }
+  repeated CSGOp csg_ops = 12;
+
+  // Automatic capping
+  bool auto_cap = 13;
+  double cap_blend = 14;
 }
 
 // Design constraints for generative workflows

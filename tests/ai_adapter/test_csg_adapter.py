@@ -1,7 +1,7 @@
 # tests/ai_adapter/test_csg_adapter.py
 import pytest
 import json
-from ai_adapter.csg_adapter import parse_raw_spec, generate_summary, review_request
+from ai_adapter.csg_adapter import parse_raw_spec, generate_summary, review_request, update_request
 
 def test_parse_sphere_spec():
     raw = '{"shape":"sphere","size_mm":10}'
@@ -143,3 +143,98 @@ def test_review_request_with_modified_spec():
     assert isinstance(summary, str)
     assert "sphere" in summary.lower()
     assert "4.5" in summary
+
+
+# Test update_request for adding infill to a sphere
+def test_update_request_add_infill():
+    raw = '{"shape":"sphere","size_mm":10}'
+    initial_spec = parse_raw_spec(raw)
+    request_data = {
+        'sid': 'test-session',
+        'spec': initial_spec,
+        'raw': 'Please add a 2mm gyroid infill to the sphere'
+    }
+    spec, summary = update_request(request_data['sid'], request_data['spec'], request_data['raw'])
+    # Should return a list of length 1
+    assert isinstance(spec, list)
+    assert len(spec) == 1
+    action = spec[0]
+    # There should be an 'infill' key
+    assert 'infill' in action
+    infill = action['infill']
+    assert isinstance(infill, dict)
+    # Should have type or pattern mentioning gyroid
+    pattern = infill.get('pattern') or infill.get('type')
+    assert pattern is not None
+    assert 'gyroid' in str(pattern).lower()
+    # Should have a thickness or density that is numeric and positive
+    thickness = infill.get('thickness') or infill.get('density')
+    assert isinstance(thickness, (int, float))
+    assert thickness > 0
+    # Summary should mention gyroid
+    assert isinstance(summary, str)
+    assert 'gyroid' in summary.lower()
+
+
+# Test update_request for union of multiple primitives
+def test_update_request_multiple_primitives():
+    raw = '{"primitives":[{"shape":"cube","size_mm":8},{"shape":"sphere","size_mm":6}]}'
+    initial_spec = parse_raw_spec(raw)
+    request_data = {
+        'sid': 'test-session',
+        'spec': initial_spec,
+        'raw': 'Please union these two shapes'
+    }
+    spec, summary = update_request(request_data['sid'], request_data['spec'], request_data['raw'])
+    # Should not add new primitives, just apply boolean operation
+    assert isinstance(spec, list)
+    assert len(spec) == 2
+    # Each action should still have its primitive
+    for action in spec:
+        assert 'primitive' in action
+        primitive = action['primitive']
+        assert isinstance(primitive, dict)
+        assert list(primitive.keys())[0] in ('cube', 'sphere')
+    # Summary should mention union
+    assert isinstance(summary, str)
+    assert 'union' in summary.lower()
+
+
+# Voronoi primitive and infill tests
+def test_parse_voronoi_shape_spec():
+    # Explicit Voronoi primitive spec
+    raw = json.dumps({
+        "shape": "voronoi",
+        "min_dist": 0.3,
+        "bbox_min": [0, 0, 0],
+        "bbox_max": [1, 1, 1]
+    })
+    spec = parse_raw_spec(raw)
+    assert isinstance(spec, list)
+    assert len(spec) == 1
+    primitive = spec[0].get('primitive', {})
+    assert 'voronoi' in primitive
+    vor = primitive['voronoi']
+    assert vor['min_dist'] == 0.3
+    assert vor['bbox_min'] == [0, 0, 0]
+    assert vor['bbox_max'] == [1, 1, 1]
+
+
+def test_review_request_with_voronoi_infill():
+    # Voronoi infill on a box should transform into a standalone Voronoi primitive
+    raw_data = {
+        "shape": "box",
+        "size_mm": 10,
+        "infill": {"pattern": "voronoi", "density": 0.5}
+    }
+    spec, summary = review_request(raw_data)
+    assert isinstance(spec, list) and len(spec) == 1
+    primitive = spec[0].get('primitive', {})
+    assert 'voronoi' in primitive
+    vor = primitive['voronoi']
+    # Check that default parameters are present
+    assert 'bbox_min' in vor and 'bbox_max' in vor
+    assert 'min_dist' in vor and isinstance(vor['min_dist'], float)
+    # Summary should mention voronoi
+    assert isinstance(summary, str)
+    assert 'voronoi' in summary.lower()

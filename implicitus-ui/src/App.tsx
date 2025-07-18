@@ -6,19 +6,10 @@ import Preview from './Preview';
 
 const handleEditorDidMount = (editor: monaco.editor.IStandaloneCodeEditor, monacoInstance: typeof monaco) => {
   monacoInstance.languages.json.jsonDefaults.setDiagnosticsOptions({
+    // Draft mode: only basic syntax and comments validation, no schema enforcement
     validate: true,
-    schemas: [
-      {
-        uri: 'http://implicitus.io/schema/spec.json',
-        fileMatch: ['*'],
-        schema: {
-          type: 'array',
-          items: {
-            type: 'object'
-          }
-        }
-      }
-    ],
+    allowComments: true,
+    schemas: [],  // disable JSON schema checks to allow free-form editing (e.g., voronoi fields)
   });
 };
 

@@ -1,4 +1,5 @@
 import numpy as np
+import numpy as np  # ensure numpy is available for cap SDF
 import random
 import math
 from typing import Union, Any
@@ -609,6 +610,8 @@ def construct_voronoi_cells(
     resolution: Tuple[int, int, int] = (64, 64, 64),
     wall_thickness: float = 0.0,
     csg_ops: Optional[List[Dict[str, Any]]] = None,
+    auto_cap: bool = False,
+    cap_blend: float = 0.0,
     adaptive_grid: Optional[OctreeNode] = None
 ) -> List[Dict]:
     """
@@ -626,6 +629,16 @@ def construct_voronoi_cells(
       - "volume": 0.0  (to fill in later)
       - "neighbors": list of adjacent seed points
     """
+    # Prepare box SDF for automatic capping
+    bmin_np = np.array(bbox_min)
+    bmax_np = np.array(bbox_max)
+    def box_sdf(p: np.ndarray) -> float:
+        # Signed distance to AABB: negative inside, positive outside
+        q = np.maximum(bmin_np - p, p - bmax_np)
+        outside = np.linalg.norm(np.maximum(q, 0.0))
+        inside = min(max(q[0], max(q[1], q[2])), 0.0)
+        return outside + inside
+
     # Adaptive grid sampling: use octree leaves as sample points
     if adaptive_grid is not None:
         # collect leaf nodes
@@ -665,6 +678,11 @@ def construct_voronoi_cells(
                             val = smooth_intersection(val, other_v, blend_r)
                         elif typ == 'difference':
                             val = smooth_difference(val, other_v, blend_r)
+                # Automatic capping for adaptive samples
+                if auto_cap:
+                    cap_val = box_sdf(p_arr)
+                    if cap_val > 0:
+                        val = smooth_intersection(val, cap_val, cap_blend)
                 samples.append((p, val))
             cells.append({
                 "site": seed,
@@ -675,19 +693,24 @@ def construct_voronoi_cells(
             })
         # Compute adjacency via Delaunay triangulation of seed points
         if Delaunay is not None and len(points) >= 2:
-            pts_np = np.array(points)
-            tri = Delaunay(pts_np)
-            adj_map = {tuple(seed): set() for seed in points}
-            for simplex in tri.simplices:
-                for i in range(len(simplex)):
-                    for j in range(i+1, len(simplex)):
-                        si = tuple(points[simplex[i]])
-                        sj = tuple(points[simplex[j]])
-                        adj_map[si].add(sj)
-                        adj_map[sj].add(si)
-            # Assign neighbor lists
-            for cell in cells:
-                cell['neighbors'] = list(adj_map[cell['site']])
+            try:
+                pts_np = np.array(points)
+                tri = Delaunay(pts_np)
+                adj_map = {tuple(seed): set() for seed in points}
+                for simplex in tri.simplices:
+                    for i in range(len(simplex)):
+                        for j in range(i+1, len(simplex)):
+                            si = tuple(points[simplex[i]])
+                            sj = tuple(points[simplex[j]])
+                            adj_map[si].add(sj)
+                            adj_map[sj].add(si)
+                # Assign neighbor lists
+                for cell in cells:
+                    cell['neighbors'] = list(adj_map[cell['site']])
+            except Exception:
+                # Fallback with no neighbors
+                for cell in cells:
+                    cell['neighbors'] = []
         else:
             # Fallback with no neighbors
             for cell in cells:
@@ -759,6 +782,15 @@ def construct_voronoi_cells(
                 elif op_type == 'difference':
                     final_sdf = smooth_difference(final_sdf, other, blend_r)
             cell_sdf = final_sdf
+        # Automatic capping at bounding box
+        if auto_cap:
+            for ii in range(nx):
+                for jj in range(ny):
+                    for kk in range(nz):
+                        p = np.array([xs[ii], ys[jj], zs[kk]])
+                        cap_val = box_sdf(p)
+                        if cap_val > 0:
+                            cell_sdf[ii, jj, kk] = smooth_intersection(cell_sdf[ii, jj, kk], cap_val, cap_blend)
         cells.append({
             "site": pt,
             "sdf": cell_sdf,

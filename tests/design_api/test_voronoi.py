@@ -515,3 +515,58 @@ def test_construct_surface_voronoi_cells_hybrid_blend_curve_full():
         grid = cell['sdf']
         val = grid[0, 0, 0]
         assert pytest.approx(exp, rel=1e-2) == val
+
+
+# Additional tests for auto_cap behavior
+def test_construct_voronoi_cells_auto_cap_nochange():
+    # Single seed at center: auto_cap should not alter interior lattice
+    seeds = [(0.5, 0.5, 0.5)]
+    bbox_min = (0.0, 0.0, 0.0)
+    bbox_max = (1.0, 1.0, 1.0)
+    resolution = (2, 2, 2)
+
+    cells_no_cap = construct_voronoi_cells(
+        seeds, bbox_min, bbox_max,
+        resolution=resolution,
+        auto_cap=False
+    )
+    cells_cap = construct_voronoi_cells(
+        seeds, bbox_min, bbox_max,
+        resolution=resolution,
+        auto_cap=True,
+        cap_blend=0.2
+    )
+    # Verify same number of cells
+    assert len(cells_no_cap) == len(cells_cap) == 1
+    sdf0 = cells_no_cap[0]['sdf']
+    sdf1 = cells_cap[0]['sdf']
+    # Values should be unchanged for interior points
+    assert isinstance(sdf0, np.ndarray) and isinstance(sdf1, np.ndarray)
+    assert sdf0.shape == resolution and sdf1.shape == resolution
+    assert np.allclose(sdf0, sdf1)
+
+
+def test_construct_voronoi_cells_adaptive_auto_cap_nochange():
+    # Two seeds with adaptive grid: auto_cap should not alter interior samples
+    seeds = [(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)]
+    bbox_min = (0.0, 0.0, 0.0)
+    bbox_max = (1.0, 1.0, 1.0)
+    root = OctreeNode(bbox_min, bbox_max)
+
+    cells_no_cap = construct_voronoi_cells(
+        seeds, bbox_min, bbox_max,
+        adaptive_grid=root,
+        auto_cap=False
+    )
+    cells_cap = construct_voronoi_cells(
+        seeds, bbox_min, bbox_max,
+        adaptive_grid=root,
+        auto_cap=True,
+        cap_blend=0.1
+    )
+    assert len(cells_no_cap) == len(cells_cap) == len(seeds)
+    # Compare sample values
+    for c0, c1 in zip(cells_no_cap, cells_cap):
+        vals0 = [v for _, v in c0['samples']]
+        vals1 = [v for _, v in c1['samples']]
+        assert vals0 == vals1

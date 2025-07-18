@@ -1,6 +1,20 @@
 # React + TypeScript + Vite
 
+
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+
+## Current Progress
+
+Our application now includes a full-featured Voronoi lattice generation backend with the following capabilities:
+
+- **Seed-point sampling**: uniform, Poisson-disk with `min_dist`, spatially-varying `density_field`, and anisotropic sampling (`scale_field`).
+- **Adaptive grid resolution**: octree subdivision driven by curvature or custom error metrics; multi-resolution support.
+- **Voronoi cell construction**: surface-only and full-volume lattices, with customizable wall thickness and lattice parameters.
+- **CSG operations**: smooth union, intersection, and difference with user-provided SDFs and blend radii.
+- **Hybrid surface-to-solid shells**: blend curves and shell offsets to transition from thin shells to solid infill.
+- **Test coverage**: comprehensive unit tests covering all core functionality.
+
+See `BACKLOG.md` for upcoming features and enhancements.
 
 Currently, two official plugins are available:
 
