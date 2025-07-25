@@ -4,15 +4,6 @@ import * as monaco from 'monaco-editor';
 import './App.css'
 import Preview from './Preview';
 
-const handleEditorDidMount = (editor: monaco.editor.IStandaloneCodeEditor, monacoInstance: typeof monaco) => {
-  monacoInstance.languages.json.jsonDefaults.setDiagnosticsOptions({
-    // Draft mode: only basic syntax and comments validation, no schema enforcement
-    validate: true,
-    allowComments: true,
-    schemas: [],  // disable JSON schema checks to allow free-form editing (e.g., voronoi fields)
-  });
-};
-
 function App() {
   const [isDirty, setIsDirty] = useState(false);
   const [prompt, setPrompt] = useState('');
@@ -24,6 +15,45 @@ function App() {
   const [modelProto, setModelProto] = useState<any | null>(null);
   const [sessionId, setSessionId] = useState<string | null>(null);
   const [messages, setMessages] = useState<{speaker: 'user'|'assistant'; text: string}[]>([]);
+  // Layer visibility toggles for preview
+  const [visibility, setVisibility] = useState<{[key: string]: boolean}>({
+    primitive: true,
+    infill: true,
+  });
+
+  const handleValidate = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const parsed = JSON.parse(specText);
+      const response = await fetch('http://localhost:8000/design/review', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spec: parsed }),
+      });
+      const rawText = await response.text();
+      if (!response.ok) {
+        throw new Error(`Validation error: ${rawText}`);
+      }
+      const data = JSON.parse(rawText);
+      setSummary(data.summary || 'Validation successful.');
+      setMessages(prev => [...prev, { speaker: 'assistant', text: `Validation: ${data.summary}` }]);
+    } catch (err: any) {
+      setError(err.message || 'Validation failed.');
+    } finally {
+      setLoading(false);
+      setIsDirty(false);
+    }
+  };
+
+  const handleEditorDidMount = (editor: monaco.editor.IStandaloneCodeEditor, monacoInstance: typeof monaco) => {
+    monacoInstance.languages.json.jsonDefaults.setDiagnosticsOptions({
+      // Draft mode: only basic syntax and comments validation, no schema enforcement
+      validate: true,
+      allowComments: true,
+      schemas: [],  // disable JSON schema checks to allow free-form editing (e.g., voronoi fields)
+    });
+  };
 
   const handleSubmit = async (e: React.FormEvent<HTMLFormElement>) => {
     e.preventDefault();
@@ -59,7 +89,10 @@ function App() {
     console.log('[UI] Current specText →', specText);
     console.log('[UI] Current prompt →', prompt);
     try {
-      const endpoint = sessionId ? '/design/update' : '/design/review';
+      // use /design/update for any follow-up on an existing spec,
+      // or when there is already a spec and the user enters a new prompt
+      const isUpdate = Boolean(sessionId) || (spec.length > 0 && prompt.trim().length > 0);
+      const endpoint = isUpdate ? '/design/update' : '/design/review';
       console.log('[UI] using endpoint →', endpoint);
       const response = await fetch(`http://localhost:8000${endpoint}`, {
         method: 'POST',
@@ -81,7 +114,22 @@ function App() {
         console.error('[UI] JSON parse error:', parseError);
         throw new Error(`Failed to parse JSON spec: ${parseError}`);
       }
-      console.log('[UI] Received parsed response data →', data);
+      // Handle updated spec with nested modifiers
+      if (data.spec && Array.isArray(data.spec)) {
+        setSpec(data.spec);
+        setSpecText(JSON.stringify(data.spec, null, 2));
+        if (data.summary) {
+          setSummary(data.summary);
+          setMessages(prev => [...prev, { speaker: 'assistant', text: data.summary }]);
+        }
+        // Capture session ID for subsequent updates
+        if (!sessionId && data.sid) {
+          setSessionId(data.sid);
+        }
+        setIsDirty(false);
+        setLoading(false);
+        return;
+      }
       if (data.question) {
         // Extract plain question text from the JSON-wrapped response
         let questionText: string;
@@ -106,22 +154,6 @@ function App() {
         }
         setLoading(false);
         return;
-      }
-      if (data.response) {
-        // Apply LLM-provided spec update
-        const resp = data.response;
-        setSpec([resp]);
-        setSpecText(JSON.stringify([resp], null, 2));
-        setMessages(prev => [...prev, { speaker: 'assistant', text: data.confirmation ?? 'Updated the model as requested.' }]);
-        setPrompt('');
-        setLoading(false);
-        return;
-      }
-      setSummary(data.summary);
-      if (Array.isArray(data.spec)) {
-        setSpec(data.spec);
-        setSpecText(JSON.stringify(data.spec, null, 2));
-        setIsDirty(false);
       }
       // Updated block per instructions
       const isInitial = !sessionId;
@@ -222,8 +254,18 @@ function App() {
                   defaultLanguage="json"
                   value={specText}
                   onChange={value => {
-                    setSpecText(value!);
+                    const text = value ?? '';
+                    setSpecText(text);
                     setIsDirty(true);
+                    try {
+                      const parsed = JSON.parse(text);
+                      if (Array.isArray(parsed)) {
+                        setSpec(parsed);
+                        setError(null);
+                      }
+                    } catch {
+                      // ignore JSON parse errors for draft mode
+                    }
                   }}
                   onMount={handleEditorDidMount}
                   options={{
@@ -237,6 +279,19 @@ function App() {
                 <button onClick={handleConfirm} disabled={loading}>
                   Confirm &amp; Apply
                 </button>
+                <button onClick={handleValidate} disabled={loading || !isDirty}>
+                  Validate
+                </button>
+                {spec.length > 0 && spec[0].modifiers?.infill?.seed_points && (
+                  <div style={{ marginTop: '1em' }}>
+                    <strong>Seed Points:</strong>
+                    <textarea
+                      readOnly
+                      style={{ width: '100%', height: '120px', fontFamily: 'monospace', fontSize: '0.9em' }}
+                      value={JSON.stringify(spec[0].modifiers.infill.seed_points, null, 2)}
+                    />
+                  </div>
+                )}
               </div>
             )}
           </div>
@@ -250,10 +305,29 @@ function App() {
           </div>
         </div>
         <div style={{ flex: 1, overflow: 'auto' }}>
+          {/* Layer visibility toggles */}
+          <div style={{ margin: '1em', textAlign: 'left' }}>
+            <label>
+              <input
+                type="checkbox"
+                checked={visibility.primitive}
+                onChange={() => setVisibility(v => ({ ...v, primitive: !v.primitive }))}
+              />
+              Show Solid
+            </label>
+            <label style={{ marginLeft: '1em' }}>
+              <input
+                type="checkbox"
+                checked={visibility.infill}
+                onChange={() => setVisibility(v => ({ ...v, infill: !v.infill }))}
+              />
+              Show Infill
+            </label>
+          </div>
           {/* Preview panel */}
           {spec && (
             <div>
-              <Preview spec={spec} />
+              <Preview spec={spec} visibility={visibility} />
             </div>
           )}
         </div>

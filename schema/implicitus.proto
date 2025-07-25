@@ -145,18 +145,28 @@ message Transform {
   }
 }
 
+// A modifier applied to a primitive (infill, shell, lattice, boolean, etc.)
+message Modifier {
+  oneof kind {
+    Infill infill = 1;               // lattice infill or other patterns
+    Shell shell = 2;                 // shell thickness
+    VoronoiLattice lattice = 3;      // parameterized Voronoi lattice
+    BooleanOp boolean_op = 4;        // bool. operation on this primitive
+  }
+}
+
 // A node in the implicit scene graph
 message Node {
+  // The primary content of this node: either a base primitive or a transform
   oneof body {
-    Primitive primitive      = 1;
-    Transform transform      = 2;
-    BooleanOp boolean_op     = 3;
-    Infill infill            = 4;
-    Shell shell              = 5;
-    ShellFill shell_fill     = 6;
-    VoronoiLattice voronoi   = 8;
+    Primitive primitive  = 1;
+    Transform transform  = 2;
   }
+  // Child nodes in the scene graph
   repeated Node children = 7;
+
+  // Modifiers to apply to this primitive (infill, shell, lattice, boolean, etc.)
+  repeated Modifier modifiers = 8;
 }
 
 // Top-level model definition

@@ -126,16 +126,18 @@ async def update(req: UpdateRequest):
     sid = req.sid
     if sid not in design_states:
         raise HTTPException(status_code=400, detail=f"Unknown session id {sid}")
+    # Call the adapter to update the spec
     result = update_request(req.sid, req.spec, req.raw)
-    # if adapter returned a clarification question, forward it
+    # If adapter returned a clarification question, forward it
     if isinstance(result, dict) and "question" in result:
         question = result["question"]
         log_turn(req.sid, "clarify", req.raw, design_states[req.sid].draft_spec, question=question)
         return {"sid": req.sid, "question": question}
-    new_spec, new_summary, confirmation = result
+    # Unpack updated spec and summary
+    new_spec, new_summary = result
     design_states[req.sid].draft_spec = new_spec
     log_turn(req.sid, "update", req.raw, new_spec)
-    return {"sid": req.sid, "spec": new_spec, "summary": new_summary, "confirmation": confirmation}
+    return {"sid": req.sid, "spec": new_spec, "summary": new_summary}
 
 
 # New endpoint: submit final model

@@ -6,6 +6,54 @@ from ai_adapter.schema.implicitus_pb2 import Model
 import uuid
 from google.protobuf import json_format
 
+# --- Helper functions for voronoi seed generation ---
+import random
+
+def _auto_generate_seed_points(shape: str, params: dict, bbox_min: tuple, bbox_max: tuple, spacing: float) -> list:
+    """
+    Generate seed points inside the given primitive shape within its AABB,
+    using a grid plus random jitter at the given spacing.
+    """
+    seeds = []
+    # compute grid dimensions
+    nx = int((bbox_max[0] - bbox_min[0]) / spacing) + 1
+    ny = int((bbox_max[1] - bbox_min[1]) / spacing) + 1
+    nz = int((bbox_max[2] - bbox_min[2]) / spacing) + 1
+    for i in range(nx):
+        for j in range(ny):
+            for k in range(nz):
+                x = bbox_min[0] + i * spacing + (random.random() - 0.5) * spacing
+                y = bbox_min[1] + j * spacing + (random.random() - 0.5) * spacing
+                z = bbox_min[2] + k * spacing + (random.random() - 0.5) * spacing
+                if _point_inside_shape(shape, params, (x, y, z)):
+                    seeds.append([x, y, z])
+    return seeds
+
+def _point_inside_shape(shape: str, params: dict, pt: tuple) -> bool:
+    """
+    Check if point pt is inside the primitive defined by shape and params.
+    """
+    x, y, z = pt
+    if shape == 'sphere':
+        r = params.get('radius', params.get('radius_mm', 0))
+        return (x*x + y*y + z*z) <= r*r
+    if shape in ('cube', 'box'):
+        # size may be dict or scalar
+        size = params.get('size')
+        if isinstance(size, dict):
+            sx, sy, sz = size.get('x',0)/2, size.get('y',0)/2, size.get('z',0)/2
+        else:
+            half = size/2
+            sx = sy = sz = half
+        return abs(x) <= sx and abs(y) <= sy and abs(z) <= sz
+    if shape == 'cylinder':
+        r = params.get('radius', params.get('radius_mm',0))
+        h = params.get('height', params.get('height_mm',0))
+        inside_circle = (x*x + y*y) <= r*r
+        return inside_circle and (0 <= z <= h)
+    # default: accept
+    return True
+
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -99,7 +147,11 @@ def _build_modifier_dict(raw_spec: dict) -> dict:
     under 'infill' or as top‐level keys like 'infill_pattern' and 'infill_thickness_mm'.
     Returns either {'pattern': <str>, 'density': <float>} or {} if none found.
     """
+    # Support top-level string infill flag (e.g., "infill": "voronoi")
     infill_data = {}
+    if 'infill' in raw_spec and isinstance(raw_spec['infill'], str):
+        infill_data['pattern'] = raw_spec.pop('infill')
+
     # nested infill
     if isinstance(raw_spec.get('infill'), dict):
         infill_data.update(raw_spec['infill'])
@@ -114,13 +166,16 @@ def _build_modifier_dict(raw_spec: dict) -> dict:
         infill_data['density'] = raw_spec.pop('infill_thickness_mm')
     if 'infill_mm' in raw_spec:
         infill_data['density'] = raw_spec.pop('infill_mm')
-    # Support flattened infill_type field
+
+    # Support flattened infill_type field (alias for pattern)
     if 'infill_type' in raw_spec:
         infill_data['pattern'] = raw_spec.pop('infill_type')
 
     # Support flattened infill_voronoi boolean flag
-    if raw_spec.get('infill_voronoi'):
-        infill_data['pattern'] = 'voronoi'
+    # (remove or adjust if redundant with the top-level string handling)
+    if 'infill_voronoi' in raw_spec:
+        if raw_spec.pop('infill_voronoi'):
+            infill_data['pattern'] = 'voronoi'
         # leave density to downstream defaults if missing
 
     # Normalize 'type' to 'pattern' and 'thickness_mm' to 'density'
@@ -232,15 +287,11 @@ def parse_raw_spec(llm_output):
     for spec in specs:
         modifier = _build_modifier_dict(spec)
         primitive_params = _build_primitive_dict(spec)
-        primitive_node = {'primitive': primitive_params}
+        node = {'primitive': primitive_params}
         if modifier:
-            infill_node = {
-                'infill': modifier,
-                'children': [primitive_node]
-            }
-            nodes.append(infill_node)
-        else:
-            nodes.append(primitive_node)
+            # Attach infill (or other) modifier under 'modifiers'
+            node.setdefault('modifiers', {})['infill'] = modifier
+        nodes.append(node)
     return nodes
 
 def interpret_llm_request(llm_output):
@@ -271,8 +322,63 @@ def interpret_llm_request(llm_output):
             except json.JSONDecodeError:
                 raise RuntimeError(f"Failed to parse LLM update JSON: {generated}")
         logging.debug("interpret_llm_request parsed update-generated JSON into dict: %r", update_list)
-        # Immediately return the updated primitives list, skipping missing-field checks
-        nodes = parse_raw_spec(update_list)
+        # Convert any internal-node dicts (with 'primitive') back into raw spec dicts, mapping fields by shape
+        raw_specs = []
+        for node in update_list:
+            if isinstance(node, dict) and 'primitive' in node:
+                prim = node['primitive']
+                shape, params = next(iter(prim.items()))
+                raw = {'shape': shape}
+                # Map back to raw spec fields by shape
+                if shape == 'sphere':
+                    # radius -> radius_mm
+                    raw['radius_mm'] = params.get('radius')
+                elif shape in ('cube', 'box'):
+                    size = params.get('size')
+                    # If size is dict, check for uniform dimensions
+                    if isinstance(size, dict):
+                        x, y, z = size.get('x'), size.get('y'), size.get('z')
+                        if x == y == z:
+                            raw['size_mm'] = x
+                        else:
+                            raw['size_mm'] = [x, y, z]
+                    else:
+                        raw['size_mm'] = size
+                elif shape == 'cylinder':
+                    raw['radius_mm'] = params.get('radius')
+                    raw['height_mm'] = params.get('height')
+                else:
+                    # Fallback: merge all params directly
+                    raw.update(params)
+                # preserve infill flag if present
+                if 'infill' in params:
+                    raw['infill'] = params.get('infill')
+                # also support the infill_type alias
+                if 'infill_type' in params:
+                    raw['infill'] = params.get('infill_type')
+                raw_specs.append(raw)
+            else:
+                raw_specs.append(node)
+        # Re-parse through our normal spec flow to get nested modifiers
+        nodes = parse_raw_spec(raw_specs)
+        # Enrich any voronoi modifiers with defaults
+        for node in nodes:
+            infill = node.get('modifiers', {}).get('infill')
+            if isinstance(infill, dict) and infill.get('_is_voronoi'):
+                prim = node['primitive']
+                bbox_min, bbox_max = _compute_bbox_from_primitive(prim)
+                size = [bbox_max[i] - bbox_min[i] for i in range(3)]
+                infill.setdefault('min_dist', max(size) / 20.0)
+                infill.setdefault('wall_thickness', size[2] / 50.0)
+                infill.setdefault('bbox_min', list(bbox_min))
+                infill.setdefault('bbox_max', list(bbox_max))
+                # Auto-generate seed points inside the primitive if missing
+                # Determine shape and params for point-inside test
+                shape, params = next(iter(node['primitive'].items()))
+                infill.setdefault(
+                    'seed_points',
+                    _auto_generate_seed_points(shape, params, bbox_min, bbox_max, infill['min_dist'])
+                )
         return {"primitives": nodes}
     else:
         raw = llm_output
@@ -317,38 +423,18 @@ def interpret_llm_request(llm_output):
             logging.debug("interpret_llm_request applied _build_modifier_dict: %r", modifier)
 
     nodes = parse_raw_spec(raw)
-    # Transform voronoi-marked infill into a standalone primitive
-    new_nodes = []
+    # Enrich any voronoi modifiers with defaults
     for node in nodes:
-        if 'infill' in node and node['infill'].get('_is_voronoi'):
-            prim = node['children'][0]['primitive']
+        infill = node.get('modifiers', {}).get('infill')
+        if isinstance(infill, dict) and infill.get('_is_voronoi'):
+            prim = node['primitive']
             bbox_min, bbox_max = _compute_bbox_from_primitive(prim)
             size = [bbox_max[i] - bbox_min[i] for i in range(3)]
-            default_min_dist = max(size) / 20.0
-            default_wall = size[2] / 50.0
-            vor_spec = {
-                'shape': 'voronoi',
-                'seed_points': [],
-                'bbox_min': list(bbox_min),
-                'bbox_max': list(bbox_max),
-                'min_dist': default_min_dist,
-                'wall_thickness': default_wall,
-                'adaptive': True,
-                'max_depth': 3,
-                'threshold': 0.1,
-                'resolution': [32, 32, 32],
-                'shell_offset': 0.0,
-                'auto_cap': False
-            }
-            new_nodes.append({'primitive': {'voronoi': vor_spec}})
-        else:
-            new_nodes.append(node)
-    nodes = new_nodes
-    spec = {"primitives": nodes}
-    boolean_op = raw.get("boolean") if isinstance(raw, dict) else None
-    if boolean_op:
-        spec["boolean"] = boolean_op
-    return spec
+            infill.setdefault('min_dist', max(size) / 20.0)
+            infill.setdefault('wall_thickness', size[2] / 50.0)
+            infill.setdefault('bbox_min', list(bbox_min))
+            infill.setdefault('bbox_max', list(bbox_max))
+    return {"primitives": nodes}
 
 def build_model_from_spec(nodes, boolean_op=None):
     # Wrap nodes into root based on boolean_op or count
@@ -408,20 +494,15 @@ def generate_summary(spec):
                             segments.append(f"cylinder radius {details['radius']} height {details['height']}")
                         else:
                             segments.append(shape)
-        # handle modifiers like infill
-        if 'infill' in action:
-            infill = action['infill']
+        # handle modifiers like infill (nested under 'modifiers')
+        infill = action.get('modifiers', {}).get('infill')
+        if isinstance(infill, dict):
             pattern = infill.get('pattern')
             density = infill.get('density')
             # determine primary shape name
-            if 'children' in action and action['children']:
-                child = action['children'][0]
-                prim = child.get('primitive', {})
-                shape = next(iter(prim.keys()), '')
-            elif 'primitive' in action:
+            shape = ''
+            if 'primitive' in action:
                 shape = next(iter(action['primitive'].keys()), '')
-            else:
-                shape = ''
             segments.append(f"{shape} infill pattern {pattern} density {density}")
     return "; ".join(segments)
 
@@ -467,34 +548,8 @@ def review_request(request_data):
     if isinstance(request_data, dict) and ("shape" in request_data or "primitives" in request_data):
         # parse the raw spec without calling the LLM
         nodes = parse_raw_spec(request_data)
-        # Transform voronoi-marked infill into standalone primitive
-        new_nodes = []
-        for node in nodes:
-            if 'infill' in node and node['infill'].get('_is_voronoi'):
-                prim = node['children'][0]['primitive']
-                bbox_min, bbox_max = _compute_bbox_from_primitive(prim)
-                size = [bbox_max[i] - bbox_min[i] for i in range(3)]
-                default_min_dist = max(size) / 20.0
-                default_wall = size[2] / 50.0
-                vor_spec = {
-                    'shape': 'voronoi',
-                    'seed_points': [],
-                    'bbox_min': list(bbox_min),
-                    'bbox_max': list(bbox_max),
-                    'min_dist': default_min_dist,
-                    'wall_thickness': default_wall,
-                    'adaptive': True,
-                    'max_depth': 3,
-                    'threshold': 0.1,
-                    'resolution': [32, 32, 32],
-                    'shell_offset': 0.0,
-                    'auto_cap': False
-                }
-                new_nodes.append({'primitive': {'voronoi': vor_spec}})
-            else:
-                new_nodes.append(node)
-        summary = generate_summary(new_nodes)
-        return new_nodes, summary
+        summary = generate_summary(nodes)
+        return nodes, summary
 
     # Unwrap single-key string/dict/list payloads
     raw = request_data
@@ -536,9 +591,9 @@ def update_request(sid: str, spec: list, raw: str):
     if m:
         thickness = float(m.group(1))
         pattern = m.group(2)
-        # apply infill to all primitives
+        # apply infill to all primitives, nesting under modifiers
         for action in spec:
-            action['infill'] = {'pattern': pattern, 'density': thickness}
+            action.setdefault('modifiers', {})['infill'] = {'pattern': pattern, 'density': thickness}
         summary = f"Added {thickness}mm {pattern} infill"
         # Return updated spec and summary, without LLM confirmation
         return spec, summary
@@ -560,33 +615,35 @@ def update_request(sid: str, spec: list, raw: str):
     request_data = {"raw": raw, "spec": old_spec, "sid": sid}
     intermediate_spec, _ = review_request(request_data)
 
-    # Post-process to promote any Voronoi infill modifiers into standalone primitives
     promoted = []
     for node in intermediate_spec:
-        if 'infill' in node and node['infill'].get('_is_voronoi'):
-            prim = node['children'][0]['primitive']
-            bbox_min, bbox_max = _compute_bbox_from_primitive(prim)
+        # Detect nested voronoi infill modifier
+        infill = node.get('modifiers', {}).get('infill')
+        if isinstance(infill, dict) and infill.get('pattern') == 'voronoi':
+            # Compute defaults based on the primitive's bounding box
+            prim_dict = node['primitive']
+            shape, params = next(iter(prim_dict.items()))
+            bbox_min, bbox_max = _compute_bbox_from_primitive({shape: params})
             size = [bbox_max[i] - bbox_min[i] for i in range(3)]
             default_min_dist = max(size) / 20.0
             default_wall = size[2] / 50.0
-            vor_spec = {
-                'shape': 'voronoi',
-                'seed_points': [],
-                'bbox_min': list(bbox_min),
-                'bbox_max': list(bbox_max),
-                'min_dist': default_min_dist,
-                'wall_thickness': default_wall,
-                'adaptive': True,
-                'max_depth': 3,
-                'threshold': 0.1,
-                'resolution': [32, 32, 32],
-                'shell_offset': 0.0,
-                'auto_cap': False
-            }
-            promoted.append({'primitive': {'voronoi': vor_spec}})
-        else:
-            promoted.append(node)
-
+            # Enrich the existing infill modifier
+            infill.setdefault('min_dist', default_min_dist)
+            infill.setdefault('wall_thickness', default_wall)
+            infill.setdefault('bbox_min', list(bbox_min))
+            infill.setdefault('bbox_max', list(bbox_max))
+            infill.setdefault('adaptive', True)
+            infill.setdefault('max_depth', 3)
+            infill.setdefault('threshold', 0.1)
+            infill.setdefault('resolution', [32, 32, 32])
+            infill.setdefault('shell_offset', 0.0)
+            infill.setdefault('auto_cap', False)
+            # auto-generate seed points if not already present
+            infill.setdefault(
+                'seed_points',
+                _auto_generate_seed_points(shape, params, bbox_min, bbox_max, infill['min_dist'])
+            )
+        promoted.append(node)
     new_spec = promoted
     new_summary = generate_summary(new_spec)
     return new_spec, new_summary

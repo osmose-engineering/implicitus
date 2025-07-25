@@ -1,53 +1,94 @@
 import uuid
 from ai_adapter.schema.implicitus_pb2 import Primitive
+from ai_adapter.schema.implicitus_pb2 import Modifier, Infill, Shell, BooleanOp, VoronoiLattice
 
-def map_primitive(spec: dict) -> dict:
-    # unwrap wrapper nodes with 'primitive'
-    if isinstance(spec, dict) and 'primitive' in spec:
-        inner = spec['primitive']
+class SomeMappingError(Exception):
+    """Raised when mapping a primitive spec fails due to unknown shape."""
+    pass
+
+def _map_base_shape(spec: dict) -> dict:
+    """
+    Internal: map a simple shape spec to the proto dict structure.
+    """
+    id_str = str(uuid.uuid4())
+    shape = spec['shape'].lower()
+    if shape == 'sphere':
+        radius = spec['size_mm'] / 2
+        primitive = {'sphere': {'radius': radius}}
+    elif shape in ('cube', 'box'):
+        size = spec.get('size_mm', spec.get('size', 0))
+        if isinstance(size, (int, float)):
+            size_dict = {'x': size, 'y': size, 'z': size}
+        else:
+            size_dict = {'x': size[0], 'y': size[1], 'z': size[2]}
+        primitive = {'box': {'size': size_dict}}
+    elif shape == 'cylinder':
+        primitive = {'cylinder': {'radius': spec['radius_mm'], 'height': spec['height_mm']}}
+    else:
+        raise SomeMappingError(f"Unknown shape: {shape}")
+    return {'id': id_str, 'root': {'primitive': primitive}}
+
+def map_primitive(node: dict) -> dict:
+    """
+    Convert a primitive node with optional modifiers into a proto-ready dict.
+    Applies modifiers in order: shell -> infill -> boolean.
+    """
+    # Extract modifiers if present
+    modifiers = node.get('modifiers', {})
+    # Unwrap the base primitive spec
+    if isinstance(node, dict) and 'primitive' in node:
+        inner = node['primitive']
         prim_type, prim_vals = next(iter(inner.items()))
+        # Build base spec for mapping
+        base_spec = {'shape': prim_type}
         if prim_type == 'sphere':
-            spec = {'shape': 'sphere', 'size_mm': prim_vals['radius'] * 2}
+            base_spec['size_mm'] = prim_vals['radius'] * 2
         elif prim_type == 'box':
             size_dict = prim_vals['size']
-            # uniform cube
             if size_dict['x'] == size_dict['y'] == size_dict['z']:
-                spec = {'shape': 'box', 'size_mm': size_dict['x']}
+                base_spec['size_mm'] = size_dict['x']
             else:
-                spec = {'shape': 'box', 'size': (size_dict['x'], size_dict['y'], size_dict['z'])}
+                base_spec['size'] = (size_dict['x'], size_dict['y'], size_dict['z'])
         elif prim_type == 'cylinder':
-            spec = {
-                'shape': 'cylinder',
-                'radius_mm': prim_vals['radius'],
-                'height_mm': prim_vals['height']
-            }
+            base_spec['radius_mm'] = prim_vals['radius']
+            base_spec['height_mm'] = prim_vals['height']
         else:
-            raise ValueError(f"Unknown primitive type: {prim_type}")
-    # handle grouping nodes with 'children'
-    if isinstance(spec, dict) and 'children' in spec:
-        # flatten all children primitives
-        children = spec['children']
-        return [map_primitive(child) for child in children]
-    # Handle a list of primitive specs by mapping each element
-    if isinstance(spec, list):
-        return [map_primitive(s) for s in spec]
-    id_str = str(uuid.uuid4())
-    shape = spec.get("shape", "").lower()
-    if shape == "sphere":
-        radius = spec["size_mm"] / 2
-        primitive = {"sphere": {"radius": radius}}
-    elif shape in ("cube", "box"):
-        size = spec.get("size_mm", spec.get("size", 0))
-        if isinstance(size, (int, float)):
-            size_dict = {"x": size, "y": size, "z": size}
-        else:
-            size_dict = {"x": size[0], "y": size[1], "z": size[2]}
-        primitive = {"box": {"size": size_dict}}
-    elif shape == "cylinder":
-        primitive = {"cylinder": {"radius": spec["radius_mm"], "height": spec["height_mm"]}}
+            raise SomeMappingError(f"Unknown primitive type: {prim_type}")
     else:
-        raise ValueError(f"Unknown shape: {shape}")
-    return {"id": id_str, "root": {"primitive": primitive}}
+        # Already a raw spec dict
+        base_spec = node
+
+    # Map base primitive to proto dict
+    mapped = _map_base_shape(base_spec)  # Helper that returns {"id":..., "root":{...}}
+    root = mapped['root']
+
+    # Apply shell modifier
+    if 'shell' in modifiers:
+        shell_params = modifiers['shell']
+        root = {
+            "booleanOp": {"union": {}},
+            "children": [root, {"primitive": {"shell": shell_params}}]
+        }
+
+    # Apply infill modifier (Voronoi lattice)
+    if 'infill' in modifiers:
+        infill_params = modifiers['infill']
+        root = {
+            "booleanOp": {"intersection": {}},
+            "children": [root, {"primitive": {"lattice": infill_params}}]
+        }
+
+    # Apply boolean_op modifier
+    if 'boolean_op' in modifiers:
+        bool_params = modifiers['boolean_op']
+        root = {
+            "booleanOp": {bool_params['op']: {}},
+            "children": [root, map_primitive(bool_params['shape_node'])]
+        }
+
+    # Return final wrapped dict
+    mapped['root'] = root
+    return mapped
 
 def get_response_fields(proto_model):
     """

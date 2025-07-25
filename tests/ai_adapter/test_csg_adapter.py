@@ -37,16 +37,16 @@ def test_parse_infill_modifier_spec():
     assert isinstance(spec, list)
     assert len(spec) == 1
     action = spec[0]
-    assert 'children' in action
-    assert len(action['children']) == 1
-    child = action['children'][0]
-    assert 'primitive' in child
-    box = child['primitive']['box']['size']
+    # Primitive should be present
+    assert 'primitive' in action
+    box = action['primitive']['box']['size']
     assert box['x'] == 12.0
     assert box['y'] == 12.0
     assert box['z'] == 12.0
-    assert 'infill' in action
-    infill = action['infill']
+    # Modifier 'infill' should nest under 'modifiers'
+    assert 'modifiers' in action
+    assert 'infill' in action['modifiers']
+    infill = action['modifiers']['infill']
     assert infill['pattern'] == 'hex'
     assert infill['density'] == 0.5
 
@@ -159,9 +159,10 @@ def test_update_request_add_infill():
     assert isinstance(spec, list)
     assert len(spec) == 1
     action = spec[0]
-    # There should be an 'infill' key
-    assert 'infill' in action
-    infill = action['infill']
+    # There should be a nested 'infill' modifier
+    assert 'modifiers' in action
+    assert 'infill' in action['modifiers']
+    infill = action['modifiers']['infill']
     assert isinstance(infill, dict)
     # Should have type or pattern mentioning gyroid
     pattern = infill.get('pattern') or infill.get('type')
@@ -229,12 +230,19 @@ def test_review_request_with_voronoi_infill():
     }
     spec, summary = review_request(raw_data)
     assert isinstance(spec, list) and len(spec) == 1
-    primitive = spec[0].get('primitive', {})
-    assert 'voronoi' in primitive
-    vor = primitive['voronoi']
-    # Check that default parameters are present
-    assert 'bbox_min' in vor and 'bbox_max' in vor
-    assert 'min_dist' in vor and isinstance(vor['min_dist'], float)
+    action = spec[0]
+    # Primitive remains the box
+    assert 'primitive' in action
+    box = action['primitive']['box']
+    assert box['size']['x'] == 10.0
+    # Infill modifier should be nested
+    assert 'modifiers' in action
+    assert 'infill' in action['modifiers']
+    infill = action['modifiers']['infill']
+    assert infill['pattern'] == 'voronoi'
+    # Default lattice params should be present
+    assert 'min_dist' in infill and isinstance(infill['min_dist'], float)
+    assert 'bbox_min' in infill and 'bbox_max' in infill
     # Summary should mention voronoi
     assert isinstance(summary, str)
     assert 'voronoi' in summary.lower()

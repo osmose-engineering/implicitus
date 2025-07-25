@@ -2,11 +2,37 @@
 import React, { useMemo } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
+import VoronoiLatticePreview from './VoronoiLatticePreview';
+// Compute axis-aligned bounds for a primitive
+function computeBounds(primitive: { type: string; params: any }): { min: [number, number, number]; max: [number, number, number] } {
+  switch (primitive.type) {
+    case 'sphere': {
+      const r = (primitive.params.size_mm ?? 0) / 2 * MM_TO_UNIT;
+      return { min: [-r, -r, -r], max: [r, r, r] };
+    }
+    case 'box':
+    case 'cube': {
+      const size = primitive.params.size || { x: primitive.params.size_mm, y: primitive.params.size_mm, z: primitive.params.size_mm };
+      return {
+        min: [-(size.x*MM_TO_UNIT)/2, -(size.y*MM_TO_UNIT)/2, -(size.z*MM_TO_UNIT)/2],
+        max: [(size.x*MM_TO_UNIT)/2, (size.y*MM_TO_UNIT)/2, (size.z*MM_TO_UNIT)/2]
+      };
+    }
+    case 'cylinder': {
+      const r = (primitive.params.radius_mm ?? 0) * MM_TO_UNIT;
+      const h = (primitive.params.height_mm ?? 0) * MM_TO_UNIT;
+      return { min: [-r, -r, -h/2], max: [r, r, h/2] };
+    }
+    default:
+      return { min: [-1, -1, -1], max: [1, 1, 1] };
+  }
+}
 
 const MM_TO_UNIT = 0.1;
 
 interface PreviewProps {
   spec: any | any[];
+  visibility: { [key: string]: boolean };
 }
 
 const Geometry: React.FC<{ primitive: { type: string; params: Record<string, number> }; infill?: { pattern: string; density: number } }> = ({ primitive, infill }) => {
@@ -66,7 +92,7 @@ const Geometry: React.FC<{ primitive: { type: string; params: Record<string, num
   );
 };
 
-const Preview: React.FC<PreviewProps> = ({ spec }) => {
+const Preview: React.FC<PreviewProps> = ({ spec, visibility }) => {
   //console.log('[Preview] component rendered, spec prop:', spec);
   // Accept either a single node or an array of nodes
   const nodes = Array.isArray(spec) ? spec : [spec];
@@ -89,49 +115,37 @@ const Preview: React.FC<PreviewProps> = ({ spec }) => {
     );
   }
 
-  const primitives: { type: string; params: Record<string, number>; infill?: { pattern: string; density: number } }[] = useMemo(() => {
-    //console.log('[Preview] computing primitives from spec:', spec);
+  const primitives = useMemo(() => {
     return nodes.map((node: any) => {
-      let raw = {};
-      if (node.primitive) {
-        raw = node.primitive;
-      } else if (node.root?.primitive) {
-        raw = node.root.primitive;
-      } else if (Array.isArray(node.children) && node.children.length > 0) {
-        const firstChild = node.children[0];
-        raw = firstChild.primitive || firstChild.root?.primitive || {};
-      }
-      // normalize infill parameters
-      const infillRaw = node.infill || {};
-      const pattern = infillRaw.pattern ?? infillRaw.infill_pattern ?? infillRaw.infill_shape;
-      const density = infillRaw.density ?? infillRaw.infill_thickness_mm ?? infillRaw.infill_mm;
-      const infill = pattern && density != null ? { pattern, density } : undefined;
-      //console.log('[Preview] raw primitive data:', raw);
-      if (raw.type && raw.params) {
-        return { ...raw, infill };
-      }
-      const key = Object.keys(raw)[0];
-      const details = (raw as any)[key];
-      console.log('[Preview] resolved primitive:', { key, details });
-      switch (key) {
+      // extract primitive entry
+      const raw = node.primitive || node.root?.primitive ||
+                  (Array.isArray(node.children) && node.children[0].primitive) || {};
+      const key = Object.keys(raw)[0] || '';
+      const details = (raw as any)[key] || {};
+      // build type & params
+      let type = key;
+      let params: Record<string, any> = {};
+      switch (type) {
         case 'box':
-        case 'cube': {
-          // support both numeric size and object size { x, y, z }
+        case 'cube':
           if (details.size && typeof details.size === 'object') {
-            const { x, y, z } = details.size as { x: number; y: number; z: number };
-            return { type: 'box', params: { size_mm: undefined, size: { x, y, z } }, infill };
-          } else if (typeof details.size === 'number') {
-            return { type: 'box', params: { size_mm: details.size }, infill };
+            params = { size: details.size };
+          } else {
+            params = { size_mm: details.size_mm ?? 1 };
           }
-          return { type: 'box', params: {}, infill };
-        }
+          break;
         case 'sphere':
-          return { type: 'sphere', params: { size_mm: details.radius * 2 }, infill };
+          params = { size_mm: details.radius * 2 };
+          break;
         case 'cylinder':
-          return { type: 'cylinder', params: { radius_mm: details.radius, height_mm: details.height }, infill };
+          params = { radius_mm: details.radius, height_mm: details.height };
+          break;
         default:
-          return { type: '', params: {}, infill };
+          params = {};
       }
+      // extract nested infill modifier
+      const infill = node.modifiers?.infill;
+      return { type, params, infill };
     });
   }, [spec]);
 
@@ -156,34 +170,27 @@ const Preview: React.FC<PreviewProps> = ({ spec }) => {
         <directionalLight position={[5, 5, 5]} intensity={1} />
         <axesHelper args={[5]} />
         <gridHelper args={[10, 10]} />
-        {primitives.map((primitive, idx) => (
-          <group key={idx}>
-            {/* outer solid shell */}
-            <Geometry primitive={primitive} />
-            {/* inner wireframe infill approximation */}
-            {primitive.infill && (() => {
-              // compute scaled-down params for infill shell
-              const inset = primitive.infill.density;
-              const infillParams: Record<string, number> = {};
-              // copy and shrink each dimensional param
-              if (primitive.params.size_mm !== undefined) {
-                infillParams.size_mm = primitive.params.size_mm - inset * 2;
-              }
-              if (primitive.params.radius_mm !== undefined) {
-                infillParams.radius_mm = primitive.params.radius_mm - inset;
-              }
-              if (primitive.params.height_mm !== undefined) {
-                infillParams.height_mm = primitive.params.height_mm - inset * 2;
-              }
-              return (
-                <Geometry
-                  primitive={{ type: primitive.type, params: infillParams }}
-                  infill={primitive.infill}
+        {primitives.map((primitive, idx) => {
+          const cb = computeBounds({ type: primitive.type, params: primitive.params });
+          return (
+            <group key={idx}>
+              {/* draw base solid */}
+              {visibility.primitive && <Geometry primitive={primitive} />}
+              {/* draw Voronoi lattice overlay if infill modifier present */}
+              {visibility.infill && primitive.infill?.pattern === 'voronoi' && (
+                <VoronoiLatticePreview
+                  spec={primitive.infill as any}
+                  bounds={[cb.min, cb.max]}
+                  seedPoints={
+                    primitive.infill.seed_points.map(([x, y, z]: [number, number, number]) =>
+                      [x * MM_TO_UNIT, y * MM_TO_UNIT, z * MM_TO_UNIT]
+                    )
+                  }
                 />
-              );
-            })()}
-          </group>
-        ))}
+              )}
+            </group>
+          );
+        })}
         <OrbitControls />
       </Canvas>
     </div>
