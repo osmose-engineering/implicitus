@@ -1,5 +1,8 @@
 import numpy as np
 import numpy as np  # ensure numpy is available for cap SDF
+import logging
+logging.basicConfig(level=logging.DEBUG)
+logger = logging.getLogger(__name__)
 import random
 import math
 from typing import Union, Any
@@ -449,6 +452,7 @@ def sample_seed_points(
         min_dist (float, optional): Minimum distance between points. If not provided, spacing is chosen to target num_points by volume.
         max_trials (int): Maximum number of points to attempt to generate.
     """
+    logging.debug(f"[sample_seed_points] called with num_points={num_points}, bbox_min={bbox_min}, bbox_max={bbox_max}, min_dist={min_dist}, density_field={'yes' if density_field is not None else 'no'}")
     # Compute domain volume and minimal distance r
     xmin, ymin, zmin = bbox_min
     xmax, ymax, zmax = bbox_max
@@ -459,6 +463,7 @@ def sample_seed_points(
         r = min_dist
     else:
         r = (volume / num_points) ** (1/3)
+    logging.debug(f"[sample_seed_points] volume={volume:.3f}, computed spacing r={r:.3f}, max_trials={max_trials}")
     # Determine local Poisson radius
     if density_field is not None:
         def _get_r(p):
@@ -543,6 +548,7 @@ def sample_seed_points(
         for _ in range(n_extra):
             pt = tuple(random.uniform(bbox_min[i], bbox_max[i]) for i in range(3))
             points.append(pt)
+    logging.debug(f"[sample_seed_points] returning {len(points)} seed points (requested {num_points})")
     return points
 
 def sample_seed_points_anisotropic(

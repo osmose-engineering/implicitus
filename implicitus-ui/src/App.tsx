@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 // Simple debounce helper
 function debounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
   let timeout: ReturnType<typeof setTimeout> | null;
@@ -30,6 +30,7 @@ function App() {
     primitive: true,
     infill: true,
   });
+
 
   const handleValidate = async () => {
     setError(null);
@@ -202,7 +203,7 @@ function App() {
         headers: {
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify({ spec: parsed, sid: sessionId }),
+        body: JSON.stringify({ spec: parsed, sid: sessionId, raw: "" }),
       });
       if (!response.ok) {
         const text = await response.text();
@@ -218,14 +219,74 @@ function App() {
     }
   };
 
+  const handleApplyChanges = async () => {
+    setError(null);
+    setLoading(true);
+    try {
+      const parsed = JSON.parse(specText);
+      // strip any existing seed_points to avoid sending large arrays back
+      const specToSend = parsed.map(node => {
+        if (node.modifiers?.infill?.seed_points) {
+          const { seed_points, ...restInfill } = node.modifiers.infill;
+          return {
+            ...node,
+            modifiers: {
+              ...node.modifiers,
+              infill: restInfill,
+            },
+          };
+        }
+        return node;
+      });
+      const response = await fetch('http://localhost:8000/design/update', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({ spec: specToSend, sid: sessionId, raw: '' }),
+      });
+      if (!response.ok) {
+        const text = await response.text();
+        throw new Error(`Server error: ${response.status} ${response.statusText} - ${text}`);
+      }
+      const data = await response.json();
+      if (data.spec && Array.isArray(data.spec)) {
+        setSpec(data.spec);
+        setSpecText(JSON.stringify(data.spec, null, 2));
+        if (data.summary) {
+          setSummary(data.summary);
+          setMessages(prev => [...prev, { speaker: 'assistant', text: data.summary }]);
+        }
+      }
+    } catch (err: any) {
+      setError(err.message || 'An error occurred while applying changes');
+    } finally {
+      setLoading(false);
+    }
+  };
+
   // Helper: Regenerate infill seed points if needed
   const regenerateSeeds = async (currentSpec: any[]) => {
+    // Strip out any existing seed_points so backend regenerates fresh
+    const specToSend = currentSpec.map(node => {
+      if (node.modifiers?.infill) {
+        const { seed_points, ...restInfill } = node.modifiers.infill;
+        return {
+          ...node,
+          modifiers: {
+            ...node.modifiers,
+            infill: restInfill,
+          },
+        };
+      }
+      return node;
+    });
     setLoading(true);
     try {
       const response = await fetch(`http://localhost:8000/design/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spec: currentSpec, sid: sessionId }),
+        body: JSON.stringify({ spec: specToSend, sid: sessionId, raw: "" }),
       });
       const rawText = await response.text();
       if (!response.ok) throw new Error(rawText);
@@ -311,9 +372,9 @@ function App() {
                         setSpec(parsed);
                         setError(null);
                         // if infill is present and we have a session, auto-regenerate seed points
-                        if (sessionId && parsed[0].modifiers?.infill) {
-                          debouncedRegenerateSeeds(parsed);
-                        }
+                        // if (sessionId && parsed[0].modifiers?.infill) {
+                        //   debouncedRegenerateSeeds(parsed);
+                        // }
                       }
                     } catch {
                       // ignore JSON parse errors for draft mode
@@ -328,21 +389,16 @@ function App() {
                     formatOnType: true,
                   }}
                 />
+                <button onClick={handleApplyChanges} disabled={loading || !isDirty}>
+                  Apply Changes
+                </button>
                 <button onClick={handleConfirm} disabled={loading}>
-                  Confirm &amp; Apply
+                  Finalize
                 </button>
                 <button onClick={handleValidate} disabled={loading || !isDirty}>
                   Validate
                 </button>
-                {spec.length > 0 && spec[0].modifiers?.infill && (
-                  <>
-                    {spec[0].modifiers.infill.max_points != null && (
-                      <div style={{ marginTop: '0.5em' }}>
-                        <strong>Max Seed Count:</strong> {spec[0].modifiers.infill.max_points}
-                      </div>
-                    )}
-                  </>
-                )}
+                {/* Removed Max Seed Count and Desired Seed Count UI */}
                 {spec.length > 0 && spec[0].modifiers?.infill?.seed_points && (
                   <div style={{ marginTop: '1em' }}>
                     <strong>Seed Points:</strong>

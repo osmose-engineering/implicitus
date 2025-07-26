@@ -1,7 +1,7 @@
 # tests/ai_adapter/test_csg_adapter.py
 import pytest
 import json
-from ai_adapter.csg_adapter import parse_raw_spec, generate_summary, review_request, update_request
+from ai_adapter.csg_adapter import parse_raw_spec, generate_summary, review_request, update_request, MAX_SEED_POINTS
 
 def test_parse_sphere_spec():
     raw = '{"shape":"sphere","size_mm":10}'
@@ -246,3 +246,22 @@ def test_review_request_with_voronoi_infill():
     # Summary should mention voronoi
     assert isinstance(summary, str)
     assert 'voronoi' in summary.lower()
+
+def test_update_request_seed_generation_count():
+    # Ensure update_request caps seed points to MAX_SEED_POINTS
+    raw = '{"shape":"sphere","size_mm":10}'
+    initial_spec = parse_raw_spec(raw)
+    request_data = {
+        'sid': 'seed-test-session',
+        'spec': initial_spec,
+        'raw': 'Can you add a voronoi infill?'
+    }
+    spec, summary = update_request(request_data['sid'], request_data['spec'], request_data['raw'])
+    assert isinstance(spec, list) and len(spec) == 1
+    action = spec[0]
+    assert 'modifiers' in action and 'infill' in action['modifiers']
+    infill = action['modifiers']['infill']
+    seed_points = infill.get('seed_points', [])
+    assert isinstance(seed_points, list)
+    # Should be capped to MAX_SEED_POINTS
+    assert len(seed_points) == MAX_SEED_POINTS

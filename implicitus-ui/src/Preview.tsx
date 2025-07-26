@@ -96,7 +96,61 @@ const Preview: React.FC<PreviewProps> = ({ spec, visibility }) => {
   //console.log('[Preview] component rendered, spec prop:', spec);
   // Accept either a single node or an array of nodes
   const nodes = Array.isArray(spec) ? spec : [spec];
-  //console.log('[Preview] nodes:', nodes);
+
+  const primitives = useMemo(() => {
+    return nodes.map((node: any) => {
+      const raw = node.primitive || node.root?.primitive ||
+                  (Array.isArray(node.children) && node.children[0].primitive) || {};
+      const key = Object.keys(raw)[0] || '';
+      const details = (raw as any)[key] || {};
+      let type = key;
+      let params: Record<string, any> = {};
+      switch (type) {
+        case 'box':
+        case 'cube':
+          if (details.size != null) {
+            if (typeof details.size === 'object') {
+              params = { size: details.size };
+            } else {
+              params = { size_mm: details.size };
+            }
+          } else {
+            params = { size_mm: details.size_mm ?? 1 };
+          }
+          break;
+        case 'sphere':
+          params = { size_mm: details.radius * 2 };
+          break;
+        case 'cylinder':
+          params = { radius_mm: details.radius, height_mm: details.height };
+          break;
+        default:
+          params = {};
+      }
+      const infill = node.modifiers?.infill;
+      return { type, params, infill };
+    });
+  }, [spec]);
+
+  const VIEW_SIZE = 10;
+  const normalization = useMemo(() => {
+    const boundsUnits = primitives.map(p => computeBounds({ type: p.type, params: p.params }));
+    const mins = [0, 1, 2].map(i => Math.min(...boundsUnits.map(b => b.min[i])));
+    const maxs = [0, 1, 2].map(i => Math.max(...boundsUnits.map(b => b.max[i])));
+    const modelSize = Math.max(maxs[0] - mins[0], maxs[1] - mins[1], maxs[2] - mins[2]) || 1;
+    const center: [number, number, number] = [
+      (mins[0] + maxs[0]) / 2,
+      (mins[1] + maxs[1]) / 2,
+      (mins[2] + maxs[2]) / 2
+    ];
+    const scaleFactor = VIEW_SIZE / modelSize;
+    return { boundsUnits, mins, maxs, center, modelSize, scaleFactor };
+  }, [primitives]);
+
+  // add a percentage margin around the model for helpers
+  const MARGIN_RATIO = 0.5; // 50% margin
+  const helperSize = normalization.modelSize * (1 + 2 * MARGIN_RATIO);
+
   // if any node does not yet have a confirmed primitive, prompt for confirmation
   const allConfirmed = nodes.every(node => {
     if (node.primitive || node.root?.primitive) return true;
@@ -115,49 +169,6 @@ const Preview: React.FC<PreviewProps> = ({ spec, visibility }) => {
     );
   }
 
-  const primitives = useMemo(() => {
-    return nodes.map((node: any) => {
-      // extract primitive entry
-      const raw = node.primitive || node.root?.primitive ||
-                  (Array.isArray(node.children) && node.children[0].primitive) || {};
-      const key = Object.keys(raw)[0] || '';
-      const details = (raw as any)[key] || {};
-      // build type & params
-      let type = key;
-      let params: Record<string, any> = {};
-      switch (type) {
-        case 'box':
-        case 'cube':
-          // Handle numeric or object size uniformly
-          if (details.size != null) {
-            if (typeof details.size === 'object') {
-              params = { size: details.size };
-            } else if (typeof details.size === 'number') {
-              params = { size_mm: details.size };
-            } else {
-              params = { size_mm: Number(details.size) };
-            }
-          } else {
-            // Fallback to size_mm if provided
-            params = { size_mm: details.size_mm ?? 1 };
-          }
-          break;
-        case 'sphere':
-          params = { size_mm: details.radius * 2 };
-          break;
-        case 'cylinder':
-          params = { radius_mm: details.radius, height_mm: details.height };
-          break;
-        default:
-          params = {};
-      }
-      // extract nested infill modifier
-      const infill = node.modifiers?.infill;
-      return { type, params, infill };
-    });
-  }, [spec]);
-
-  //console.log('[Preview] computed primitives:', primitives);
   // if no primitives have been resolved yet, prompt for confirmation
   if (primitives.length === 0) {
     return (
@@ -166,40 +177,50 @@ const Preview: React.FC<PreviewProps> = ({ spec, visibility }) => {
       </div>
     );
   }
+
   //console.log('[Preview] about to render Canvas, primitives:', primitives);
+
+  // position camera dynamically so the model fits nicely
+  const cameraDistance = VIEW_SIZE * 1.5;
+  const cameraPosition: [number, number, number] = [cameraDistance, cameraDistance, cameraDistance];
 
   return (
     <div style={{ width: '100%', height: '400px' }}>
       <Canvas 
-        camera={{ position: [3, 3, 3], fov: 50 }}
+        camera={{ position: cameraPosition, fov: 50 }}
         gl={{ preserveDrawingBuffer: true, antialias: true }}
       >
         <ambientLight intensity={0.5} />
         <directionalLight position={[5, 5, 5]} intensity={1} />
-        <axesHelper args={[5]} />
-        <gridHelper args={[10, 10]} />
-        {primitives.map((primitive, idx) => {
-          const cb = computeBounds({ type: primitive.type, params: primitive.params });
-          return (
-            <group key={idx}>
-              {/* draw base solid */}
-              {visibility.primitive && <Geometry primitive={primitive} />}
-              {/* draw Voronoi lattice overlay if infill modifier present */}
-              {visibility.infill && primitive.infill?.pattern === 'voronoi' && (
-                <VoronoiLatticePreview
-                  spec={primitive.infill as any}
-                  bounds={[cb.min, cb.max]}
-                  seedPoints={
-                    primitive.infill.seed_points.map(([x, y, z]: [number, number, number]) =>
-                      [x * MM_TO_UNIT, y * MM_TO_UNIT, z * MM_TO_UNIT]
-                    )
-                  }
-                />
-              )}
-            </group>
-          );
-        })}
-        <OrbitControls />
+        <group
+          scale={[normalization.scaleFactor, normalization.scaleFactor, normalization.scaleFactor]}
+          position={[-normalization.center[0], -normalization.center[1], -normalization.center[2]]}
+        >
+          <axesHelper args={[helperSize]} />
+          <gridHelper args={[helperSize, 10]} />
+          {primitives.map((primitive, idx) => {
+            const cb = computeBounds({ type: primitive.type, params: primitive.params });
+            return (
+              <group key={idx}>
+                {/* draw base solid */}
+                {visibility.primitive && <Geometry primitive={primitive} />}
+                {/* draw Voronoi lattice overlay if infill modifier present */}
+                {visibility.infill && primitive.infill?.pattern === 'voronoi' && (
+                  <VoronoiLatticePreview
+                    spec={primitive.infill as any}
+                    bounds={[cb.min, cb.max]}
+                    seedPoints={
+                      primitive.infill.seed_points.map(([x, y, z]: [number, number, number]) =>
+                        [x * MM_TO_UNIT, y * MM_TO_UNIT, z * MM_TO_UNIT]
+                      )
+                    }
+                  />
+                )}
+              </group>
+            );
+          })}
+        </group>
+        <OrbitControls target={[0, 0, 0]} />
       </Canvas>
     </div>
   );

@@ -7,7 +7,7 @@ import uuid
 from google.protobuf import json_format
 
 # Maximum number of voronoi seed points to avoid huge arrays
-MAX_SEED_POINTS = 200
+MAX_SEED_POINTS = 20000
 
 # --- Helper functions for voronoi seed generation ---
 import random
@@ -30,6 +30,15 @@ def _auto_generate_seed_points(shape: str, params: dict, bbox_min: tuple, bbox_m
                 z = bbox_min[2] + k * spacing + (random.random() - 0.5) * spacing
                 if _point_inside_shape(shape, params, (x, y, z)):
                     seeds.append([x, y, z])
+    logging.debug(
+        f"_auto_generate_seed_points: shape={shape}, spacing={spacing}, "
+        f"bbox_min={bbox_min}, bbox_max={bbox_max}, generated={len(seeds)}"
+    )
+    # Cap seed list to avoid excessive points
+    if len(seeds) > MAX_SEED_POINTS:
+        random.shuffle(seeds)
+        seeds = seeds[:MAX_SEED_POINTS]
+        logging.debug(f"_auto_generate_seed_points: capped seed count to {len(seeds)}")
     return seeds
 
 def _point_inside_shape(shape: str, params: dict, pt: tuple) -> bool:
@@ -378,37 +387,19 @@ def interpret_llm_request(llm_output):
                 infill.setdefault('bbox_min', list(bbox_min))
                 infill.setdefault('bbox_max', list(bbox_max))
                 # Auto-generate seed points inside the primitive if missing
-                # Determine shape and params for point-inside test
                 shape, params = next(iter(node['primitive'].items()))
-                infill.setdefault(
-                    'seed_points',
-                    _auto_generate_seed_points(shape, params, bbox_min, bbox_max, infill['min_dist'])
-                )
-                # Estimate and set a default number of seed points if missing
-                if 'num_points' not in infill:
-                    import math
-                    # Compute approximate volume of the primitive
-                    if shape == 'sphere':
-                        r = params.get('radius', params.get('radius_mm', 0))
-                        vol = 4.0/3.0 * math.pi * (r ** 3)
-                    elif shape in ('cube', 'box'):
-                        sz = params.get('size')
-                        if isinstance(sz, dict):
-                            sx, sy, sz_ = sz.get('x', 0), sz.get('y', 0), sz.get('z', 0)
-                        else:
-                            sx = sy = sz_ = sz or 0
-                        vol = sx * sy * sz_
-                    else:
-                        # fallback to AABB volume
-                        vol = (
-                            (bbox_max[0] - bbox_min[0]) *
-                            (bbox_max[1] - bbox_min[1]) *
-                            (bbox_max[2] - bbox_min[2])
-                        )
-                    spacing = infill.get('min_dist', 1.0)
-                    if spacing > 0:
-                        est = int(vol / (spacing ** 3) * 0.5)  # 50% packing heuristic
-                        infill['num_points'] = max(1, est)
+                if 'seed_points' not in infill:
+                    # generate full set of candidate points
+                    seeds = _auto_generate_seed_points(shape, params, bbox_min, bbox_max, infill['min_dist'])
+                    # Set num_points default if not present
+                    infill.setdefault('num_points', len(seeds))
+                    # if user specified a desired count, trim to that many
+                    if 'num_points' in infill:
+                        import random
+                        random.shuffle(seeds)
+                        seeds = seeds[: int(infill['num_points'])]
+                    infill['seed_points'] = seeds
+                    logging.debug(f"interpret_llm_request: generated {len(seeds)} seed points for {shape}")
         return {"primitives": nodes}
     else:
         raw = llm_output
@@ -562,7 +553,12 @@ def review_request(request_data):
     if isinstance(request_data, dict) and request_data.get("needsClarification"):
         return {"needsClarification": True, "question": request_data["question"]}
     # Follow-up update: apply a new raw instruction to an existing spec
-    if isinstance(request_data, dict) and "spec" in request_data and "raw" in request_data:
+    if (
+        isinstance(request_data, dict)
+        and "spec" in request_data
+        and "raw" in request_data
+        and request_data.get("raw", "").strip()
+    ):
         interpreted = interpret_llm_request(request_data)
         spec = interpreted.get("primitives", [])
         summary = generate_summary(spec)
@@ -578,6 +574,17 @@ def review_request(request_data):
     if isinstance(request_data, dict) and ("shape" in request_data or "primitives" in request_data):
         # parse the raw spec without calling the LLM
         nodes = parse_raw_spec(request_data)
+        # Enrich any voronoi modifiers with default parameters on review
+        for node in nodes:
+            infill = node.get('modifiers', {}).get('infill')
+            if isinstance(infill, dict) and infill.get('_is_voronoi'):
+                prim = node['primitive']
+                bbox_min, bbox_max = _compute_bbox_from_primitive(prim)
+                size = [bbox_max[i] - bbox_min[i] for i in range(3)]
+                infill.setdefault('min_dist', max(size) / 20.0)
+                infill.setdefault('wall_thickness', size[2] / 50.0)
+                infill.setdefault('bbox_min', list(bbox_min))
+                infill.setdefault('bbox_max', list(bbox_max))
         summary = generate_summary(nodes)
         return nodes, summary
 
@@ -655,11 +662,8 @@ def update_request(sid: str, spec: list, raw: str):
             shape, params = next(iter(prim_dict.items()))
             bbox_min, bbox_max = _compute_bbox_from_primitive({shape: params})
             size = [bbox_max[i] - bbox_min[i] for i in range(3)]
-            default_min_dist = max(size) / 20.0
-            default_wall = size[2] / 50.0
-            # Enrich the existing infill modifier
-            infill.setdefault('min_dist', default_min_dist)
-            infill.setdefault('wall_thickness', default_wall)
+            infill.setdefault('min_dist', max(size) / 20.0)
+            infill.setdefault('wall_thickness', size[2] / 50.0)
             infill.setdefault('bbox_min', list(bbox_min))
             infill.setdefault('bbox_max', list(bbox_max))
             infill.setdefault('adaptive', True)
@@ -668,49 +672,18 @@ def update_request(sid: str, spec: list, raw: str):
             infill.setdefault('resolution', [32, 32, 32])
             infill.setdefault('shell_offset', 0.0)
             infill.setdefault('auto_cap', False)
-            # auto-generate seed points if not already present
-            infill.setdefault(
-                'seed_points',
-                _auto_generate_seed_points(shape, params, bbox_min, bbox_max, infill['min_dist'])
+            # always regenerate seed points, and expose num_points parameter
+            seeds = _auto_generate_seed_points(
+                shape, params, bbox_min, bbox_max, infill['min_dist']
             )
-            # Cap the number of seed points to avoid huge arrays
-            seeds = infill['seed_points']
-            if len(seeds) > MAX_SEED_POINTS:
+            # expose a tunable count parameter for seed generation
+            infill.setdefault('num_points', len(seeds))
+            if 'num_points' in infill:
                 import random
                 random.shuffle(seeds)
-                infill['seed_points'] = seeds[:MAX_SEED_POINTS]
-            # Estimate and set a default number of seed points if missing
-            if 'num_points' not in infill:
-                import math
-                # Compute primitive volume
-                shape, params = next(iter(node['primitive'].items()))
-                if shape == 'sphere':
-                    r = params.get('radius', params.get('radius_mm', 0))
-                    vol = 4.0/3.0 * math.pi * (r ** 3)
-                elif shape in ('cube', 'box'):
-                    sz = params.get('size')
-                    if isinstance(sz, dict):
-                        sx, sy, sz_ = sz.get('x', 0), sz.get('y', 0), sz.get('z', 0)
-                    else:
-                        sx = sy = sz_ = sz or 0
-                    vol = sx * sy * sz_
-                else:
-                    bbox_min = infill['bbox_min']
-                    bbox_max = infill['bbox_max']
-                    vol = (
-                        (bbox_max[0] - bbox_min[0]) *
-                        (bbox_max[1] - bbox_min[1]) *
-                        (bbox_max[2] - bbox_min[2])
-                    )
-                spacing = infill.get('min_dist', 1.0)
-                # Calculate number of points via Poisson disk packing heuristic
-                max_packing = 0.64
-                density = infill.get('density', 1.0)
-                if spacing > 0:
-                    raw_count = density * max_packing * vol / (spacing ** 3)
-                    num_points = int(raw_count)
-                    num_points = min(num_points, MAX_SEED_POINTS)
-                    infill['num_points'] = max(1, num_points)
+                seeds = seeds[: int(infill['num_points'])]
+            infill['seed_points'] = seeds
+            logging.debug(f"update_request: generated {len(infill['seed_points'])} seed points for {shape}")
         promoted.append(node)
     new_spec = promoted
     new_summary = generate_summary(new_spec)
