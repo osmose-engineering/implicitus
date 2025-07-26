@@ -128,9 +128,17 @@ const Preview: React.FC<PreviewProps> = ({ spec, visibility }) => {
       switch (type) {
         case 'box':
         case 'cube':
-          if (details.size && typeof details.size === 'object') {
-            params = { size: details.size };
+          // Handle numeric or object size uniformly
+          if (details.size != null) {
+            if (typeof details.size === 'object') {
+              params = { size: details.size };
+            } else if (typeof details.size === 'number') {
+              params = { size_mm: details.size };
+            } else {
+              params = { size_mm: Number(details.size) };
+            }
           } else {
+            // Fallback to size_mm if provided
             params = { size_mm: details.size_mm ?? 1 };
           }
           break;

@@ -1,4 +1,14 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
+// Simple debounce helper
+function debounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
+  let timeout: ReturnType<typeof setTimeout> | null;
+  return (...args: Parameters<T>) => {
+    if (timeout) clearTimeout(timeout);
+    timeout = setTimeout(() => {
+      fn(...args);
+    }, delay);
+  };
+}
 import Editor from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import './App.css'
@@ -26,10 +36,13 @@ function App() {
     setLoading(true);
     try {
       const parsed = JSON.parse(specText);
+      // include sessionId if available
+      const validateBody: any = { spec: parsed };
+      if (sessionId) validateBody.sid = sessionId;
       const response = await fetch('http://localhost:8000/design/review', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spec: parsed }),
+        body: JSON.stringify(validateBody),
       });
       const rawText = await response.text();
       if (!response.ok) {
@@ -128,6 +141,7 @@ function App() {
         }
         setIsDirty(false);
         setLoading(false);
+        setPrompt('');
         return;
       }
       if (data.question) {
@@ -204,6 +218,40 @@ function App() {
     }
   };
 
+  // Helper: Regenerate infill seed points if needed
+  const regenerateSeeds = async (currentSpec: any[]) => {
+    setLoading(true);
+    try {
+      const response = await fetch(`http://localhost:8000/design/update`, {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ spec: currentSpec, sid: sessionId }),
+      });
+      const rawText = await response.text();
+      if (!response.ok) throw new Error(rawText);
+      const data = JSON.parse(rawText);
+      if (data.spec && Array.isArray(data.spec)) {
+        setSpec(data.spec);
+        setSpecText(JSON.stringify(data.spec, null, 2));
+        if (data.summary) {
+          setSummary(data.summary);
+          setMessages(prev => [...prev, { speaker: 'assistant', text: data.summary }]);
+        }
+      }
+    } catch (err: any) {
+      console.error('[UI] regenerateSeeds error:', err);
+      setError(err.message || 'Failed to regenerate seeds');
+    } finally {
+      setLoading(false);
+    }
+  };
+  // Debounced regenerateSeeds ref
+  const debouncedRegenerateSeeds = useRef(
+    debounce((parsed: any[]) => {
+      regenerateSeeds(parsed);
+    }, 400)
+  ).current;
+
   return (
     <div className="App" style={{ display: 'flex', flexDirection: 'column', height: '100vh' }}>
       <h1>Implicitus</h1>
@@ -262,6 +310,10 @@ function App() {
                       if (Array.isArray(parsed)) {
                         setSpec(parsed);
                         setError(null);
+                        // if infill is present and we have a session, auto-regenerate seed points
+                        if (sessionId && parsed[0].modifiers?.infill) {
+                          debouncedRegenerateSeeds(parsed);
+                        }
                       }
                     } catch {
                       // ignore JSON parse errors for draft mode
@@ -282,13 +334,43 @@ function App() {
                 <button onClick={handleValidate} disabled={loading || !isDirty}>
                   Validate
                 </button>
+                {spec.length > 0 && spec[0].modifiers?.infill && (
+                  <>
+                    {spec[0].modifiers.infill.max_points != null && (
+                      <div style={{ marginTop: '0.5em' }}>
+                        <strong>Max Seed Count:</strong> {spec[0].modifiers.infill.max_points}
+                      </div>
+                    )}
+                  </>
+                )}
                 {spec.length > 0 && spec[0].modifiers?.infill?.seed_points && (
                   <div style={{ marginTop: '1em' }}>
                     <strong>Seed Points:</strong>
                     <textarea
-                      readOnly
+                      rows={6}
                       style={{ width: '100%', height: '120px', fontFamily: 'monospace', fontSize: '0.9em' }}
                       value={JSON.stringify(spec[0].modifiers.infill.seed_points, null, 2)}
+                      onChange={e => {
+                        const text = (e.target as HTMLTextAreaElement).value;
+                        try {
+                          const pts = JSON.parse(text);
+                          const newSpec = [...spec];
+                          newSpec[0] = {
+                            ...newSpec[0],
+                            modifiers: {
+                              ...newSpec[0].modifiers,
+                              infill: {
+                                ...newSpec[0].modifiers.infill,
+                                seed_points: pts
+                              }
+                            }
+                          };
+                          setSpec(newSpec);
+                          setSpecText(JSON.stringify(newSpec, null, 2));
+                        } catch {
+                          // ignore parse errors
+                        }
+                      }}
                     />
                   </div>
                 )}
