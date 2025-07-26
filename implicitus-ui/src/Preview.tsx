@@ -209,11 +209,6 @@ const Preview: React.FC<PreviewProps> = ({ spec, visibility }) => {
                   <VoronoiLatticePreview
                     spec={primitive.infill as any}
                     bounds={[cb.min, cb.max]}
-                    seedPoints={
-                      primitive.infill.seed_points.map(([x, y, z]: [number, number, number]) =>
-                        [x * MM_TO_UNIT, y * MM_TO_UNIT, z * MM_TO_UNIT]
-                      )
-                    }
                   />
                 )}
               </group>
