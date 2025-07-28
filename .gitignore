@@ -8,6 +8,7 @@ Thumbs.db
 .vscode/
 *.swp
 *~
+*.pyc
 
 # Rust build artifacts
 /core_engine/target/

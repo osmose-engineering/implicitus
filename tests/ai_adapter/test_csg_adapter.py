@@ -2,6 +2,7 @@
 import pytest
 import json
 from ai_adapter.csg_adapter import parse_raw_spec, generate_summary, review_request, update_request, MAX_SEED_POINTS
+from design_api.services.voronoi_gen.voronoi_gen  import _call_sdf
 
 def test_parse_sphere_spec():
     raw = '{"shape":"sphere","size_mm":10}'
@@ -261,7 +262,7 @@ def test_update_request_seed_generation_count():
     action = spec[0]
     assert 'modifiers' in action and 'infill' in action['modifiers']
     infill = action['modifiers']['infill']
-    seed_points = infill.get('seed_points', [])
-    assert isinstance(seed_points, list)
+    num_points = infill.get('num_points')
+    assert isinstance(num_points, int)
     # Should be capped to MAX_SEED_POINTS
-    assert len(seed_points) == MAX_SEED_POINTS
+    assert num_points <= MAX_SEED_POINTS

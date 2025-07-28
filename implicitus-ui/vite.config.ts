@@ -1,9 +1,17 @@
 import type { ClientRequest, IncomingMessage, ServerResponse } from 'http';
 import { defineConfig } from 'vite'
+import macros from 'vite-plugin-babel-macros'
 import react from '@vitejs/plugin-react'
+import path from 'path'
 
 export default defineConfig({
-  plugins: [react()],
+  babelMacros: {
+    plugins: ['babel-plugin-glsl/macro']
+  },
+  plugins: [
+    macros(),
+    react()
+  ],
   server: {
     host: 'localhost',
     port: 3000,

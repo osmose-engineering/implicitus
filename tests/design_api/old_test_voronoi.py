@@ -2,20 +2,16 @@ import math
 import numpy as np
 import pytest
 
-from design_api.services.voronoi_gen import (
+from design_api.services.voronoi_gen.organic.sampler import (
     sample_seed_points,
     sample_seed_points_anisotropic,
-    construct_voronoi_cells,
     sample_surface_seed_points,
-    construct_surface_voronoi_cells,
-    compute_voronoi_adjacency,
-    estimate_normal,
-    estimate_hessian,
-    compute_fillet_radius,
-    smooth_union,
-    _call_sdf,
-    OctreeNode,
 )
+from design_api.services.voronoi_gen.organic.construct import (
+    construct_voronoi_cells,
+    construct_surface_voronoi_cells,
+)
+
 
 def test_sample_seed_points_basic():
     bbox_min = (0.0, 0.0, 0.0)

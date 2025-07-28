@@ -1,8 +1,9 @@
 // src/Preview.tsx
-import React, { useMemo } from 'react';
+import React, { useMemo, useState } from 'react';
 import { Canvas } from '@react-three/fiber';
 import { OrbitControls } from '@react-three/drei';
 import VoronoiLatticePreview from './VoronoiLatticePreview';
+import VoronoiSDF from './VoronoiSDF';
 // Compute axis-aligned bounds for a primitive
 function computeBounds(primitive: { type: string; params: any }): { min: [number, number, number]; max: [number, number, number] } {
   switch (primitive.type) {
@@ -93,6 +94,7 @@ const Geometry: React.FC<{ primitive: { type: string; params: Record<string, num
 };
 
 const Preview: React.FC<PreviewProps> = ({ spec, visibility }) => {
+  const [useSDF, setUseSDF] = useState(false);
   //console.log('[Preview] component rendered, spec prop:', spec);
   // Accept either a single node or an array of nodes
   const nodes = Array.isArray(spec) ? spec : [spec];
@@ -186,6 +188,11 @@ const Preview: React.FC<PreviewProps> = ({ spec, visibility }) => {
 
   return (
     <div style={{ width: '100%', height: '400px' }}>
+      <div style={{ marginBottom: '0.5rem' }}>
+        <button onClick={() => setUseSDF(v => !v)}>
+          {useSDF ? 'Switch to Lattice Preview' : 'Switch to SDF Preview'}
+        </button>
+      </div>
       <Canvas 
         camera={{ position: cameraPosition, fov: 50 }}
         gl={{ preserveDrawingBuffer: true, antialias: true }}
@@ -206,10 +213,17 @@ const Preview: React.FC<PreviewProps> = ({ spec, visibility }) => {
                 {visibility.primitive && <Geometry primitive={primitive} />}
                 {/* draw Voronoi lattice overlay if infill modifier present */}
                 {visibility.infill && primitive.infill?.pattern === 'voronoi' && (
-                  <VoronoiLatticePreview
-                    spec={primitive.infill as any}
-                    bounds={[cb.min, cb.max]}
-                  />
+                  useSDF ? (
+                    <VoronoiSDF
+                      spec={primitive.infill as any}
+                      bounds={[cb.min, cb.max]}
+                    />
+                  ) : (
+                    <VoronoiLatticePreview
+                      spec={primitive.infill as any}
+                      bounds={[cb.min, cb.max]}
+                    />
+                  )
                 )}
               </group>
             );

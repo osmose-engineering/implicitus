@@ -8,6 +8,7 @@ logging.basicConfig(
 )
 
 import json
+import copy
 import traceback
 import uuid
 from json.decoder import JSONDecodeError
@@ -38,6 +39,15 @@ def log_turn(session_id: str, turn_type: str, raw: str, spec: list, summary: Opt
         "raw": raw,
         "spec": spec,
     }
+    # remove seed_points from infill modifiers to keep logs small
+    scrubbed_spec = []
+    for node in entry["spec"]:
+        node_copy = copy.deepcopy(node)
+        mods = node_copy.get("modifiers")
+        if mods and isinstance(mods.get("infill"), dict):
+            mods["infill"].pop("seed_points", None)
+        scrubbed_spec.append(node_copy)
+    entry["spec"] = scrubbed_spec
     if summary is not None:
         entry["summary"] = summary
     if question is not None:
