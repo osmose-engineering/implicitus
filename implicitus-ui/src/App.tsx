@@ -1,4 +1,9 @@
 import React, { useState, useRef, useEffect } from 'react';
+import Editor from '@monaco-editor/react';
+import * as monaco from 'monaco-editor';
+import './App.css'
+import VoronoiCanvas from './components/VoronoiCanvas';
+
 // Simple debounce helper
 function debounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
   let timeout: ReturnType<typeof setTimeout> | null;
@@ -9,15 +14,14 @@ function debounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
     }, delay);
   };
 }
-import Editor from '@monaco-editor/react';
-import * as monaco from 'monaco-editor';
-import './App.css'
-import Preview from './Preview';
 
 function App() {
   const [isDirty, setIsDirty] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [spec, setSpec] = useState<any[]>([]);
+  // Derive seed points for the Voronoi viewer from the spec (assumes first node has infill.seed_points)
+  const seedPoints: [number, number, number][] =
+    spec[0]?.modifiers?.infill?.seed_points ?? [];
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<string>('');
@@ -30,7 +34,6 @@ function App() {
     primitive: true,
     infill: true,
   });
-
 
   const handleValidate = async () => {
     setError(null);
@@ -462,11 +465,26 @@ function App() {
               Show Infill
             </label>
           </div>
-          {/* Preview panel */}
-          {spec && (
-            <div>
-              <Preview spec={spec} visibility={visibility} />
-            </div>
+          {/* Preview panel + seed list */}
+          {seedPoints.length > 0 && (
+            <>
+              <VoronoiCanvas
+                seedPoints={seedPoints}
+                bbox={[0, 0, 0, 1, 1, 1]}
+                // Use a thickness ~ half the average seed spacing (~0.35 mm)
+                thickness={0.35}
+                maxSteps={256}
+                epsilon={0.001}
+              />
+              {/* Seed points list */}
+              <div style={{ height: '200px', overflowY: 'auto', border: '1px solid #ccc', marginTop: '1rem' }}>
+                {seedPoints.map(([x, y, z], idx) => (
+                  <div key={idx}>
+                    Seed {idx}: ({x.toFixed(3)}, {y.toFixed(3)}, {z.toFixed(3)})
+                  </div>
+                ))}
+              </div>
+            </>
           )}
         </div>
       </div>
