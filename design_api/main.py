@@ -22,6 +22,7 @@ from design_api.services.llm_service import generate_design_spec
 from design_api.services.mapping import map_primitive as map_to_proto_dict
 from design_api.services.validator import validate_model_spec as validate_proto
 from ai_adapter.csg_adapter import review_request, generate_summary, update_request
+from design_api.services.voronoi_gen.voronoi_gen import build_hex_lattice, point_in_primitive
 
 @dataclass
 class DesignState:
@@ -113,6 +114,20 @@ async def review(req: dict, sid: Optional[str] = None):
         # Otherwise we have a spec and summary tuple
         spec, summary = result
         design_states[sid].draft_spec = spec
+        # If infill pattern is hex, generate a hex lattice
+        for node in spec:
+            inf = node.get("modifiers", {}).get("infill", {})
+            if inf.get("pattern") == "hex":
+                bbox_min = inf.get("bbox_min") or inf.get("bboxMin")
+                bbox_max = inf.get("bbox_max") or inf.get("bboxMax")
+                spacing  = inf.get("min_dist") or inf.get("spacing") or 1.0
+                if bbox_min and bbox_max:
+                    pts = build_hex_lattice(bbox_min, bbox_max, spacing)
+                    # Clip to the primitive volume
+                    prim = node.get("primitive", {})
+                    pts = [p for p in pts if point_in_primitive(p, prim)]
+                    inf["seed_points"] = pts
+                    inf["num_points"] = len(pts)
         log_turn(sid, "review", req.get("raw", ""), spec, summary=summary)
         return {"sid": sid, "spec": spec, "summary": summary}
     except Exception as e:
@@ -145,6 +160,20 @@ async def update(req: UpdateRequest):
         return {"sid": req.sid, "question": question}
     # Unpack updated spec and summary
     new_spec, new_summary = result
+    # If infill pattern is hex, generate a hex lattice
+    for node in new_spec:
+        inf = node.get("modifiers", {}).get("infill", {})
+        if inf.get("pattern") == "hex":
+            bbox_min = inf.get("bbox_min") or inf.get("bboxMin")
+            bbox_max = inf.get("bbox_max") or inf.get("bboxMax")
+            spacing  = inf.get("min_dist") or inf.get("spacing") or 1.0
+            if bbox_min and bbox_max:
+                pts = build_hex_lattice(bbox_min, bbox_max, spacing)
+                # Clip to the primitive volume
+                prim = node.get("primitive", {})
+                pts = [p for p in pts if point_in_primitive(p, prim)]
+                inf["seed_points"] = pts
+                inf["num_points"] = len(pts)
     design_states[req.sid].draft_spec = new_spec
     log_turn(req.sid, "update", req.raw, new_spec)
     return {"sid": req.sid, "spec": new_spec, "summary": new_summary}

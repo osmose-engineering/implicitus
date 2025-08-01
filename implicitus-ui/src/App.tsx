@@ -1,8 +1,57 @@
+// Reorders infill keys: configurable params first, then bbox_min, bbox_max, seed_points last
+function reorderInfillKeys(node: any) {
+  const infillOriginal = node.modifiers?.infill;
+  if (!infillOriginal) return node;
+  // clone infill and normalize spacing
+  const infill: any = { ...infillOriginal };
+  // rename snake_case and camelCase keys to spacing
+  if (infill.hasOwnProperty('min_dist')) {
+    infill.spacing = infill.min_dist;
+    delete infill.min_dist;
+  }
+  if (infill.hasOwnProperty('minDist')) {
+    infill.spacing = infill.minDist;
+    delete infill.minDist;
+  }
+  const ordered: any = {};
+  const primaryKeys = [
+    'pattern','_is_voronoi','spacing','wall_thickness',
+    'uniform','num_points','adaptive','max_depth',
+    'threshold','resolution','shell_offset','auto_cap'
+  ];
+  // add primary keys in order
+  primaryKeys.forEach(k => {
+    if (infill.hasOwnProperty(k)) ordered[k] = infill[k];
+  });
+  // then bbox_min, bbox_max, seed_points last
+  ['bbox_min','bbox_max','seed_points'].forEach(k => {
+    if (infill.hasOwnProperty(k)) ordered[k] = infill[k];
+  });
+  // clone other keys (if any) in original order
+  Object.keys(infill).forEach(k => {
+    if (!ordered.hasOwnProperty(k)) ordered[k] = infill[k];
+  });
+  // return new node with reordered infill
+  return {
+    ...node,
+    modifiers: {
+      ...node.modifiers,
+      infill: ordered
+    }
+  };
+}
+
+function reorderSpec(specArray: any[]) {
+  return specArray.map(node => reorderInfillKeys(node));
+}
 import React, { useState, useRef, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import './App.css'
 import VoronoiCanvas from './components/VoronoiCanvas';
+import { Checkbox } from './components/UI';
+import { Tabs, TabList, Tab, TabPanel } from 'react-tabs';
+import 'react-tabs/style/react-tabs.css';
 
 // Simple debounce helper
 function debounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
@@ -34,6 +83,11 @@ function App() {
     primitive: true,
     infill: true,
   });
+  const [showRaymarch, setShowRaymarch] = useState(true);
+  const [showStruts, setShowStruts]     = useState(false);
+  const [strutRadius, setStrutRadius]   = useState(0.02);
+
+  const [tabIndex, setTabIndex] = useState(1);
 
   const handleValidate = async () => {
     setError(null);
@@ -134,7 +188,7 @@ function App() {
       // Handle updated spec with nested modifiers
       if (data.spec && Array.isArray(data.spec)) {
         setSpec(data.spec);
-        setSpecText(JSON.stringify(data.spec, null, 2));
+        setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
         if (data.summary) {
           setSummary(data.summary);
           setMessages(prev => [...prev, { speaker: 'assistant', text: data.summary }]);
@@ -255,7 +309,7 @@ function App() {
       const data = await response.json();
       if (data.spec && Array.isArray(data.spec)) {
         setSpec(data.spec);
-        setSpecText(JSON.stringify(data.spec, null, 2));
+        setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
         if (data.summary) {
           setSummary(data.summary);
           setMessages(prev => [...prev, { speaker: 'assistant', text: data.summary }]);
@@ -340,7 +394,16 @@ function App() {
                   </div>
                 ))}
               </div>
-              <form onSubmit={handleSubmit} style={{ borderTop: '1px solid #ccc', padding: '0.5em' }}>
+              <form
+                onSubmit={handleSubmit}
+                style={{
+                  display: 'flex',
+                  alignItems: 'center',
+                  gap: '0.5em',
+                  borderTop: '1px solid #ccc',
+                  padding: '0.5em'
+                }}
+              >
                 <input
                   type="text"
                   value={prompt ?? ''}
@@ -369,19 +432,6 @@ function App() {
                     const text = value ?? '';
                     setSpecText(text);
                     setIsDirty(true);
-                    try {
-                      const parsed = JSON.parse(text);
-                      if (Array.isArray(parsed)) {
-                        setSpec(parsed);
-                        setError(null);
-                        // if infill is present and we have a session, auto-regenerate seed points
-                        // if (sessionId && parsed[0].modifiers?.infill) {
-                        //   debouncedRegenerateSeeds(parsed);
-                        // }
-                      }
-                    } catch {
-                      // ignore JSON parse errors for draft mode
-                    }
                   }}
                   onMount={handleEditorDidMount}
                   options={{
@@ -465,27 +515,51 @@ function App() {
               Show Infill
             </label>
           </div>
-          {/* Preview panel + seed list */}
-          {seedPoints.length > 0 && (
-            <>
-              <VoronoiCanvas
-                seedPoints={seedPoints}
-                bbox={[0, 0, 0, 1, 1, 1]}
-                // Use a thickness ~ half the average seed spacing (~0.35 mm)
-                thickness={0.35}
-                maxSteps={256}
-                epsilon={0.001}
-              />
-              {/* Seed points list */}
-              <div style={{ height: '200px', overflowY: 'auto', border: '1px solid #ccc', marginTop: '1rem' }}>
-                {seedPoints.map(([x, y, z], idx) => (
-                  <div key={idx}>
-                    Seed {idx}: ({x.toFixed(3)}, {y.toFixed(3)}, {z.toFixed(3)})
-                  </div>
-                ))}
-              </div>
-            </>
+
+          {/* Tabbed preview: Ray-March and Strut views */}
+          {tabIndex === 1 && (
+            <div style={{ margin: '1em', fontStyle: 'italic', color: '#555' }}>
+              Rendering...
+            </div>
           )}
+          <Tabs selectedIndex={tabIndex} onSelect={index => setTabIndex(index)}>
+            <TabList>
+              <Tab>Ray-March View</Tab>
+              <Tab>Strut View</Tab>
+            </TabList>
+            <TabPanel>
+              {seedPoints.length > 0 && (
+                <VoronoiCanvas
+                  seedPoints={seedPoints}
+                  bbox={[0, 0, 0, 1, 1, 1]}
+                  thickness={0.35}
+                  maxSteps={256}
+                  epsilon={0.001}
+                  showSolid={visibility.primitive}
+                  showInfill={visibility.infill}
+                  showRaymarch={true}
+                  showStruts={false}
+                />
+              )}
+            </TabPanel>
+            <TabPanel>
+              {seedPoints.length > 0 && (
+                <VoronoiCanvas
+                  seedPoints={seedPoints}
+                  bbox={[0, 0, 0, 1, 1, 1]}
+                  thickness={0.35}
+                  maxSteps={256}
+                  epsilon={0.001}
+                  showSolid={visibility.primitive}
+                  showInfill={visibility.infill}
+                  showRaymarch={false}
+                  showStruts={true}
+                  strutRadius={strutRadius}
+                  strutColor="white"
+                />
+              )}
+            </TabPanel>
+          </Tabs>
         </div>
       </div>
     </div>

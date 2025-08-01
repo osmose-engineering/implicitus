@@ -1,6 +1,7 @@
 import React from 'react';
 import { Canvas } from '@react-three/fiber';
 import VoronoiMesh from './VoronoiMesh';
+import { VoronoiStruts } from './VoronoiStruts';
 import { OrbitControls } from '@react-three/drei';
 import * as THREE from 'three';
 
@@ -10,9 +11,23 @@ interface VoronoiCanvasProps {
   thickness?: number;
   maxSteps?: number;
   epsilon?: number;
+  showRaymarch?: boolean;
+  showStruts?: boolean;
+  strutRadius?: number;
+  strutColor?: string | number;
 }
 
-const VoronoiCanvas: React.FC<VoronoiCanvasProps> = (props) => {
+const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
+  seedPoints,
+  bbox,
+  thickness,
+  maxSteps,
+  epsilon,
+  showRaymarch = true,
+  showStruts = false,
+  strutRadius = 0.5,
+  strutColor = 'white',
+}) => {
   return (
     <div style={{
       width: '100%',
@@ -29,16 +44,17 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = (props) => {
         gl={{ version: 2 }}
         camera={{ position: [3, 3, 3], fov: 60 }}
       >
+        {showRaymarch && <VoronoiMesh seedPoints={seedPoints} bbox={bbox} thickness={thickness} maxSteps={maxSteps} epsilon={epsilon} />}
+        {showStruts  && <VoronoiStruts seedPoints={seedPoints} strutRadius={strutRadius} color={strutColor} />}
         <ambientLight />
         <pointLight position={[5, 5, 5]} />
         {/* Grid and axes helpers */}
         <primitive object={new THREE.GridHelper(200, 20)} />
         <primitive object={new THREE.AxesHelper(100)} />
-        <VoronoiMesh {...props} />
         {/* Debug: visualize seed points */}
-        {/*props.seedPoints.map(([x, y, z], idx) => (
+        {/*seedPoints.map(([x, y, z], idx) => (
           <mesh key={idx} position={[x, y, z]}>
-            <sphereGeometry args={[0.5, 16, 16]} />
+            <sphereGeometry args={[0.2, 16, 16]} />
             <meshBasicMaterial color="red" />
           </mesh>
         ))*/}

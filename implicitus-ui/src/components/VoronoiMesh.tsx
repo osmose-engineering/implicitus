@@ -12,13 +12,21 @@ interface VoronoiMeshProps {
   thickness: number;
   maxSteps: number;
   epsilon: number;
+  showSolid: boolean;
+  showInfill: boolean;
+  sphereCenter?: [number, number, number];
+  sphereRadius?: number;
 }
 
 const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
   seedPoints,
   thickness = 0.1,
   maxSteps = 64,
-  epsilon = 0.001
+  epsilon = 0.001,
+  showSolid = true,
+  showInfill = true,
+  sphereCenter,
+  sphereRadius
 }) => {
   // Derive world-space bounding box from seedPoints
   const xs = seedPoints.map(p => p[0]);
@@ -30,6 +38,19 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
   const maxY = Math.max(...ys);
   const minZ = Math.min(...zs);
   const maxZ = Math.max(...zs);
+
+  // Default sphere center & radius if not provided
+  const defaultCenter = new THREE.Vector3(
+    (minX + maxX) / 2,
+    (minY + maxY) / 2,
+    (minZ + maxZ) / 2
+  );
+  const centerVec = sphereCenter
+    ? new THREE.Vector3(...sphereCenter)
+    : defaultCenter;
+  const radiusVal = sphereRadius !== undefined
+    ? sphereRadius
+    : Math.min(maxX - minX, maxY - minY, maxZ - minZ) / 2;
 
   const numSeeds = seedPoints.length;
   const count = Math.min(MAX_SEEDS, numSeeds);
@@ -76,10 +97,20 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     // Initialize SDF offset thickness (from prop) and a thin edge thickness
     m.uniforms.uThickness.value = thickness;
     m.uniforms.uThickness.needsUpdate = true;
-    m.uniforms.uEdgeThickness.value = thickness;  // thin walls
+    m.uniforms.uEdgeThickness.value = thickness;
     m.uniforms.uEdgeThickness.needsUpdate = true;
+    // Wire up visibility toggles
+    m.uniforms.uShowSolid.value = showSolid;
+    m.uniforms.uShowSolid.needsUpdate = true;
+    m.uniforms.uShowInfill.value = showInfill;
+    m.uniforms.uShowInfill.needsUpdate = true;
+    // Bind sphere shape parameters
+    m.uniforms.uSphereCenter.value.copy(centerVec);
+    m.uniforms.uSphereCenter.needsUpdate = true;
+    m.uniforms.uSphereRadius.value = radiusVal;
+    m.uniforms.uSphereRadius.needsUpdate = true;
     return m;
-  }, [seedTexture, thickness]);
+  }, [seedTexture, thickness, showSolid, showInfill, centerVec, radiusVal]);
 
   const { camera } = useThree();
 
@@ -209,6 +240,16 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     mat.uniforms.uMaxSteps.needsUpdate = true;
     mat.uniforms.uEpsilon.value = epsilon;
     mat.uniforms.uEpsilon.needsUpdate = true;
+    mat.uniforms.uShowSolid.value = showSolid;
+    mat.uniforms.uShowSolid.needsUpdate = true;
+    mat.uniforms.uShowInfill.value = showInfill;
+    mat.uniforms.uShowInfill.needsUpdate = true;
+
+    // Update sphere shape uniforms
+    mat.uniforms.uSphereCenter.value.copy(centerVec);
+    mat.uniforms.uSphereCenter.needsUpdate = true;
+    mat.uniforms.uSphereRadius.value = radiusVal;
+    mat.uniforms.uSphereRadius.needsUpdate = true;
 
     //console.log('Uniforms:', {
       //uNumSeeds: mat.uniforms.uNumSeeds.value,

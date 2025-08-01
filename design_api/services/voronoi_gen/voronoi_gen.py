@@ -147,6 +147,76 @@ def smooth_difference(a: float, b: float, r: float) -> float:
     # difference = intersection of a and complement of b
     return smooth_intersection(a, -b, r)
 
+
+# --- Hexagonal lattice generation helper ---
+def build_hex_lattice(
+    bbox_min: Tuple[float, float, float],
+    bbox_max: Tuple[float, float, float],
+    spacing: float
+) -> List[Tuple[float, float, float]]:
+    """
+    Generate a hexagonal (offset) 3D lattice of points within the given bounding box.
+    bbox_min, bbox_max: (x,y,z) minimum and maximum coordinates.
+    spacing: distance between adjacent lattice points.
+    """
+    pts: List[Tuple[float, float, float]] = []
+    dx = spacing
+    dy = spacing * math.sqrt(3) / 2.0
+    dz = spacing
+
+    x0, y0, z0 = bbox_min
+    x1, y1, z1 = bbox_max
+
+    row = 0
+    y = y0
+    while y <= y1:
+        # offset every other row for hex pattern in XY plane
+        x_start = x0 + (row % 2) * (dx / 2.0)
+        x = x_start
+        while x <= x1:
+            z = z0
+            while z <= z1:
+                pts.append((x, y, z))
+                z += dz
+            x += dx
+        y += dy
+        row += 1
+
+    return pts
+
+
+# --- Generic primitive point-inclusion helper ---
+def point_in_primitive(
+    p: Tuple[float, float, float],
+    prim: Dict[str, Any]
+) -> bool:
+    """
+    Test whether point p (x,y,z) lies inside the given primitive definition.
+    Supported primitives: sphere, cylinder, box.
+    """
+    x, y, z = p
+    # Sphere: center at origin
+    if "sphere" in prim:
+        r = prim["sphere"].get("radius", 0.0)
+        return (x*x + y*y + z*z) <= r*r
+
+    # Cylinder: axis along Z, centered at origin
+    if "cylinder" in prim:
+        cyl = prim["cylinder"]
+        r = cyl.get("radius", 0.0)
+        h = cyl.get("height", 0.0)
+        # radial check in XY and height check in Z
+        return (x*x + y*y) <= r*r and abs(z) <= h/2.0
+
+    # Box: axis-aligned
+    if "box" in prim:
+        bmin = prim["box"].get("min", prim.get("bbox_min", (0,0,0)))
+        bmax = prim["box"].get("max", prim.get("bbox_max", (0,0,0)))
+        return all(bmin[i] <= p[i] <= bmax[i] for i in range(3))
+
+    # Default: inside
+    return True
+
 # Compute Voronoi adjacency on a grid
 def compute_voronoi_adjacency(
     sites: List[Tuple[float, float, float]],

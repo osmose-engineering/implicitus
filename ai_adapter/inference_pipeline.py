@@ -21,7 +21,7 @@ def _init_chat():
     if _chat is None:
         tokenizer = AutoTokenizer.from_pretrained(
             "mistralai/Mistral-7B-Instruct-v0.3",
-            use_fast=True
+            use_fast=False
         )
         _chat = pipeline(
             "text-generation",

@@ -21,15 +21,20 @@ seedTexture.needsUpdate = true;
 
 export const VoronoiMaterial = shaderMaterial(
   {
-    uSeedsTex:   { value: seedTexture },
-    uTexSize:    { value: texSize },
-    uNumSeeds:   { value: 0 },
-    uBoxMin:     { value: new THREE.Vector3(0,0,0) },
-    uBoxMax:     { value: new THREE.Vector3(0,0,0) },
-    uThickness:  { value: 0.1 },
-    uEdgeThickness: { value: 0.1 },
-    uMaxSteps:   { value: 64 },
-    uEpsilon:    { value: 0.001 }
+    uSeedsTex: seedTexture,
+    uTexSize: texSize,
+    uNumSeeds: 0,
+    uBoxMin: new THREE.Vector3(0, 0, 0),
+    uBoxMax: new THREE.Vector3(0, 0, 0),
+    uThickness: 0.1,
+    uEdgeThickness: 0.02,
+    uMaxSteps: 64,
+    uEpsilon: 0.001,
+    uShowSolid: true,
+    uShowInfill: true,
+    uShowAccumulate: true,
+    uSphereCenter: new THREE.Vector3(0, 0, 0),
+    uSphereRadius: 1.0,
   },
   // vertex shader
   `
@@ -56,6 +61,11 @@ uniform float     uThickness;
 uniform float     uEdgeThickness;
 uniform int       uMaxSteps;
 uniform float     uEpsilon;
+uniform bool      uShowSolid;
+uniform bool      uShowInfill;
+uniform bool      uShowAccumulate;
+uniform vec3      uSphereCenter;
+uniform float     uSphereRadius;
 
 // Box‐ray intersection
 bool intersectBox(vec3 ro, vec3 rd, vec3 boxMin, vec3 boxMax, out float tNear, out float tFar) {
@@ -67,6 +77,19 @@ bool intersectBox(vec3 ro, vec3 rd, vec3 boxMin, vec3 boxMax, out float tNear, o
   tNear = max(max(tsmaller.x, tsmaller.y), tsmaller.z);
   tFar  = min(min(tbigger.x,  tbigger.y),  tbigger.z);
   return tNear < tFar && tFar > 0.0;
+}
+
+// Sphere‐ray intersection
+bool intersectSphere(vec3 ro, vec3 rd, vec3 center, float radius, out float tNear, out float tFar) {
+  vec3 oc = ro - center;
+  float b = dot(oc, rd);
+  float c = dot(oc, oc) - radius * radius;
+  float disc = b * b - c;
+  if (disc < 0.0) return false;
+  float sqrtD = sqrt(disc);
+  tNear = -b - sqrtD;
+  tFar  = -b + sqrtD;
+  return tFar > 0.0;
 }
 
 // SDF lookup functions remain unchanged
@@ -96,28 +119,65 @@ float voronoiSDF(vec3 p) {
   return sd;
 }
 
+// Shape SDF for a sphere
+float sphereSDF(vec3 p) {
+  return length(p - uSphereCenter) - uSphereRadius;
+}
+
 void main() {
-  // Ray origin and direction in world-space
   vec3 ro = cameraPosition;
   vec3 rd = normalize(vWorldPos - ro);
 
-  // Intersect ray with box volume
-  float t0, t1;
-  if (!intersectBox(ro, rd, uBoxMin, uBoxMax, t0, t1)) {
+  // Intersect with box and sphere
+  float t0b, t1b, t0s, t1s;
+  intersectBox(ro, rd, uBoxMin, uBoxMax, t0b, t1b);
+  if (!intersectSphere(ro, rd, uSphereCenter, uSphereRadius, t0s, t1s)) {
     discard;
   }
-  float t = max(t0, 0.0);
-  // Ray-march loop
+  float t0 = max(max(t0b, t0s), 0.0);
+  float t1 = min(t1b, t1s);
+  if (t1 < t0) discard;
+  float tEntry = t0;
+  float tExit  = t1;
+  float t       = tEntry;
+
+  float acc = 0.0;
   for (int i = 0; i < uMaxSteps; i++) {
     vec3 p = ro + rd * t;
-    float d = voronoiSDF(p);
-    // Highlight shell: where distance is near zero
-    if (abs(d) < uEdgeThickness) {
-      gl_FragColor = vec4(vec3(1.0), 1.0);
+    float vorD   = voronoiSDF(p);
+    float shapeD = sphereSDF(p);
+    bool insideShape = (shapeD < 0.0);
+    bool wall       = insideShape && abs(vorD) < uEdgeThickness;
+
+    // Solid branch
+    if (uShowSolid && insideShape) {
+      float depthNorm = clamp((t - tEntry) / (tExit - tEntry), 0.0, 1.0);
+      float shade = pow(1.0 - depthNorm, 2.2);
+      gl_FragColor = vec4(vec3(shade), 1.0);
       return;
     }
-    t += max(abs(d), uEpsilon);
+    // Infill branch
+    if (uShowInfill) {
+      if (uShowAccumulate) {
+        if (wall) acc += 1.0;
+      } else {
+        if (wall) {
+          float depthNorm = clamp((t - tEntry) / (tExit - tEntry), 0.0, 1.0);
+          float shade = pow(1.0 - depthNorm, 2.2);
+          gl_FragColor = vec4(vec3(shade), 1.0);
+          return;
+        }
+      }
+    }
+
+    t += max(abs(vorD), uEpsilon);
     if (t > t1) break;
+  }
+  // After marching, if accumulating, draw intensity
+  if (uShowAccumulate && acc > 0.0) {
+    float intensity = acc / float(uMaxSteps);
+    gl_FragColor = vec4(vec3(intensity), 1.0);
+    return;
   }
   discard;
 }
