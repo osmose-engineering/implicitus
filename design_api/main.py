@@ -22,12 +22,7 @@ from design_api.services.llm_service import generate_design_spec
 from design_api.services.mapping import map_primitive as map_to_proto_dict
 from design_api.services.validator import validate_model_spec as validate_proto
 from ai_adapter.csg_adapter import review_request, generate_summary, update_request
-from design_api.services.voronoi_gen.voronoi_gen import (
-    compute_voronoi_adjacency,
-    compute_delaunay_adjacency,
-    build_hex_lattice,
-    compute_voronoi_mesh,
-)
+from design_api.services.voronoi_gen.voronoi_gen import compute_voronoi_adjacency
 
 @dataclass
 class DesignState:
@@ -127,14 +122,9 @@ async def review(req: dict, sid: Optional[str] = None):
             bbox_max = inf.get("bbox_max") or inf.get("bboxMax")
             if pts and bbox_min and bbox_max:
                 if inf.get("pattern") == "voronoi":
-                    # True Voronoi cell-wall mesh via dual circumcenters
-                    primitive = node.get("primitive", {})
-                    vertices, edges = compute_voronoi_mesh(pts, primitive, surface_only=False)
-                    inf["seed_points"] = vertices
-                    inf["edges"] = edges
-                else:
-                    # Fallback to Delaunay adjacency
-                    inf["edges"] = compute_delaunay_adjacency(pts)
+                    spacing = inf.get("spacing", 2.0)
+                    inf["edges"] = compute_voronoi_adjacency(pts, spacing)
+                # Removed else branch calling compute_delaunay_adjacency
                 logging.debug(f"[DEBUG review] got {len(inf['edges'])} edges, sample first 10: {inf['edges'][:10]}")
 
         design_states[sid].draft_spec = spec
@@ -180,14 +170,9 @@ async def update(req: UpdateRequest):
         bbox_max = inf.get("bbox_max") or inf.get("bboxMax")
         if pts and bbox_min and bbox_max:
             if inf.get("pattern") == "voronoi":
-                # True Voronoi cell-wall mesh via dual circumcenters
-                primitive = node.get("primitive", {})
-                vertices, edges = compute_voronoi_mesh(pts, primitive, surface_only=False)
-                inf["seed_points"] = vertices
-                inf["edges"] = edges
-            else:
-                # Fallback to Delaunay adjacency
-                inf["edges"] = compute_delaunay_adjacency(pts)
+                spacing = inf.get("spacing", 2.0)
+                inf["edges"] = compute_voronoi_adjacency(pts, spacing)
+            # Removed else branch calling compute_delaunay_adjacency
             logging.debug(f"[DEBUG update] got {len(inf['edges'])} edges, sample first 10: {inf['edges'][:10]}")
 
     design_states[req.sid].draft_spec = new_spec
