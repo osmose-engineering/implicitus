@@ -71,6 +71,7 @@ function App() {
   // Derive seed points for the Voronoi viewer from the spec (assumes first node has infill.seed_points)
   const seedPoints: [number, number, number][] =
     spec[0]?.modifiers?.infill?.seed_points ?? [];
+  const [edges, setEdges] = useState<number[][]>([]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<string>('');
@@ -188,6 +189,7 @@ function App() {
       // Handle updated spec with nested modifiers
       if (data.spec && Array.isArray(data.spec)) {
         setSpec(data.spec);
+        setEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
         setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
         if (data.summary) {
           setSummary(data.summary);
@@ -309,6 +311,7 @@ function App() {
       const data = await response.json();
       if (data.spec && Array.isArray(data.spec)) {
         setSpec(data.spec);
+        setEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
         setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
         if (data.summary) {
           setSummary(data.summary);
@@ -546,6 +549,7 @@ function App() {
               {seedPoints.length > 0 && (
                 <VoronoiCanvas
                   seedPoints={seedPoints}
+                  edges={edges}
                   bbox={[0, 0, 0, 1, 1, 1]}
                   thickness={0.35}
                   maxSteps={256}

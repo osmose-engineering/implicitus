@@ -1,71 +1,66 @@
-import React, { useMemo, useRef, useEffect } from 'react';
+import React, { useMemo, useEffect, useRef } from 'react';
 import * as THREE from 'three';
-import { InstancedMesh, Object3D, BufferGeometry, Float32BufferAttribute, MeshStandardMaterial } from 'three';
-import triangulate from 'delaunay-triangulate';
 
 
 export interface VoronoiStrutsProps {
   seedPoints: [number, number, number][];
+  edges: [number, number][];      // list of index pairs
   strutRadius: number;
   color?: string | number;
 }
 
-export const VoronoiStruts: React.FC<VoronoiStrutsProps> = ({ seedPoints, strutRadius, color = 'white' }) => {
-  // 1️⃣ Compute Delaunay edges once
-  const edges = useMemo(() => {
-    // Compute 3D Delaunay tetrahedra
-    const cells = triangulate(seedPoints);
-    const seen = new Set<string>();
-    const list: [ [number,number,number], [number,number,number] ][] = [];
+export const VoronoiStruts: React.FC<VoronoiStrutsProps> = ({
+  seedPoints,
+  edges = [],
+  strutRadius,
+  color = 'white'
+}) => {
+  // Convert index‐pairs to coordinate pairs
+  const edgePairs = useMemo(() => {
+    return (edges || []).map(([i, j]) => [
+      seedPoints[i] as [number, number, number],
+      seedPoints[j] as [number, number, number]
+    ]);
+  }, [edges, seedPoints]);
 
-    for (const cell of cells) {
-      for (let i = 0; i < 4; i++) {
-        for (let j = i + 1; j < 4; j++) {
-          const a = cell[i], b = cell[j];
-          const key = a < b ? `${a},${b}` : `${b},${a}`;
-          if (!seen.has(key)) {
-            seen.add(key);
-            list.push([ seedPoints[a], seedPoints[b] ]);
-          }
-        }
-      }
-    }
-    return list;
-  }, [seedPoints]);
+  const meshRef = useRef<THREE.InstancedMesh>(null!);
 
-  // 2️⃣ Prepare instanced mesh
-  const count = edges.length;
-  const meshRef = useRef<InstancedMesh>(null!);
-  const dummy = useMemo(() => new Object3D(), []);
-
-  // 3️⃣ Geometry & material
-  const geometry = useMemo(() => {
-    // cylinder aligned along Y of unit length
-    return new THREE.CylinderGeometry(1, 1, 1, 3, 1, true);
-  }, []);
-  const material = useMemo(() => new MeshStandardMaterial({ color }), [color]);
-
-  // 4️⃣ Instance placement
   useEffect(() => {
-    edges.forEach(([a, b], i) => {
+    const mesh = meshRef.current;
+    // ensure instance count matches dynamic edgePairs length
+    // mesh.count = edgePairs.length;
+    // Position and scale instances
+    edgePairs.forEach(([a, b], i) => {
       const pa = new THREE.Vector3(...a);
       const pb = new THREE.Vector3(...b);
       const dir = pb.clone().sub(pa);
       const len = dir.length();
-
-      dummy.position.copy(pa).addScaledVector(dir, 0.5);
-      dummy.scale.set(strutRadius, len, strutRadius);
-      dummy.quaternion.setFromUnitVectors(
+      // mid-point
+      const mid = pa.add(dir.multiplyScalar(0.5));
+      // orientation
+      const quat = new THREE.Quaternion().setFromUnitVectors(
         new THREE.Vector3(0, 1, 0),
         dir.normalize()
       );
-      dummy.updateMatrix();
-      meshRef.current.setMatrixAt(i, dummy.matrix);
+      // build matrix
+      const mat = new THREE.Matrix4()
+        .makeRotationFromQuaternion(quat)
+        .setPosition(mid)
+        .scale(new THREE.Vector3(strutRadius, len * 0.5, strutRadius));
+      mesh.setMatrixAt(i, mat);
     });
-    meshRef.current.instanceMatrix.needsUpdate = true;
-  }, [edges, strutRadius]);
+    mesh.instanceMatrix.needsUpdate = true;
+    // Apply uniform color prop
+    (mesh.material as THREE.MeshBasicMaterial).color.set(color as any);
+  }, [edgePairs, color, strutRadius]);
 
   return (
-    <instancedMesh ref={meshRef} args={[geometry, material, count]} />
+    <instancedMesh ref={meshRef} args={[undefined, undefined, edgePairs.length]}>
+      <cylinderGeometry args={[1, 1, 1, 8, 1]} />
+      <meshBasicMaterial
+        vertexColors={false}
+        color={color as any}
+      />
+    </instancedMesh>
   );
 };

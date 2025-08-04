@@ -1,9 +1,75 @@
 import numpy as np
 import random
+from typing import Union, Any, Dict
+from typing import Tuple, List, Optional, Dict
+from typing import Callable
+
 import math
-from typing import Union, Any
-from typing import Tuple, List, Optional
-from typing import Dict, Callable
+def build_spatial_index(
+    seeds: List[Tuple[float, float, float]],
+    spacing: float
+) -> Dict[Tuple[int, int, int], List[int]]:
+    """
+    Build a 3D spatial hash grid of seed indices.
+
+    Args:
+        seeds: list of (x,y,z) seed coordinates
+        spacing: target minimal seed spacing (r);
+                 grid cell size will be 2 * spacing
+
+    Returns:
+        A dict mapping (i,j,k) cell keys to lists of seed indices in that cell.
+    """
+    grid: Dict[Tuple[int, int, int], List[int]] = {}
+    cell_size = 2 * spacing
+    for idx, (x, y, z) in enumerate(seeds):
+        i = math.floor(x / cell_size)
+        j = math.floor(y / cell_size)
+        k = math.floor(z / cell_size)
+        key = (i, j, k)
+        grid.setdefault(key, []).append(idx)
+    return grid
+
+
+# --- Prune adjacency using spatial hash grid (efficient) ---
+def prune_adjacency_via_grid(
+    seeds: List[Tuple[float, float, float]],
+    spacing: float
+) -> List[Tuple[int, int]]:
+    """
+    Prune adjacency by only checking seeds in the same or neighboring spatial hash cells.
+    Args:
+        seeds: list of (x,y,z) seed coordinates
+        spacing: target minimal seed spacing (r)
+    Returns:
+        List of undirected edges (i,j) where j>i and distance ≤ 2*spacing.
+    """
+    # build cell grid
+    grid = build_spatial_index(seeds, spacing)
+    edges = []
+    max_dist2 = (2 * spacing) ** 2
+    # neighbor cell offsets (3×3×3)
+    neighbor_offsets = [(di, dj, dk)
+                        for di in (-1, 0, 1)
+                        for dj in (-1, 0, 1)
+                        for dk in (-1, 0, 1)]
+    # for each cell and its seeds
+    for cell_key, idx_list in grid.items():
+        i0, j0, k0 = cell_key
+        # gather seeds in neighboring cells
+        for di, dj, dk in neighbor_offsets:
+            neighbor_key = (i0 + di, j0 + dj, k0 + dk)
+            for idx in idx_list:
+                for jdx in grid.get(neighbor_key, []):
+                    if jdx > idx:
+                        x0, y0, z0 = seeds[idx]
+                        x1, y1, z1 = seeds[jdx]
+                        dx = x0 - x1
+                        dy = y0 - y1
+                        dz = z0 - z1
+                        if dx*dx + dy*dy + dz*dz <= max_dist2:
+                            edges.append((idx, jdx))
+    return edges
 
 import itertools
 try:
@@ -148,76 +214,116 @@ def smooth_difference(a: float, b: float, r: float) -> float:
     return smooth_intersection(a, -b, r)
 
 
-# --- Hexagonal lattice generation helper ---
+def compute_delaunay_adjacency(
+    sites: List[Tuple[float, float, float]]
+) -> List[Tuple[int, int]]:
+    """
+    Compute Delaunay adjacency: for a set of 3D points, compute the
+    Delaunay tetrahedralization and return unique edges between vertices.
+    """
+    if Delaunay is None:
+        raise ImportError("SciPy Delaunay not available for compute_delaunay_adjacency")
+    # Convert to numpy array of shape (N,3)
+    pts_np = np.asarray(sites, dtype=float)
+    # Compute Delaunay triangulation
+    tri = Delaunay(pts_np)
+    edges = set()
+    # tri.simplices is an array of indices for each tetrahedron
+    for simplex in tri.simplices:
+        # For each pair of vertices in the simplex, add the edge
+        for i in range(len(simplex)):
+            for j in range(i + 1, len(simplex)):
+                a, b = sorted((int(simplex[i]), int(simplex[j])))
+                edges.add((a, b))
+    # Return as a list of tuple pairs
+    return list(edges)
+
+
+# --- Helper function for primitive clipping ---
+def point_in_primitive(
+    pt: Tuple[float, float, float],
+    primitive: Dict[str, Any]
+) -> bool:
+    """
+    Return True if the point pt lies within the given primitive spec.
+    Supports:
+      - sphere    : {'sphere': {'radius': r}}
+      - box       : {'box': {'min': [...], 'max': [...]} or 'bbox_min','bbox_max'}
+    """
+    # Sphere (centered at origin)
+    if 'sphere' in primitive:
+        sph = primitive['sphere']
+        r = float(sph.get('radius', 0))
+        x, y, z = pt
+        return (x*x + y*y + z*z) <= (r*r)
+    # Axis-aligned box
+    if 'box' in primitive:
+        box = primitive['box']
+        bmin = box.get('min') or primitive.get('bbox_min')
+        bmax = box.get('max') or primitive.get('bbox_max')
+        if bmin and bmax:
+            return all(bmin[i] <= pt[i] <= bmax[i] for i in range(3))
+    return False
+
+
+# --- 3D Hexagonal Lattice Sampling ---
 def build_hex_lattice(
     bbox_min: Tuple[float, float, float],
     bbox_max: Tuple[float, float, float],
-    spacing: float
-) -> List[Tuple[float, float, float]]:
+    spacing: float,
+    primitive: Dict[str, Any]
+) -> Tuple[List[Tuple[float, float, float]], List[Tuple[int, int]]]:
     """
-    Generate a hexagonal (offset) 3D lattice of points within the given bounding box.
-    bbox_min, bbox_max: (x,y,z) minimum and maximum coordinates.
-    spacing: distance between adjacent lattice points.
+    Generate a 3D hexagonally-packed lattice of points within the given AABB,
+    and return both the list of points and the nearest-neighbor edges.
     """
-    pts: List[Tuple[float, float, float]] = []
-    dx = spacing
-    dy = spacing * math.sqrt(3) / 2.0
-    dz = spacing
-
+    # Unpack bounds
     x0, y0, z0 = bbox_min
     x1, y1, z1 = bbox_max
 
-    row = 0
-    y = y0
-    while y <= y1:
-        # offset every other row for hex pattern in XY plane
-        x_start = x0 + (row % 2) * (dx / 2.0)
-        x = x_start
-        while x <= x1:
-            z = z0
-            while z <= z1:
+    # Calculate the vertical and horizontal offsets for hex packing
+    dx = spacing
+    dy = spacing * np.sqrt(3) / 2
+    dz = spacing * np.sqrt(6) / 3
+
+    coords = []
+    pts = []
+    # layer-by-layer hex grid with integer coords
+    k = 0
+    z = z0
+    while z <= z1:
+        offset_y = (k % 2) * dy / 2
+        offset_x = (k % 3) * dx / 2
+        j = 0
+        y = y0 + offset_y
+        while y <= y1:
+            i = 0
+            x = x0 + offset_x
+            while x <= x1:
+                coords.append((i, j, k))
                 pts.append((x, y, z))
-                z += dz
-            x += dx
-        y += dy
-        row += 1
+                i += 1
+                x = x0 + offset_x + i * dx
+            j += 1
+            y = y0 + offset_y + j * dy
+        k += 1
+        z = z0 + k * dz
 
-    return pts
+    # Clip to the target shape
+    if primitive:
+        filtered = [(c, p) for c, p in zip(coords, pts) if point_in_primitive(p, primitive)]
+        if filtered:
+            coords, pts = zip(*filtered)
+            coords, pts = list(coords), list(pts)
+        else:
+            coords, pts = [], []
 
+    # Build adjacency efficiently via spatial pruning
+    edges = prune_adjacency_via_grid(pts, spacing)
 
-# --- Generic primitive point-inclusion helper ---
-def point_in_primitive(
-    p: Tuple[float, float, float],
-    prim: Dict[str, Any]
-) -> bool:
-    """
-    Test whether point p (x,y,z) lies inside the given primitive definition.
-    Supported primitives: sphere, cylinder, box.
-    """
-    x, y, z = p
-    # Sphere: center at origin
-    if "sphere" in prim:
-        r = prim["sphere"].get("radius", 0.0)
-        return (x*x + y*y + z*z) <= r*r
+    return pts, edges
 
-    # Cylinder: axis along Z, centered at origin
-    if "cylinder" in prim:
-        cyl = prim["cylinder"]
-        r = cyl.get("radius", 0.0)
-        h = cyl.get("height", 0.0)
-        # radial check in XY and height check in Z
-        return (x*x + y*y) <= r*r and abs(z) <= h/2.0
-
-    # Box: axis-aligned
-    if "box" in prim:
-        bmin = prim["box"].get("min", prim.get("bbox_min", (0,0,0)))
-        bmax = prim["box"].get("max", prim.get("bbox_max", (0,0,0)))
-        return all(bmin[i] <= p[i] <= bmax[i] for i in range(3))
-
-    # Default: inside
-    return True
-
-# Compute Voronoi adjacency on a grid
+# Compute Voronoi adjacency on a grid (SDF)
 def compute_voronoi_adjacency(
     sites: List[Tuple[float, float, float]],
     bbox_min: Tuple[float, float, float] = None,
@@ -266,5 +372,156 @@ def compute_voronoi_adjacency(
     adjacency_lists = {int(i): [int(n) for n in neighs] for i, neighs in adjacency.items()}
     return adjacency_lists
 
+from typing import List, Tuple, Dict, Any, Optional
+import numpy as np
+from scipy.spatial import Delaunay
+
+def circumcenter_3d(tet: np.ndarray) -> np.ndarray:
+    """
+    Compute the circumcenter of a tetrahedron given its 4 vertices (4x3 array).
+    """
+    A = tet[0]
+    B = tet[1]
+    C = tet[2]
+    D = tet[3]
+    # Solve using linear system: (P - A) dot (B - A) etc.
+    # Build matrix M and RHS vector b for solving M x = b
+    # where circumcenter x satisfies (x-A).(B-A)=|B-A|^2/2, etc.
+    BA = B - A
+    CA = C - A
+    DA = D - A
+    RHS = np.array([
+        np.dot(BA, BA) / 2,
+        np.dot(CA, CA) / 2,
+        np.dot(DA, DA) / 2
+    ])
+    M = np.vstack((BA, CA, DA)).T  # 3x3
+    # Solve for x-A
+    try:
+        x_rel = np.linalg.solve(M, RHS)
+    except np.linalg.LinAlgError:
+        # Fallback: return centroid
+        return np.mean(tet, axis=0)
+    return A + x_rel
 
 
+def compute_voronoi_mesh(
+    seeds: List[Tuple[float, float, float]],
+    primitive: Optional[Dict[str, Any]] = None,
+    surface_only: bool = False
+) -> Tuple[List[Tuple[float, float, float]], List[Tuple[int, int]]]:
+    """
+    Given a list of 3D seed points, compute the Voronoi vertices (circumcenters of Delaunay tetrahedra)
+    and the adjacency edges between those vertices, corresponding to shared faces.
+    Optionally, cap open boundary faces to a primitive.
+    Returns:
+      - vertices: list of circumcenters (3D tuples)
+      - edges: list of pairs of vertex indices
+    """
+    logger.debug(f"compute_voronoi_mesh: received {len(seeds)} seeds, primitive={primitive}")
+    pts = np.array(seeds)
+    tri = Delaunay(pts)
+    simplices = tri.simplices  # shape (M,4)
+    logger.debug(f"  Delaunay produced {len(simplices)} tetrahedra")
+    # Compute circumcenters for each tetrahedron
+    centers = []
+    # compute circumcenters and log first few
+    for tid, s in enumerate(simplices):
+        c_pt = tuple(circumcenter_3d(pts[s]))
+        if tid < 5:
+            logger.debug(f"  circumcenter[{tid}] = {c_pt}")
+        centers.append(c_pt)
+
+    # Map each triangular face to the list of tet indices sharing it
+    from itertools import combinations
+    face2tets: Dict[Tuple[int, int, int], List[int]] = {}
+    for tid, simplex in enumerate(simplices):
+        for face in combinations(simplex, 3):
+            key = tuple(sorted(face))
+            face2tets.setdefault(key, []).append(tid)
+
+    total_faces = len(face2tets)
+    boundary_faces = sum(1 for t in face2tets.values() if len(t) == 1)
+    interior_faces = total_faces - boundary_faces
+    logger.debug(f"  faces: total={total_faces}, interior={interior_faces}, boundary={boundary_faces}")
+
+    # Build edges: two tetrahedra sharing a face produce an edge between their centers
+    edges: List[Tuple[int, int]] = []
+    for tets in face2tets.values():
+        if len(tets) == 2:
+            a, b = sorted(tets)
+            edges.append((a, b))
+
+    # Cap boundary faces to create finite cell walls
+    # Each face with only one incident tetrahedron is on the hull
+    # Create a cap vertex on the primitive boundary for each such face
+    for face, tets in face2tets.items():
+        if surface_only and len(tets) == 1 and primitive:
+            tid = tets[0]
+            # compute centroid of the three seed points
+            pts_arr = np.array(seeds)
+            verts = pts_arr[list(face)]
+            centroid = tuple(np.mean(verts, axis=0))
+
+            # compute cap point depending on primitive type
+            cap_pt = None
+            if 'sphere' in primitive:
+                # project onto sphere
+                r = float(primitive['sphere'].get('radius', 1.0))
+                dir_vec = np.array(centroid)
+                norm = np.linalg.norm(dir_vec)
+                if norm > 0:
+                    cap_pt = tuple((dir_vec / norm) * r)
+            elif 'box' in primitive:
+                # clamp to box extents
+                bmin = primitive.get('bbox_min') or primitive['box'].get('min')
+                bmax = primitive.get('bbox_max') or primitive['box'].get('max')
+                if bmin and bmax:
+                    cap_pt = tuple(
+                        max(bmin[i], min(centroid[i], bmax[i]))
+                        for i in range(3)
+                    )
+
+            if cap_pt is not None:
+                logger.debug(f"  cap for face {face}: centroid={centroid} -> cap_pt={cap_pt}")
+                # append cap vertex and connect it to the interior center
+                cap_idx = len(centers)
+                centers.append(cap_pt)
+                edges.append((tid, cap_idx))
+
+    cap_count = len(centers) - len(simplices)
+    logger.debug(f"  after capping: centers={len(centers)}, edges={len(edges)}, cap_vertices={cap_count}")
+    # log final bounding box of centers
+    arr = np.array(centers)
+    mins = arr.min(axis=0)
+    maxs = arr.max(axis=0)
+    logger.debug(f"  final centers bbox: min={tuple(mins)}, max={tuple(maxs)}")
+
+    # --- Filter out outlier circumcenters beyond the sphere radius ---
+    if primitive and 'sphere' in primitive and not surface_only:
+        # allow slight tolerance beyond the exact radius
+        r = float(primitive['sphere']['radius'])
+        tol = 1.01 * r
+        valid_idxs = [i for i, c in enumerate(centers) if np.linalg.norm(c) <= tol]
+        # build index remapping
+        idx_map = {old: new for new, old in enumerate(valid_idxs)}
+        # remap centers and edges
+        filtered_centers = [centers[i] for i in valid_idxs]
+        filtered_edges = [
+            (idx_map[a], idx_map[b])
+            for (a, b) in edges
+            if a in idx_map and b in idx_map
+        ]
+        logger.debug(f"  filtered centers from {len(centers)} to {len(filtered_centers)}, "
+                     f"edges from {len(edges)} to {len(filtered_edges)}")
+        centers, edges = filtered_centers, filtered_edges
+
+    if surface_only and primitive:
+        # keep only edges touching at least one cap-vertex
+        num_tets = len(simplices)
+        surface_edges = [(a, b) for (a, b) in edges if a >= num_tets or b >= num_tets]
+        used = sorted({i for e in surface_edges for i in e})
+        idx_map = {old: new for new, old in enumerate(used)}
+        centers = [centers[i] for i in used]
+        edges = [(idx_map[a], idx_map[b]) for (a, b) in surface_edges]
+    return centers, edges
