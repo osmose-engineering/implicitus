@@ -1,4 +1,3 @@
-
 # diagram.py
 """Voronoi diagram generation module."""
 from scipy.spatial import Voronoi
@@ -36,10 +35,19 @@ def voronoi_finite_polygons_2d(vor, radius=None):
             continue
 
         # otherwise infinite region: reconstruct
-        ridges = all_ridges[p_idx]
+        ridges = all_ridges.get(p_idx, [])
         new_region = [v for v in vertices if v >= 0]
+        if not ridges:
+            # no ridges for this point, treat region as finite
+            new_regions.append(new_region)
+            continue
+
         for p2, v1, v2 in ridges:
+            if v2 < 0:
+                v1 = v1  # finite
+                v2 = v2  # infinite
             if v1 < 0 or v2 < 0:
+                # Compute the missing endpoint at infinity
                 v_finite = vor.vertices[v1 if v1 >= 0 else v2]
                 tangent = vor.points[p2] - vor.points[p_idx]
                 tangent /= np.linalg.norm(tangent)
@@ -62,14 +70,28 @@ def generate_voronoi_diagram(points, bbox, radius=None, **kwargs):
       - vor: the raw SciPy Voronoi object
       - segments: list of np.ndarray shape (2,2) giving each clipped edge
     """
+    pts = np.asarray(points)
+    # If points are 3D (x,y,z), project to 2D for Voronoi
+    if pts.ndim == 2 and pts.shape[1] == 3:
+        # drop Z coordinate
+        pts2d = pts[:, :2]
+        # if bbox is also 3D, drop Z bounds
+        if len(bbox) == 2 and len(bbox[0]) == 3:
+            bbox2d = ((bbox[0][0], bbox[0][1]), (bbox[1][0], bbox[1][1]))
+        else:
+            bbox2d = bbox
+    else:
+        pts2d = pts
+        bbox2d = bbox
+
     # 1) Build raw voronoi
-    vor = Voronoi(points)
+    vor = Voronoi(pts2d)
 
     # 2) Close infinite regions
     regions, verts = voronoi_finite_polygons_2d(vor, radius=radius)
 
     # 3) Clip vertices to bbox
-    (xmin, ymin), (xmax, ymax) = bbox
+    (xmin, ymin), (xmax, ymax) = bbox2d
     verts[:, 0] = np.clip(verts[:, 0], xmin, xmax)
     verts[:, 1] = np.clip(verts[:, 1], ymin, ymax)
 

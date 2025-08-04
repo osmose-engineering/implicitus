@@ -5,6 +5,27 @@ from typing import Tuple, List, Optional, Dict
 from typing import Callable
 
 import math
+def derive_bbox_from_primitive(primitive: Dict[str, Any]) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
+    """
+    Compute axis-aligned bounding box (min and max) for the given primitive spec.
+    Supports:
+      - sphere: {'sphere': {'radius': r}}
+      - box: {'box': {'min': [x,y,z], 'max': [x,y,z]}}
+    """
+    # Sphere centered at origin
+    if 'sphere' in primitive:
+        r = float(primitive['sphere'].get('radius', 0))
+        return (-r, -r, -r), (r, r, r)
+    # Axis-aligned box
+    if 'box' in primitive:
+        box = primitive['box']
+        bmin = box.get('min') or primitive.get('bbox_min')
+        bmax = box.get('max') or primitive.get('bbox_max')
+        if bmin and bmax:
+            return tuple(bmin), tuple(bmax)
+    # Fallback to zero-sized box
+    return (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)
+
 def build_spatial_index(
     seeds: List[Tuple[float, float, float]],
     spacing: float

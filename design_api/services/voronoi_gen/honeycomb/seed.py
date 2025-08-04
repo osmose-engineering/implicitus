@@ -2,52 +2,49 @@
 # seed.py
 """Seed point sampling module."""
 import numpy as np
-import itertools
 import math
 
-def sample_seed_points(num_points, bbox, spacing, uniform=True, **kwargs):
+def sample_seed_points(bbox_min, bbox_max, cell_size, slice_thickness, uniform=True, **kwargs):
     """
-    Sample seed points within a bounding box.
-    :param num_points: target number of points
-    :param bbox: ((xmin, ymin, zmin), (xmax, ymax, zmax))
-    :param spacing: minimum spacing between points
-    :param uniform: if True, use uniform grid sampling; otherwise Poisson disk
-    :return: np.ndarray of shape (N,3)
+    Generate a 3D hexagonal (honeycomb) seed grid within a bounding box.
+    :param bbox_min: (xmin, ymin, zmin) tuple
+    :param bbox_max: (xmax, ymax, zmax) tuple
+    :param cell_size: horizontal spacing between cell centers
+    :param slice_thickness: layer height (Z spacing) for extrusion
+    :return: np.ndarray of shape (N, 3) of seed coordinates
     """
-    xmin, ymin, zmin = bbox[0]
-    xmax, ymax, zmax = bbox[1]
+    xmin, ymin, zmin = bbox_min
+    xmax, ymax, zmax = bbox_max
 
-    if uniform:
-        # jittered grid sampling
-        nx = int(math.ceil((xmax - xmin) / spacing))
-        ny = int(math.ceil((ymax - ymin) / spacing))
-        nz = int(math.ceil((zmax - zmin) / spacing))
-        cells = list(itertools.product(range(nx), range(ny), range(nz)))
-        np.random.shuffle(cells)
-        points = []
-        for i, j, k in cells[: min(num_points, len(cells))]:
-            x0, x1 = xmin + i * spacing, xmin + (i + 1) * spacing
-            y0, y1 = ymin + j * spacing, ymin + (j + 1) * spacing
-            z0, z1 = zmin + k * spacing, zmin + (k + 1) * spacing
-            points.append([
-                np.random.uniform(x0, x1),
-                np.random.uniform(y0, y1),
-                np.random.uniform(z0, z1)
-            ])
-        return np.array(points)
-    else:
-        # simple Poisson-disk via rejection
-        points = []
-        max_attempts = num_points * 30
-        attempts = 0
-        while len(points) < num_points and attempts < max_attempts:
-            p = np.random.uniform([xmin, ymin, zmin], [xmax, ymax, zmax])
-            if all(np.linalg.norm(p - q) >= spacing for q in points):
-                points.append(p)
-            attempts += 1
-        # if we didn't get enough, fill the rest randomly
-        if len(points) < num_points:
-            rem = num_points - len(points)
-            extra = np.random.uniform([xmin, ymin, zmin], [xmax, ymax, zmax], size=(rem, 3))
-            points.extend(extra)
-        return np.array(points)
+    # Compute number of Z-layers
+    z_range = zmax - zmin
+    n_layers = int(math.ceil(z_range / slice_thickness))
+
+    # Compute vertical spacing for hex grid rows
+    vert_spacing = cell_size * math.sqrt(3) / 2.0
+
+    # Generate 2D hex grid in XY plane
+    points_xy = []
+    # number of rows needed (plus extra to cover top)
+    n_rows = int(math.ceil((ymax - ymin) / vert_spacing))
+    for row in range(n_rows + 1):
+        y = ymin + row * vert_spacing
+        if y > ymax:
+            break
+        # stagger every other row
+        x_start = xmin + (cell_size / 2.0 if row % 2 else 0.0)
+        x = x_start
+        while x <= xmax:
+            points_xy.append((x, y))
+            x += cell_size
+
+    # Extrude 2D grid through Z layers
+    seeds = []
+    for layer in range(n_layers + 1):
+        z = zmin + layer * slice_thickness
+        if z > zmax:
+            break
+        for x, y in points_xy:
+            seeds.append([x, y, z])
+
+    return np.array(seeds)

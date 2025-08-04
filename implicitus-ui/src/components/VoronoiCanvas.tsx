@@ -1,4 +1,4 @@
-import React, { useMemo } from 'react';
+import React, { useMemo, useRef, useEffect } from 'react';
 import { Canvas } from '@react-three/fiber';
 import VoronoiMesh from './VoronoiMesh';
 import { VoronoiStruts } from './VoronoiStruts';
@@ -118,7 +118,7 @@ interface VoronoiCanvasProps {
 }
 
 const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
-  seedPoints,
+  seedPoints = [],
   edges = [],
   bbox,
   thickness,
@@ -132,29 +132,99 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
 }) => {
   // In debug mode, hide the ray-march solid box
   if (DEBUG_HEX_TEST) showSolid = false;
-  // Debug override or use server-provided data
-  const [useSeedPoints, useEdges] = DEBUG_HEX_TEST
-    ? generateHexTest3D(
-        [bbox[0], bbox[1], bbox[2]],
-        [bbox[3], bbox[4], bbox[5]],
-        // choose spacing relative to bbox extent
-        (bbox[3] - bbox[0]) / 8
-      )
-    : [seedPoints, edges];
+  console.log('VoronoiCanvas debug props:', { seedPoints, edges, bbox });
+  const safeSeedPoints = Array.isArray(seedPoints)
+    ? seedPoints
+    : (typeof seedPoints === 'string' ? JSON.parse(seedPoints) : []);
+  const safeEdges = Array.isArray(edges)
+    ? edges
+    : (typeof edges === 'string' ? JSON.parse(edges) : []);
+  // Ensure only well-formed point and edge arrays
+  const validSeedPoints = Array.isArray(safeSeedPoints)
+    ? safeSeedPoints.filter(p => Array.isArray(p) && p.length === 3 && p.every(coord => typeof coord === 'number'))
+    : [];
+  const validEdges = Array.isArray(safeEdges)
+    ? safeEdges.filter(e => Array.isArray(e) && e.length === 2 && e.every(idx => Number.isInteger(idx)))
+    : [];
+  console.log('VoronoiCanvas safe data:', { safeSeedPoints, safeEdges });
+  // Debug: inspect z-slices and sample points
+  const zValues = validSeedPoints.map(p => p[2]);
+  console.log('VoronoiCanvas validSeedPoints z-range:', Math.min(...zValues), Math.max(...zValues));
+  console.log('VoronoiCanvas sample validSeedPoints (first 5):', validSeedPoints.slice(0,5));
   // Filter out long edges to avoid hairball: only keep edges shorter than ~1.5× the average edge length
   const filteredEdges = useMemo(() => {
-    if (useEdges.length === 0) return [];
+    console.log('VoronoiCanvas useMemo input:', { validSeedPoints, validEdges });
+    if (validEdges.length === 0) return [];
     // compute lengths
-    const lengths = useEdges.map(([i, j]) => {
-      const [xi, yi, zi] = useSeedPoints[i];
-      const [xj, yj, zj] = useSeedPoints[j];
+    const lengths = validEdges.map(([i, j]) => {
+      const [xi, yi, zi] = validSeedPoints[i];
+      const [xj, yj, zj] = validSeedPoints[j];
       const dx = xi - xj, dy = yi - yj, dz = zi - zj;
       return Math.sqrt(dx*dx + dy*dy + dz*dz);
     });
     const avg = lengths.reduce((sum, d) => sum + d, 0) / lengths.length;
     const threshold = avg * 1.5;
-    return useEdges.filter((_, idx) => lengths[idx] <= threshold);
-  }, [useEdges, useSeedPoints]);
+    return validEdges.filter((_, idx) => lengths[idx] <= threshold);
+  }, [validEdges, validSeedPoints]);
+  console.log('VoronoiCanvas filteredEdges count:', filteredEdges.length);
+  // For debug: only render seed points inside the sphere when no edges
+  const debugSeedPoints = useMemo(() => {
+    if (filteredEdges.length > 0) return [];
+    // Derive sphere center and radius from seedPoints bounds
+    const xs = validSeedPoints.map(p => p[0]);
+    const ys = validSeedPoints.map(p => p[1]);
+    const zs = validSeedPoints.map(p => p[2]);
+    const minX = Math.min(...xs), maxX = Math.max(...xs);
+    const minY = Math.min(...ys), maxY = Math.max(...ys);
+    const minZ = Math.min(...zs), maxZ = Math.max(...zs);
+    const cx = (minX + maxX) / 2;
+    const cy = (minY + maxY) / 2;
+    const cz = (minZ + maxZ) / 2;
+    const radius = Math.max(maxX - minX, maxY - minY, maxZ - minZ) / 2;
+    console.log('VoronoiCanvas debug sphere center and radius (from seed bounds):', { cx, cy, cz, radius });
+    return validSeedPoints.filter(([x, y, z]) =>
+      (x - cx) ** 2 + (y - cy) ** 2 + (z - cz) ** 2 <= radius * radius
+    );
+  }, [filteredEdges, validSeedPoints, bbox]);
+  console.log('VoronoiCanvas debugSeedPoints count:', debugSeedPoints.length);
+  // If no edges, choose points to render: use sphere-filtered debug points, or all seeds if none filtered
+  const fallbackPoints = filteredEdges.length === 0
+    ? (debugSeedPoints.length > 0 ? debugSeedPoints : validSeedPoints)
+    : [];
+  console.log('VoronoiCanvas fallbackPoints count:', fallbackPoints.length, fallbackPoints);
+  // Debug: inspect fallback points further
+  const fallbackZ = fallbackPoints.map(p => p[2]);
+  console.log('VoronoiCanvas fallbackPoints z-range:', Math.min(...fallbackZ), Math.max(...fallbackZ));
+  // Log x/y range for fallback points
+  const xValues = fallbackPoints.map(p => p[0]);
+  const yValues = fallbackPoints.map(p => p[1]);
+  console.log('VoronoiCanvas fallbackPoints x-range:', Math.min(...xValues), Math.max(...xValues));
+  console.log('VoronoiCanvas fallbackPoints y-range:', Math.min(...yValues), Math.max(...yValues));
+  console.log('Rendering JSX: fallbackPoints count', fallbackPoints.length, 'flat length', fallbackPoints.flat().length);
+  console.log('VoronoiCanvas sample fallbackPoints (first 5):', fallbackPoints.slice(0,5));
+
+  // Ref and effect for logging and computing bounding sphere of the points buffer
+  const bufferRef = useRef<THREE.BufferGeometry>(null);
+  useEffect(() => {
+    if (bufferRef.current) {
+      const geom = bufferRef.current;
+      const positionAttr = geom.getAttribute('position');
+      if (positionAttr) {
+        console.log(
+          'bufferGeometry useEffect: position attribute count',
+          positionAttr.count,
+          'boundingSphere before compute',
+          geom.boundingSphere
+        );
+        geom.computeBoundingSphere();
+        console.log(
+          'bufferGeometry useEffect: boundingSphere after compute',
+          geom.boundingSphere
+        );
+      }
+    }
+  }, [fallbackPoints]);
+
   return (
     <div style={{
       width: '100%',
@@ -195,7 +265,7 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
           ) : (
             // Ray-marched solid for Ray-March view
             <VoronoiMesh
-              seedPoints={useSeedPoints}
+              seedPoints={validSeedPoints}
               bbox={bbox}
               thickness={thickness}
               maxSteps={maxSteps}
@@ -207,8 +277,8 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
         )}
         {showStruts && (
           <VoronoiStruts
-            seedPoints={useSeedPoints}
-            edges={useEdges}
+            seedPoints={validSeedPoints}
+            edges={validEdges}
             strutRadius={strutRadius}
             color={strutColor}
           />
@@ -223,13 +293,30 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
         {/* Grid and axes helpers */}
         <gridHelper args={[200, 20]} />
         <axesHelper args={[100]} />
-        {/* Debug: visualize seed points */}
-        {/*seedPoints.map(([x, y, z], idx) => (
-          <mesh key={idx} position={[x, y, z]}>
-            <sphereGeometry args={[0.2, 16, 16]} />
-            <meshBasicMaterial color="red" />
-          </mesh>
-        ))*/}
+        {fallbackPoints.length > 0 && (
+          fallbackPoints.slice(0, 3).map((p, i) => (
+            <mesh key={`debug-sphere-${i}`} position={[p[0], p[1], p[2]]}>
+              <sphereGeometry args={[0.5, 16, 16]} />
+              <meshBasicMaterial color="yellow" />
+            </mesh>
+          ))
+        )}
+        {fallbackPoints.length > 0 && (
+          <points frustumCulled={false}>
+            <bufferGeometry
+              attach="geometry"
+              ref={bufferRef}
+            >
+              <bufferAttribute
+                attach="attributes-position"
+                array={new Float32Array(fallbackPoints.flat())}
+                count={fallbackPoints.length}
+                itemSize={3}
+              />
+            </bufferGeometry>
+            <pointsMaterial size={0.5} color="red" />
+          </points>
+        )}
         <OrbitControls />
         
       </Canvas>

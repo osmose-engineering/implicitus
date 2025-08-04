@@ -1,6 +1,11 @@
 import uuid
 from ai_adapter.schema.implicitus_pb2 import Primitive
 from ai_adapter.schema.implicitus_pb2 import Modifier, Infill, Shell, BooleanOp, VoronoiLattice
+from design_api.services.voronoi_gen.honeycomb import seed as hc_seed
+from design_api.services.voronoi_gen.voronoi_gen import derive_bbox_from_primitive
+import logging
+logger = logging.getLogger(__name__)
+logging.basicConfig(level=logging.DEBUG)
 
 class SomeMappingError(Exception):
     """Raised when mapping a primitive spec fails due to unknown shape."""
@@ -29,12 +34,14 @@ def _map_base_shape(spec: dict) -> dict:
     return {'id': id_str, 'root': {'primitive': primitive}}
 
 def map_primitive(node: dict) -> dict:
+    logger.debug(f"map_primitive called with node: {node}")
     """
     Convert a primitive node with optional modifiers into a proto-ready dict.
     Applies modifiers in order: shell -> infill -> boolean.
     """
     # Extract modifiers if present
     modifiers = node.get('modifiers', {})
+    logger.debug(f"Modifiers: {modifiers}")
     # Unwrap the base primitive spec
     if isinstance(node, dict) and 'primitive' in node:
         inner = node['primitive']
@@ -70,12 +77,35 @@ def map_primitive(node: dict) -> dict:
             "children": [root, {"primitive": {"shell": shell_params}}]
         }
 
-    # Apply infill modifier (Voronoi lattice)
+    # Apply infill modifier (supports Voronoi and honeycomb)
     if 'infill' in modifiers:
+        logger.debug(f"Applying infill with params: {modifiers.get('infill')}")
         infill_params = modifiers['infill']
+        pattern = infill_params.get('pattern')
+        # Choose primitive key based on pattern type
+        if pattern == 'honeycomb':
+            primitive_key = 'honeycomb'
+            infill_params.setdefault("spacing", 2.0)
+            infill_params.setdefault("wall_thickness", 1.0)
+            infill_params.setdefault("uniform", True)
+            bbox_min, bbox_max = derive_bbox_from_primitive(node["primitive"])
+            infill_params["bbox_min"], infill_params["bbox_max"] = bbox_min, bbox_max
+            pts = hc_seed.generate_seed_points(
+                shape=node["primitive"],
+                spacing=infill_params["spacing"],
+                bbox_min=bbox_min,
+                bbox_max=bbox_max
+            )
+            logger.debug(f"Generated {len(pts)} honeycomb seed points")
+            infill_params["seed_points"] = [list(p) for p in pts]
+        else:
+            primitive_key = 'lattice'
         root = {
             "booleanOp": {"intersection": {}},
-            "children": [root, {"primitive": {"lattice": infill_params}}]
+            "children": [
+                root,
+                {"primitive": {primitive_key: infill_params}}
+            ]
         }
 
     # Apply boolean_op modifier
@@ -88,6 +118,7 @@ def map_primitive(node: dict) -> dict:
 
     # Return final wrapped dict
     mapped['root'] = root
+    logger.debug(f"map_primitive output mapped: {mapped}")
     return mapped
 
 def get_response_fields(proto_model):
@@ -122,6 +153,7 @@ def get_response_fields(proto_model):
 
 # New function for mapping spec to proto dict model
 def map_to_proto_dict(spec):
+    logger.debug(f"map_to_proto_dict called with spec: {spec}")
     """
     Convert a spec (dict or list of specs) into a full Model dict ready for JSON-to-proto.
     If multiple primitives, wraps them in a union booleanOp under root.

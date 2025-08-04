@@ -87,6 +87,29 @@ message Sweep {
 message Infill {
   string pattern = 1;  // name of the infill pattern, e.g., "grid", "hex"
   double density = 2;  // fill density, between 0 (empty) and 1 (solid)
+
+  // honeycomb infill parameters
+  repeated Vector3 seed_points = 3;  // 3D seed positions for honeycomb
+  double spacing = 4;                // target cell spacing
+  repeated Edge2D edges = 5;         // 2D slice edges for honeycomb cells
+  repeated Cell3D cells = 6;         // 3D cell meshes for honeycomb infill
+  repeated float bbox_min = 11;  // length-3 or length-2 for a slice
+  repeated float bbox_max = 12;
+  float wall_thickness = 13;
+  bool uniform = 14;
+}
+
+// Honeycomb helper types
+message Edge2D {
+  Vector2 start = 1;
+  Vector2 end   = 2;
+}
+message Face {
+  repeated int32 vertex_indices = 1;
+}
+message Cell3D {
+  repeated Vector3 vertices = 1;
+  repeated Face    faces    = 2;
 }
 
 
