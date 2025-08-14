@@ -25,7 +25,8 @@ from design_api.services.mapping import map_primitive as map_to_proto_dict
 from design_api.services.validator import validate_model_spec as validate_proto
 from ai_adapter.csg_adapter import review_request, generate_summary, update_request
 from design_api.services.voronoi_gen.voronoi_gen import compute_voronoi_adjacency
-from design_api.services.voronoi_gen.honeycomb import seed as hc_seed, diagram as hc_diagram, mesh as hc_mesh
+from design_api.services.voronoi_gen.honeycomb import seed as hc_seed, diagram as hc_diagram
+from design_api.services.voronoi_gen.honeycomb.mesh import generate_honeycomb_cells
 
 @dataclass
 class DesignState:
@@ -153,8 +154,9 @@ async def review(req: dict, sid: Optional[str] = None):
                     vor, segments = hc_diagram.generate_voronoi_diagram(pts_arr[:, :2], bbox2d, radius=spacing * 2)
                     inf["edges"] = [seg.tolist() for seg in segments]
                     # 3D honeycomb cell meshes
-                    inf["cells"] = hc_mesh.generate_honeycomb_cells(pts_arr)
-                    logging.debug(f"[DEBUG review] got {len(inf.get('edges', []))} edges, sample first 10: {inf.get('edges', [])[:10]}")
+                inf["cells"] = generate_honeycomb_cells(pts_arr)
+                logging.debug(f"[DEBUG review] generate_honeycomb_cells returned {len(inf['cells'])} cells, sample first cell: {inf['cells'][0] if inf['cells'] else None}")
+                logging.debug(f"[DEBUG review] got {len(inf.get('edges', []))} edges, sample first 10: {inf.get('edges', [])[:10]}")
                 if 'cells' in inf:
                     logging.debug(f"[DEBUG review] got {len(inf['cells'])} honeycomb cells")
 
@@ -237,7 +239,8 @@ async def update(req: UpdateRequest):
                 vor, segments = hc_diagram.generate_voronoi_diagram(pts_arr[:, :2], bbox2d, radius=spacing * 2)
                 inf["edges"] = [seg.tolist() for seg in segments]
                 # 3D honeycomb cell meshes
-                inf["cells"] = hc_mesh.generate_honeycomb_cells(pts_arr)
+                inf["cells"] = generate_honeycomb_cells(pts_arr)
+                logging.debug(f"[DEBUG update] generate_honeycomb_cells returned {len(inf['cells'])} cells, sample first cell: {inf['cells'][0] if inf['cells'] else None}")
             logging.debug(f"[DEBUG update] got {len(inf.get('edges', []))} edges, sample first 10: {inf.get('edges', [])[:10]}")
             if 'cells' in inf:
                 logging.debug(f"[DEBUG update] got {len(inf['cells'])} honeycomb cells")

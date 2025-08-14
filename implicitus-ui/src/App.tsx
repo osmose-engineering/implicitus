@@ -72,6 +72,15 @@ function App() {
   const seedPoints: [number, number, number][] =
     spec[0]?.modifiers?.infill?.seed_points ?? [];
   const [edges, setEdges] = useState<number[][]>([]);
+  const [infillPoints, setInfillPoints] = useState<[number, number, number][]>([]);
+  const [infillEdges, setInfillEdges] = useState<number[][]>([]);
+  // NEW: track honeycomb cells
+  const [infillCells, setInfillCells] = useState<any[]>([]);
+  // Debug: log infillPoints and infillEdges state updates
+  useEffect(() => {
+    console.log('[UI] infillPoints state updated:', infillPoints);
+    console.log('[UI] infillEdges state updated:', infillEdges);
+  }, [infillPoints, infillEdges]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<string>('');
@@ -182,6 +191,7 @@ function App() {
       let data: any;
       try {
         data = JSON.parse(rawText);
+        console.log('[UI] API spec:', data.spec);
       } catch (parseError) {
         console.error('[UI] JSON parse error:', parseError);
         throw new Error(`Failed to parse JSON spec: ${parseError}`);
@@ -190,6 +200,15 @@ function App() {
       if (data.spec && Array.isArray(data.spec)) {
         setSpec(data.spec);
         setEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
+        setInfillPoints(data.spec[0]?.modifiers?.infill?.cells?.points ?? []);
+        setInfillEdges(data.spec[0]?.modifiers?.infill?.cells?.edges ?? []);
+        // NEW: extract and store all infill cell objects
+        const cells = data.spec.flatMap(node => node.modifiers?.infill?.cells || []);
+        console.debug("Loaded infill cells:", cells.length, cells.slice(0,2));
+        setInfillCells(cells);
+        console.log('[UI] backend infill.cells:', data.spec[0]?.modifiers?.infill?.cells);
+        console.log('[UI] incoming infillPoints:', data.spec[0]?.modifiers?.infill?.cells?.points);
+        console.log('[UI] incoming infillEdges:', data.spec[0]?.modifiers?.infill?.cells?.edges);
         setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
         if (data.summary) {
           setSummary(data.summary);
@@ -269,6 +288,7 @@ function App() {
         throw new Error(`Server error: ${response.status} ${response.statusText} - ${text}`);
       }
       const data = await response.json();
+      console.log('API spec:', data.spec);
       console.log('[UI] Confirm response data:', data);
       setModelProto(data);
     } catch (err: any) {
@@ -429,7 +449,8 @@ function App() {
                 <strong>JSON Spec:</strong>
                 <Editor
                   height="300px"
-                  defaultLanguage="json"
+                  language="json"
+                  theme="vs-light"
                   value={specText}
                   onChange={value => {
                     const text = value ?? '';
@@ -533,7 +554,12 @@ function App() {
             <TabPanel>
               {seedPoints.length > 0 && (
                 <VoronoiCanvas
+                  key="ray"
                   seedPoints={seedPoints}
+                  edges={edges}
+                  infillPoints={infillPoints}
+                  infillEdges={infillEdges}
+                  cells={infillCells}           // NEW
                   bbox={[0, 0, 0, 1, 1, 1]}
                   thickness={0.35}
                   maxSteps={256}
@@ -548,8 +574,12 @@ function App() {
             <TabPanel>
               {seedPoints.length > 0 && (
                 <VoronoiCanvas
+                  key="strut"
                   seedPoints={seedPoints}
                   edges={edges}
+                  infillPoints={infillPoints}
+                  infillEdges={infillEdges}
+                  cells={infillCells}           // NEW
                   bbox={[0, 0, 0, 1, 1, 1]}
                   thickness={0.35}
                   maxSteps={256}
