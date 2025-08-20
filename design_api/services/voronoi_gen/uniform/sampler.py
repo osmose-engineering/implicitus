@@ -48,6 +48,31 @@ def trace_hexagon(seed_pt: np.ndarray, medial_points: np.ndarray, plane_normal: 
 
     angles = np.linspace(0, 2 * np.pi, 6, endpoint=False)
     hex_pts: List[np.ndarray] = []
+
+    # Pre-compute bounding box of the medial points for ray fallback
+    bbox_min = medial_points.min(axis=0)
+    bbox_max = medial_points.max(axis=0)
+
+    def _ray_box_intersection(origin: np.ndarray, direction: np.ndarray) -> Optional[float]:
+        """Return distance to intersection with bbox or None if no hit."""
+        tmin, tmax = -np.inf, np.inf
+        for i in range(3):
+            if abs(direction[i]) < 1e-12:
+                if origin[i] < bbox_min[i] or origin[i] > bbox_max[i]:
+                    return None
+                continue
+            t1 = (bbox_min[i] - origin[i]) / direction[i]
+            t2 = (bbox_max[i] - origin[i]) / direction[i]
+            if t1 > t2:
+                t1, t2 = t2, t1
+            tmin = max(tmin, t1)
+            tmax = min(tmax, t2)
+            if tmin > tmax:
+                return None
+        if tmax < 0:
+            return None
+        return tmin if tmin > 0 else tmax
+
     for theta in angles:
         dir_vec = np.cos(theta) * u + np.sin(theta) * v
         # Vector from seed to all medial points
@@ -56,10 +81,15 @@ def trace_hexagon(seed_pt: np.ndarray, medial_points: np.ndarray, plane_normal: 
         t = vecs.dot(dir_vec)
         mask = t > 0
         if not np.any(mask):
-            # Fallback: point at fixed max distance
-            length = max_distance if max_distance is not None else 1.0
-            hex_pts.append(seed_pt + dir_vec * length)
-            continue
+            # Fallback: intersect with bounding box or expected radius
+            length = _ray_box_intersection(seed_pt, dir_vec)
+            if length is not None:
+                hex_pts.append(seed_pt + dir_vec * length)
+                continue
+            if max_distance is not None:
+                hex_pts.append(seed_pt + dir_vec * max_distance)
+                continue
+            raise ValueError("No valid intersection for ray; resample seed point")
         pts_masked = medial_points[mask]
         t_masked = t[mask]
         # Compute perpendicular distances to the ray
