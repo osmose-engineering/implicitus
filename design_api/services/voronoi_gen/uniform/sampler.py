@@ -102,19 +102,28 @@ def trace_hexagon(
     dists = np.linalg.norm(vecs, axis=1)
     mask = dists > 1e-8
     vecs = vecs[mask]
-    dists = dists[mask]
 
     hex_success = False
     if vecs.shape[0] >= 6:
-        # Select six nearest neighbors
-        idx = np.argpartition(dists, 6)[:6]
-        neighbor_vecs = vecs[idx]
-        # 2D coordinates in plane basis
-        neighbor_2d = np.column_stack((neighbor_vecs.dot(u), neighbor_vecs.dot(v)))
-        # Sort neighbors by angle around the seed for consistency
-        ang = np.arctan2(neighbor_2d[:, 1], neighbor_2d[:, 0])
-        order = np.argsort(ang)
-        neighbor_2d = neighbor_2d[order]
+        # Project all neighbor vectors into the slicing plane
+        neighbor_2d_all = np.column_stack((vecs.dot(u), vecs.dot(v)))
+        angles = np.mod(np.arctan2(neighbor_2d_all[:, 1], neighbor_2d_all[:, 0]), 2 * np.pi)
+
+        # Select six neighbors roughly evenly spaced by angle
+        sel_2d: List[np.ndarray] = []
+        sel_vecs: List[np.ndarray] = []
+        used = np.zeros(len(angles), dtype=bool)
+        for k in range(6):
+            target = 2 * np.pi * k / 6
+            diffs = np.abs(np.angle(np.exp(1j * (angles - target))))
+            diffs[used] = np.inf
+            idx = int(np.argmin(diffs))
+            used[idx] = True
+            sel_2d.append(neighbor_2d_all[idx])
+            sel_vecs.append(vecs[idx])
+
+        neighbor_2d = np.vstack(sel_2d)
+        neighbor_vecs = np.vstack(sel_vecs)
 
         normals = neighbor_2d
         bs = np.sum(neighbor_2d ** 2, axis=1) / 2.0
@@ -133,6 +142,13 @@ def trace_hexagon(
         if len(verts_2d) == 6:
             hex_pts = [seed_pt + x[0] * u + x[1] * v for x in verts_2d]
             hex_pts = np.vstack(hex_pts)
+
+            # Scale the hexagon so its radius matches the median neighbor distance
+            target_r = np.median(np.linalg.norm(neighbor_vecs, axis=1))
+            current_r = np.mean(np.linalg.norm(hex_pts - seed_pt, axis=1))
+            if current_r > 1e-12:
+                scale = target_r / current_r
+                hex_pts = seed_pt + (hex_pts - seed_pt) * scale
             hex_success = True
 
     if not hex_success:
