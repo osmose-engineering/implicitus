@@ -74,7 +74,7 @@ function App() {
   const [edges, setEdges] = useState<number[][]>([]);
   const [infillPoints, setInfillPoints] = useState<[number, number, number][]>([]);
   const [infillEdges, setInfillEdges] = useState<number[][]>([]);
-  // NEW: track honeycomb cells
+  // Track infill cells
   const [infillCells, setInfillCells] = useState<any[]>([]);
   // Debug: log infillPoints and infillEdges state updates
   useEffect(() => {

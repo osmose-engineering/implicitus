@@ -12,7 +12,6 @@ import copy
 import traceback
 import uuid
 import numpy as np
-from design_api.services.voronoi_gen.honeycomb.seed import sample_seed_points
 from json.decoder import JSONDecodeError
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
@@ -25,8 +24,6 @@ from design_api.services.mapping import map_primitive as map_to_proto_dict
 from design_api.services.validator import validate_model_spec as validate_proto
 from ai_adapter.csg_adapter import review_request, generate_summary, update_request
 from design_api.services.voronoi_gen.voronoi_gen import compute_voronoi_adjacency
-from design_api.services.voronoi_gen.honeycomb import seed as hc_seed, diagram as hc_diagram
-from design_api.services.voronoi_gen.honeycomb.mesh import generate_honeycomb_cells
 
 @dataclass
 class DesignState:
@@ -121,18 +118,6 @@ async def review(req: dict, sid: Optional[str] = None):
         # Compute adjacency and edges for any infill
         for node in spec:
             inf = node.get("modifiers", {}).get("infill", {})
-            pattern = inf.get("pattern")
-            # generate honeycomb seed points if missing
-            if pattern == "honeycomb":
-                bbox_min = inf.get("bbox_min") or inf.get("bboxMin")
-                bbox_max = inf.get("bbox_max") or inf.get("bboxMax")
-                if bbox_min and bbox_max and not inf.get("seed_points"):
-                    seeds = sample_seed_points(
-                        bbox_min, bbox_max,
-                        inf.get("cell_size", 2.0),
-                        inf.get("slice_thickness", 1.0)
-                    )
-                    inf["seed_points"] = seeds.tolist()
             pts = inf.get("seed_points")
             bbox_min = inf.get("bbox_min") or inf.get("bboxMin")
             bbox_max = inf.get("bbox_max") or inf.get("bboxMax")
@@ -144,21 +129,6 @@ async def review(req: dict, sid: Optional[str] = None):
                 if pattern == "voronoi":
                     spacing = inf.get("spacing", 2.0)
                     inf["edges"] = compute_voronoi_adjacency(pts, spacing)
-                elif pattern == "honeycomb":
-                    
-                    import numpy as np
-                    spacing = inf.get("spacing", 2.0)
-                    pts_arr = np.array(pts)
-                    # 2D honeycomb slice (project to XY)
-                    bbox2d = ((bbox_min[0], bbox_min[1]), (bbox_max[0], bbox_max[1]))
-                    vor, segments = hc_diagram.generate_voronoi_diagram(pts_arr[:, :2], bbox2d, radius=spacing * 2)
-                    inf["edges"] = [seg.tolist() for seg in segments]
-                    # 3D honeycomb cell meshes
-                inf["cells"] = generate_honeycomb_cells(pts_arr)
-                logging.debug(f"[DEBUG review] generate_honeycomb_cells returned {len(inf['cells'])} cells, sample first cell: {inf['cells'][0] if inf['cells'] else None}")
-                logging.debug(f"[DEBUG review] got {len(inf.get('edges', []))} edges, sample first 10: {inf.get('edges', [])[:10]}")
-                if 'cells' in inf:
-                    logging.debug(f"[DEBUG review] got {len(inf['cells'])} honeycomb cells")
 
         # sanitize spec to convert numpy arrays into lists for JSON serialization
         def _sanitize(o):
@@ -210,18 +180,6 @@ async def update(req: UpdateRequest):
     # Compute adjacency and edges for any infill
     for node in new_spec:
         inf = node.get("modifiers", {}).get("infill", {})
-        pattern = inf.get("pattern")
-        # generate honeycomb seed points if missing
-        if pattern == "honeycomb":
-            bbox_min = inf.get("bbox_min") or inf.get("bboxMin")
-            bbox_max = inf.get("bbox_max") or inf.get("bboxMax")
-            if bbox_min and bbox_max and not inf.get("seed_points"):
-                seeds = sample_seed_points(
-                    bbox_min, bbox_max,
-                    inf.get("cell_size", 2.0),
-                    inf.get("slice_thickness", 1.0)
-                )
-                inf["seed_points"] = seeds.tolist()
         pts = inf.get("seed_points")
         bbox_min = inf.get("bbox_min") or inf.get("bboxMin")
         bbox_max = inf.get("bbox_max") or inf.get("bboxMax")
@@ -230,20 +188,7 @@ async def update(req: UpdateRequest):
             if pattern == "voronoi":
                 spacing = inf.get("spacing", 2.0)
                 inf["edges"] = compute_voronoi_adjacency(pts, spacing)
-            elif pattern == "honeycomb":
-                import numpy as np
-                spacing = inf.get("spacing", 2.0)
-                pts_arr = np.array(pts)
-                # 2D honeycomb slice (project to XY)
-                bbox2d = ((bbox_min[0], bbox_min[1]), (bbox_max[0], bbox_max[1]))
-                vor, segments = hc_diagram.generate_voronoi_diagram(pts_arr[:, :2], bbox2d, radius=spacing * 2)
-                inf["edges"] = [seg.tolist() for seg in segments]
-                # 3D honeycomb cell meshes
-                inf["cells"] = generate_honeycomb_cells(pts_arr)
-                logging.debug(f"[DEBUG update] generate_honeycomb_cells returned {len(inf['cells'])} cells, sample first cell: {inf['cells'][0] if inf['cells'] else None}")
             logging.debug(f"[DEBUG update] got {len(inf.get('edges', []))} edges, sample first 10: {inf.get('edges', [])[:10]}")
-            if 'cells' in inf:
-                logging.debug(f"[DEBUG update] got {len(inf['cells'])} honeycomb cells")
 
     # sanitize new_spec to convert numpy arrays into lists for JSON serialization
     def _sanitize(o):

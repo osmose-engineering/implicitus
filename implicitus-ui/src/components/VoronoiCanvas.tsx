@@ -8,7 +8,7 @@ import * as THREE from 'three';
 // Debug: override with a small hex‐lattice test instead of server data
 const DEBUG_HEX_TEST = false;
 function generateHexTest(bboxMin, bboxMax, spacing) {
-  // Debug: draw outlines of a 3×3 honeycomb patch of cells
+// Debug: draw outlines of a 3×3 hexagonal patch of cells
   const pts = [];
   const edges = [];
   const sqrt3 = Math.sqrt(3);
@@ -43,7 +43,7 @@ function generateHexTest(bboxMin, bboxMax, spacing) {
   return [pts, edges];
 }
 
-// Debug: generate a small 3D honeycomb block for testing
+// Debug: generate a small 3D hexagonal block for testing
 function generateHexTest3D(bboxMin, bboxMax, spacing) {
   const pts = [];
   const edges = [];
@@ -118,7 +118,7 @@ interface VoronoiCanvasProps {
   strutColor?: string | number;
   infillPoints?: [number, number, number][];
   infillEdges?: [number, number][];
-  /** Honeycomb infill cells */
+  /** Infill cells */
   cells: Array<{ verts: number[][]; faces: number[][] }>;
 }
 
@@ -252,7 +252,7 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
     }
   }, [fallbackPoints]);
 
-  // Merge all honeycomb cell geometries into a single mesh
+  // Merge all cell geometries into a single mesh
   const mergedCellGeometry = useMemo(() => {
     if (cells.length === 0) return null;
     // filter cells to only those inside the seed-points bounding sphere

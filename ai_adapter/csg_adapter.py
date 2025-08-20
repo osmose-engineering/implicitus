@@ -236,7 +236,10 @@ def _build_modifier_dict(raw_spec: dict) -> dict:
     if pattern == 'voronoi':
         infill_data['_is_voronoi'] = True
     if pattern == 'honeycomb':
-        infill_data['_is_honeycomb'] = True
+        # Treat honeycomb as a voronoi lattice with uniform sampling
+        infill_data['_is_voronoi'] = True
+        infill_data['pattern'] = 'voronoi'
+        infill_data.setdefault('uniform', True)
     density = infill_data.get('density')
     if pattern is not None and density is not None:
         return {'pattern': pattern, 'density': density, **({k: v for k, v in infill_data.items() if k not in ('pattern', 'density')})}
@@ -445,17 +448,6 @@ def interpret_llm_request(llm_output):
                         seeds = seeds[: int(infill['num_points'])]
                     infill['seed_points'] = seeds
                     logging.debug(f"interpret_llm_request: generated {len(seeds)} seed points for {shape}")
-            elif isinstance(infill, dict) and infill.get('_is_honeycomb'):
-                prim = node['primitive']
-                bbox_min, bbox_max = _compute_bbox_from_primitive(prim)
-                size = [bbox_max[i] - bbox_min[i] for i in range(3)]
-                infill.setdefault('bbox_min', list(bbox_min))
-                infill.setdefault('bbox_max', list(bbox_max))
-                # default cell size in XY plane
-                default_cell_size = max(size[0], size[1]) / 10.0
-                infill.setdefault('cell_size', default_cell_size)
-                infill.setdefault('wall_thickness', default_cell_size / 10.0)
-                infill.setdefault('slice_thickness', size[2] / 20.0)
         return {"primitives": nodes}
     else:
         raw = llm_output
@@ -500,7 +492,7 @@ def interpret_llm_request(llm_output):
             logging.debug("interpret_llm_request applied _build_modifier_dict: %r", modifier)
 
     nodes = parse_raw_spec(raw)
-    # Enrich any voronoi or honeycomb modifiers with defaults
+    # Enrich any voronoi modifiers with defaults
     for node in nodes:
         infill = node.get('modifiers', {}).get('infill')
         if isinstance(infill, dict) and infill.get('_is_voronoi'):
@@ -533,16 +525,6 @@ def interpret_llm_request(llm_output):
                     seeds = seeds[: int(infill['num_points'])]
                 infill['seed_points'] = seeds
                 logging.debug(f"interpret_llm_request: generated {len(seeds)} seed points for {shape}")
-        elif isinstance(infill, dict) and infill.get('_is_honeycomb'):
-            prim = node['primitive']
-            bbox_min, bbox_max = _compute_bbox_from_primitive(prim)
-            size = [bbox_max[i] - bbox_min[i] for i in range(3)]
-            infill.setdefault('bbox_min', list(bbox_min))
-            infill.setdefault('bbox_max', list(bbox_max))
-            default_cell_size = max(size[0], size[1]) / 10.0
-            infill.setdefault('cell_size', default_cell_size)
-            infill.setdefault('wall_thickness', default_cell_size / 10.0)
-            infill.setdefault('slice_thickness', size[2] / 20.0)
     return {"primitives": nodes}
 
 def build_model_from_spec(nodes, boolean_op=None):

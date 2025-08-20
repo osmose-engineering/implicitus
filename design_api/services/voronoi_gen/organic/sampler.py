@@ -7,6 +7,43 @@ from typing import Tuple, List, Optional
 from typing import Dict, Callable
 import itertools
 
+
+def _hex_lattice(bbox_min: Tuple[float, float, float],
+                 bbox_max: Tuple[float, float, float],
+                 cell_size: float,
+                 slice_thickness: float) -> np.ndarray:
+    """Generate a 3D hexagonal seed grid within a bounding box."""
+    xmin, ymin, zmin = bbox_min
+    xmax, ymax, zmax = bbox_max
+
+    z_range = zmax - zmin
+    n_layers = int(math.ceil(z_range / slice_thickness))
+
+    vert_spacing = cell_size * math.sqrt(3) / 2.0
+
+    points_xy = []
+    n_rows = int(math.ceil((ymax - ymin) / vert_spacing))
+    for row in range(n_rows + 1):
+        y = ymin + row * vert_spacing
+        if y > ymax:
+            break
+        x_start = xmin + (cell_size / 2.0 if row % 2 else 0.0)
+        x = x_start
+        while x <= xmax:
+            points_xy.append((x, y))
+            x += cell_size
+
+    seeds = []
+    for layer in range(n_layers + 1):
+        z = zmin + layer * slice_thickness
+        if z > zmax:
+            break
+        for x, y in points_xy:
+            seeds.append([x, y, z])
+
+    return np.array(seeds)
+
+
 # --- SDF helper for surface sampling
 def _call_sdf(sdf_func, pt):
     """
@@ -32,7 +69,7 @@ def sample_seed_points(
 
     When ``pattern`` is ``"poisson"`` (the default) Bridson's Poisson-disk
     sampling is used.  When ``pattern`` is ``"hex"`` a deterministic hexagonal
-    lattice is generated via the honeycomb seed generator.
+    lattice is generated via an internal seed generator.
 
     Args:
         num_points (int): Number of points to sample.
@@ -57,11 +94,7 @@ def sample_seed_points(
             r = min_dist
         else:
             r = (volume / num_points) ** (1 / 3)
-        from ..honeycomb import seed as honeycomb_seed
-
-        seeds = honeycomb_seed.sample_seed_points(
-            bbox_min, bbox_max, cell_size=r, slice_thickness=r
-        )
+        seeds = _hex_lattice(bbox_min, bbox_max, cell_size=r, slice_thickness=r)
         logging.debug(
             f"[sample_seed_points] returning {len(seeds)} hex lattice points with spacing {r:.3f}"
         )
