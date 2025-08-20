@@ -44,6 +44,25 @@ def test_compute_medial_axis_bounds_clipping():
     assert np.allclose(medial_tolerant[0], np.array([0.5, 0.5, 149.0]))
 
 
+def test_compute_medial_axis_sphere_mesh():
+    """Medial axis of a roughly spherical mesh should span the sphere volume."""
+    rng = np.random.default_rng(0)
+    pts = rng.normal(size=(200, 3))
+    pts /= np.linalg.norm(pts, axis=1)[:, None]
+    r = rng.random(200) ** (1 / 3)
+    pts *= r[:, None]
+    mesh = DummyMesh(pts)
+
+    medial = compute_medial_axis(mesh)
+    assert medial.size > 0
+
+    extent = np.ptp(medial, axis=0)
+    assert np.all(extent > 1.0), f"medial axis collapsed: {extent}"
+
+    unique_medial = np.unique(medial, axis=0)
+    assert unique_medial.shape[0] > 10
+
+
 def test_trace_hexagon_fallback():
     seed = np.array([0.0, 0.0, 0.0])
     # All medial points are behind the seed (negative x direction)
