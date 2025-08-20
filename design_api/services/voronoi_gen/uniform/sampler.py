@@ -6,7 +6,10 @@ from typing import Union, Any
 from typing import Tuple, List, Optional
 from typing import Dict, Callable
 import itertools
-from scipy.spatial import Voronoi
+try:  # SciPy is heavy; allow tests to run without it
+    from scipy.spatial import Voronoi  # type: ignore
+except Exception:  # pragma: no cover - fallback when scipy missing
+    Voronoi = None
 
 
 def compute_medial_axis(imds_mesh: Any, tol: float = 1e-8) -> np.ndarray:
@@ -31,16 +34,52 @@ def compute_medial_axis(imds_mesh: Any, tol: float = 1e-8) -> np.ndarray:
     if vertices is None:
         raise ValueError("imds_mesh must have a 'vertices' attribute")
 
-    # Compute full Voronoi diagram of the mesh vertices
-    vor = Voronoi(vertices)
+    if Voronoi is not None:
+        # Use SciPy's robust Voronoi implementation when available
+        vor = Voronoi(vertices)
+        bbox_min = vertices.min(axis=0) - tol
+        bbox_max = vertices.max(axis=0) + tol
+        inside = np.all((vor.vertices >= bbox_min) & (vor.vertices <= bbox_max), axis=1)
+        return vor.vertices[inside]
 
-    # Clip Voronoi vertices to lie within the mesh's bounding box (+/- tol)
-    bbox_min = vertices.min(axis=0) - tol
-    bbox_max = vertices.max(axis=0) + tol
-    inside = np.all((vor.vertices >= bbox_min) & (vor.vertices <= bbox_max), axis=1)
-    medial_points = vor.vertices[inside]
+    # Fallback: approximate Voronoi vertices via circumcenters of tetrahedra
+    verts = np.asarray(vertices, dtype=float)
+    n = len(verts)
+    centers: List[np.ndarray] = []
 
-    return medial_points
+    def _circumcenter(pts: np.ndarray) -> Optional[np.ndarray]:
+        p1, p2, p3, p4 = pts
+        A = 2 * np.array([p2 - p1, p3 - p1, p4 - p1])
+        b = np.array([
+            np.dot(p2, p2) - np.dot(p1, p1),
+            np.dot(p3, p3) - np.dot(p1, p1),
+            np.dot(p4, p4) - np.dot(p1, p1),
+        ])
+        try:
+            return np.linalg.solve(A, b)
+        except np.linalg.LinAlgError:
+            return None
+
+    if n <= 20:
+        combos = itertools.combinations(range(n), 4)
+    else:
+        rng = np.random.default_rng(0)
+        combos = (rng.choice(n, 4, replace=False) for _ in range(min(500, n * 5)))
+
+    for idxs in combos:
+        pts = verts[list(idxs)]
+        c = _circumcenter(pts)
+        if c is not None:
+            centers.append(c)
+
+    if not centers:
+        return np.empty((0, 3))
+
+    centers = np.array(centers)
+    bbox_min = verts.min(axis=0) - tol
+    bbox_max = verts.max(axis=0) + tol
+    inside = np.all((centers >= bbox_min) & (centers <= bbox_max), axis=1)
+    return centers[inside]
 
 
 def trace_hexagon(
@@ -117,7 +156,6 @@ def trace_hexagon(
 
         # Select six neighbors roughly evenly spaced by angle
         sel_2d: List[np.ndarray] = []
-        sel_vecs: List[np.ndarray] = []
         used = np.zeros(len(angles), dtype=bool)
         for k in range(6):
             target = 2 * np.pi * k / 6
@@ -126,21 +164,12 @@ def trace_hexagon(
             idx = int(np.argmin(diffs))
             used[idx] = True
             sel_2d.append(neighbor_2d_all[idx])
-            sel_vecs.append(vecs[idx])
 
         neighbor_2d = np.vstack(sel_2d)
-        neighbor_vecs = np.vstack(sel_vecs)
-
-        # Project all candidate neighbors into the plane
-        neighbor_2d = np.column_stack((vecs.dot(u), vecs.dot(v)))
-        # Sort neighbors by polar angle around the seed
+        # Sort the selected neighbors by angle so adjacent pairs form edges
         ang = np.arctan2(neighbor_2d[:, 1], neighbor_2d[:, 0])
         order = np.argsort(ang)
         neighbor_2d = neighbor_2d[order]
-        # If more than six points are present, sample roughly evenly in angle
-        if neighbor_2d.shape[0] > 6:
-            step = neighbor_2d.shape[0] // 6
-            neighbor_2d = neighbor_2d[::step][:6]
 
 
         normals = neighbor_2d
@@ -160,13 +189,6 @@ def trace_hexagon(
         if len(verts_2d) == 6:
             hex_pts = [seed_pt + x[0] * u + x[1] * v for x in verts_2d]
             hex_pts = np.vstack(hex_pts)
-
-            # Scale the hexagon so its radius matches the median neighbor distance
-            target_r = np.median(np.linalg.norm(neighbor_vecs, axis=1))
-            current_r = np.mean(np.linalg.norm(hex_pts - seed_pt, axis=1))
-            if current_r > 1e-12:
-                scale = target_r / current_r
-                hex_pts = seed_pt + (hex_pts - seed_pt) * scale
             hex_success = True
 
     if not hex_success:
