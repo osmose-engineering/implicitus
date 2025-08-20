@@ -68,9 +68,9 @@ def test_trace_hexagon_basic():
     medial = np.stack([5 * np.cos(angles), 5 * np.sin(angles), np.zeros_like(angles)], axis=1)
     plane_normal = np.array([0.0, 0.0, 1.0])
     hex_pts = trace_hexagon(seed, medial, plane_normal)
-    # All distances should be approximately 5
+    # All distances should be approximately the expected Voronoi radius (R / sqrt(3))
     dists = np.linalg.norm(hex_pts - seed, axis=1)
-    assert np.allclose(dists, 5.0, atol=1e-6)
+    assert np.allclose(dists, 5.0 / np.sqrt(3.0), atol=1e-6)
     # Should produce exactly 6 unique points
     unique_pts = {tuple(pt) for pt in hex_pts}
     assert len(unique_pts) == 6
@@ -82,4 +82,25 @@ def test_trace_hexagon_no_intersection_error():
     plane_normal = np.array([0.0, 0.0, 1.0])
     with pytest.raises(ValueError):
         trace_hexagon(seed, medial, plane_normal)
+
+
+def test_trace_hexagon_origin_medial_cluster(monkeypatch):
+    seed = np.array([0.0, -1.0, 0.0])  # point on unit sphere in XY plane
+    medial = np.zeros((12, 3))  # all medial points collapse at origin
+    plane_normal = np.array([0.0, 0.0, 1.0])
+
+    # Disable regularization to expose uneven edge lengths
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.regularizer.regularize_hexagon",
+        lambda pts, normal: pts,
+    )
+
+    hex_pts, used_fallback = trace_hexagon(
+        seed, medial, plane_normal, max_distance=5.0, report_method=True
+    )
+    assert used_fallback is True
+
+    edges = np.linalg.norm(np.roll(hex_pts, -1, axis=0) - hex_pts, axis=1)
+    # Fallback rays yield a highly irregular hexagon
+    assert np.ptp(edges) > 0.3
 
