@@ -15,7 +15,8 @@ def compute_uniform_cells(
     seeds: np.ndarray,
     imds_mesh: Any,
     plane_normal: np.ndarray,
-    max_distance: Optional[float] = None
+    max_distance: Optional[float] = None,
+    vertex_tolerance: float = 1e-5
 ) -> Dict[int, np.ndarray]:
     """
     Compute near-uniform hexagonal Voronoi cells for each seed point.
@@ -24,6 +25,9 @@ def compute_uniform_cells(
         imds_mesh: mesh object with `.vertices` attribute for medial axis extraction.
         plane_normal: (3,) array defining slicing plane normal.
         max_distance: fallback distance for ray casting when no medial point is found.
+        vertex_tolerance: tolerance used when reconciling shared vertices between
+            adjacent cells. A warning is emitted if mismatches above this tolerance
+            are detected.
     Returns:
         cells: dict mapping seed index to (6,3) array of hexagon vertices.
     """
@@ -41,4 +45,72 @@ def compute_uniform_cells(
             f"{metrics['area']:.3f}"
         )
         cells[idx] = hex_pts
+
+    # --------------------
+    # Reconcile shared vertices
+    # --------------------
+    all_vertices: List[np.ndarray] = []
+    cell_slices: Dict[int, slice] = {}
+    for idx in sorted(cells.keys()):
+        start = len(all_vertices)
+        all_vertices.extend(cells[idx])
+        cell_slices[idx] = slice(start, start + len(cells[idx]))
+
+    if all_vertices:
+        verts = np.vstack(all_vertices)
+        n = len(verts)
+        parent = np.arange(n)
+
+        def find(i: int) -> int:
+            while parent[i] != i:
+                parent[i] = parent[parent[i]]
+                i = parent[i]
+            return i
+
+        def union(a: int, b: int) -> None:
+            ra, rb = find(a), find(b)
+            if ra != rb:
+                parent[rb] = ra
+
+        merge_tol = vertex_tolerance * 10.0
+        for i in range(n):
+            for j in range(i + 1, n):
+                if np.linalg.norm(verts[i] - verts[j]) <= merge_tol:
+                    union(i, j)
+
+        groups: Dict[int, List[int]] = {}
+        for idx in range(n):
+            root = find(idx)
+            groups.setdefault(root, []).append(idx)
+
+        deltas: List[float] = []
+        for inds in groups.values():
+            if len(inds) > 1:
+                pts = verts[inds]
+                avg = pts.mean(axis=0)
+                dev = np.linalg.norm(pts - avg, axis=1)
+                deltas.extend(dev.tolist())
+                verts[inds] = avg
+
+        for idx, sl in cell_slices.items():
+            cells[idx] = verts[sl]
+
+        if deltas:
+            mean_delta = float(np.mean(deltas))
+            max_delta = float(np.max(deltas))
+            logging.info(
+                "Shared vertex adjustment: mean_delta=%0.6e, max_delta=%0.6e, adjusted=%d",
+                mean_delta,
+                max_delta,
+                len(deltas),
+            )
+            if max_delta > vertex_tolerance:
+                logging.warning(
+                    "Max vertex mismatch %0.6e exceeds tolerance %0.6e",
+                    max_delta,
+                    vertex_tolerance,
+                )
+        else:
+            logging.info("Shared vertex adjustment: no coincident vertices found")
+
     return cells
