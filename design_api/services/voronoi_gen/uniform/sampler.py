@@ -8,20 +8,38 @@ from typing import Dict, Callable
 import itertools
 from scipy.spatial import Voronoi
 
-def compute_medial_axis(imds_mesh: Any) -> np.ndarray:
+
+def compute_medial_axis(imds_mesh: Any, tol: float = 1e-8) -> np.ndarray:
+    """Compute an approximation of the medial axis of the interface mesh.
+
+    Parameters
+    ----------
+    imds_mesh: Any
+        Object exposing a ``vertices`` attribute as an ``(N, 3)`` array.
+    tol: float, optional
+        Extra tolerance to expand the mesh bounds when filtering Voronoi
+        vertices.  Larger values keep more vertices; a value of ``0`` clips
+        strictly to the axis-aligned bounding box of the mesh.
+
+    Returns
+    -------
+    np.ndarray
+        Array of Voronoi vertices that fall within the mesh bounds.
     """
-    Compute an approximation of the medial axis of the interface mesh.
-    imds_mesh should have a `.vertices` attribute as an (N,3) numpy array.
-    Returns:
-        medial_points: (M,3) numpy array of medial axis vertex positions.
-    """
+
     vertices = getattr(imds_mesh, "vertices", None)
     if vertices is None:
         raise ValueError("imds_mesh must have a 'vertices' attribute")
+
     # Compute full Voronoi diagram of the mesh vertices
     vor = Voronoi(vertices)
-    # TODO: Prune Voronoi vertices to medial axis subset within mesh boundaries
-    medial_points = vor.vertices
+
+    # Clip Voronoi vertices to lie within the mesh's bounding box (+/- tol)
+    bbox_min = vertices.min(axis=0) - tol
+    bbox_max = vertices.max(axis=0) + tol
+    inside = np.all((vor.vertices >= bbox_min) & (vor.vertices <= bbox_max), axis=1)
+    medial_points = vor.vertices[inside]
+
     return medial_points
 
 

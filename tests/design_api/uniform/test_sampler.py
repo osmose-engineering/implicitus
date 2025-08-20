@@ -25,6 +25,25 @@ def test_compute_medial_axis_simple():
     assert medial.shape[0] > 0
 
 
+def test_compute_medial_axis_bounds_clipping():
+    vertices = [
+        [0.0, 0.0, 0.0],
+        [1.0, 0.0, 0.0],
+        [0.0, 1.0, 0.0],
+        [100.0, 100.0, 100.0],
+    ]
+    mesh = DummyMesh(vertices)
+
+    # With default tolerance the Voronoi vertex lies outside the bounding box
+    medial_default = compute_medial_axis(mesh)
+    assert medial_default.shape == (0, 3)
+
+    # Expanding the bounds should retain the vertex
+    medial_tolerant = compute_medial_axis(mesh, tol=60.0)
+    assert medial_tolerant.shape[0] == 1
+    assert np.allclose(medial_tolerant[0], np.array([0.5, 0.5, 149.0]))
+
+
 def test_trace_hexagon_fallback():
     seed = np.array([0.0, 0.0, 0.0])
     # All medial points are behind the seed (negative x direction)
