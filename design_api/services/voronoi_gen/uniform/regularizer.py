@@ -7,10 +7,14 @@ from typing import Tuple, List, Optional
 from typing import Dict, Callable
 import itertools
 
-def regularize_hexagon(hex_pts: np.ndarray) -> np.ndarray:
+def regularize_hexagon(hex_pts: np.ndarray, plane_normal: np.ndarray) -> np.ndarray:
     """
     Normalize a hexagon to uniform edge lengths, preserving centroid.
-    hex_pts: (6,3) array of hexagon vertices in order.
+
+    Args:
+        hex_pts: (6,3) array of hexagon vertices in order.
+        plane_normal: (3,) array normal to the plane in which the hexagon lies.
+
     Returns:
         new_pts: (6,3) array of regularized hexagon vertices.
     """
@@ -21,15 +25,31 @@ def regularize_hexagon(hex_pts: np.ndarray) -> np.ndarray:
     edge_lengths = np.linalg.norm(edges, axis=1)
     # Average edge length
     avg_edge = float(np.mean(edge_lengths))
-    # Generate perfect hexagon directions in the XY plane
+
+    # Build an orthonormal basis (u, v) spanning the plane defined by plane_normal
+    n = np.asarray(plane_normal, dtype=float)
+    n_norm = np.linalg.norm(n)
+    if n_norm == 0:
+        raise ValueError("plane_normal must be non-zero")
+    n = n / n_norm
+    # Choose a helper vector not parallel to the normal
+    if abs(n[0]) < 0.9:
+        helper = np.array([1.0, 0.0, 0.0])
+    else:
+        helper = np.array([0.0, 1.0, 0.0])
+    u = np.cross(n, helper)
+    u /= np.linalg.norm(u)
+    v = np.cross(n, u)
+
+    # Generate perfect hexagon directions in the local (u, v) basis
     angles = np.linspace(0, 2 * np.pi, 6, endpoint=False)
     dirs = np.stack([
         np.cos(angles),
-        np.sin(angles),
-        np.zeros_like(angles)
-    ], axis=1)
-    # Build new points at uniform edge length radius
-    new_pts = centroid + dirs * avg_edge
+        np.sin(angles)
+    ], axis=1)  # (6,2)
+
+    # Map directions back into 3-D using the basis
+    new_pts = centroid + avg_edge * (dirs[:, 0:1] * u + dirs[:, 1:2] * v)
     return new_pts
 
 def hexagon_metrics(hex_pts: np.ndarray) -> Dict[str, Any]:

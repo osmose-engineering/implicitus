@@ -25,7 +25,7 @@ def test_regularize_hexagon_preserves_centroid_and_edge_lengths():
     hex_pts = create_irregular_hexagon(radius=5.0, noise_level=1.0)
     centroid_before = np.mean(hex_pts, axis=0)
     # Regularize
-    new_pts = regularize_hexagon(hex_pts)
+    new_pts = regularize_hexagon(hex_pts, np.array([0.0, 0.0, 1.0]))
     centroid_after = np.mean(new_pts, axis=0)
     # Centroid should remain effectively unchanged
     assert np.allclose(centroid_before, centroid_after, atol=1e-6)

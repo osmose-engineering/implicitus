@@ -102,7 +102,7 @@ def trace_hexagon(seed_pt: np.ndarray, medial_points: np.ndarray, plane_normal: 
     # Attempt to regularize edge lengths if available
     try:
         from design_api.services.voronoi_gen.uniform.regularizer import regularize_hexagon
-        hex_pts = regularize_hexagon(hex_pts)
+        hex_pts = regularize_hexagon(hex_pts, plane_normal)
     except ImportError:
         pass
 
