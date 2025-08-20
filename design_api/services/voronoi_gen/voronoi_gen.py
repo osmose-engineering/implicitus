@@ -327,6 +327,8 @@ def build_hex_lattice(
     edges = prune_adjacency_via_grid(pts, spacing)
 
     if return_cells:
+        from .organic.construct import construct_voronoi_cells
+
         cells = construct_voronoi_cells(
             pts, bbox_min, bbox_max, **cell_kwargs
         )
@@ -336,5 +338,50 @@ def build_hex_lattice(
 
 
 
-# Alias for Voronoi infill: direct seed adjacency via grid pruning
-compute_voronoi_adjacency = prune_adjacency_via_grid
+def compute_voronoi_adjacency(
+    points: List[Tuple[float, float, float]],
+    *args: Any,
+    spacing: Optional[float] = None,
+    **kwargs: Any,
+) -> Dict[int, List[int]]:
+    """
+    Compute adjacency of seed points using a spatial hash grid.
+
+    Parameters
+    ----------
+    points
+        Seed coordinates as ``(x, y, z)`` tuples.
+    spacing
+        Optional minimum spacing between seeds. If omitted, it is inferred
+        from the closest pair of points.
+    *args, **kwargs
+        Additional positional/keyword arguments are ignored, allowing this
+        function to be called with legacy signatures such as
+        ``(points, bbox_min, bbox_max, resolution)``.
+
+    Returns
+    -------
+    Dict[int, List[int]]
+        Mapping of seed index to a list of neighboring seed indices.
+    """
+    # Ignore legacy positional arguments (e.g., bbox, resolution)
+    if spacing is None or isinstance(spacing, (tuple, list)):
+        spacing = None
+
+    if spacing is None and points:
+        min_dist = float("inf")
+        for i, (x0, y0, z0) in enumerate(points):
+            for j in range(i + 1, len(points)):
+                x1, y1, z1 = points[j]
+                dx, dy, dz = x0 - x1, y0 - y1, z0 - z1
+                dist = math.sqrt(dx * dx + dy * dy + dz * dz)
+                if dist < min_dist:
+                    min_dist = dist
+        spacing = min_dist / 2.0 if min_dist < float("inf") else 0.0
+
+    edges = prune_adjacency_via_grid(points, spacing or 0.0)
+    adjacency: Dict[int, List[int]] = {i: [] for i in range(len(points))}
+    for i, j in edges:
+        adjacency[i].append(j)
+        adjacency[j].append(i)
+    return adjacency
