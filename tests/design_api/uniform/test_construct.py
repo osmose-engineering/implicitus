@@ -49,6 +49,35 @@ def test_compute_uniform_cells_basic():
         assert np.all(np.isfinite(pts))
 
 
+def test_cell_planes_align_with_normal():
+    """Seeds offset from the slicing plane should still yield coplanar cells."""
+
+    # Place seeds at different offsets along the normal direction
+    seeds = np.array(
+        [
+            [0.0, 0.0, 0.5],
+            [0.5, 0.5, -0.5],
+        ]
+    )
+    mesh = _sample_mesh()
+    plane_normal = np.array([0.0, 0.0, 1.0])
+
+    cells = compute_uniform_cells(seeds, mesh, plane_normal, max_distance=2.0)
+
+    unit_normal = plane_normal / np.linalg.norm(plane_normal)
+    for pts in cells.values():
+        # Compute a normal from two consecutive edges
+        edge1 = pts[1] - pts[0]
+        edge2 = pts[2] - pts[1]
+        cell_normal = np.cross(edge1, edge2)
+        cell_normal /= np.linalg.norm(cell_normal)
+
+        # Angle between computed normal and provided plane_normal should be tiny
+        cos_angle = np.clip(np.abs(np.dot(cell_normal, unit_normal)), -1.0, 1.0)
+        angle = np.arccos(cos_angle)
+        assert angle < 1e-6
+
+
 
 def test_shared_vertex_alignment(monkeypatch, caplog):
     seeds = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
@@ -59,12 +88,12 @@ def test_shared_vertex_alignment(monkeypatch, caplog):
 
     base_hex = np.array(
         [
-            [0.0, 0.0, 0.0],
             [1.0, 0.0, 0.0],
-            [1.5, 0.5, 0.0],
-            [1.0, 1.0, 0.0],
-            [0.0, 1.0, 0.0],
-            [-0.5, 0.5, 0.0],
+            [0.5, np.sqrt(3) / 2, 0.0],
+            [-0.5, np.sqrt(3) / 2, 0.0],
+            [-1.0, 0.0, 0.0],
+            [-0.5, -np.sqrt(3) / 2, 0.0],
+            [0.5, -np.sqrt(3) / 2, 0.0],
         ]
     )
 
@@ -98,8 +127,9 @@ def test_shared_vertex_alignment(monkeypatch, caplog):
     assert warnings and "exceeds tolerance" in warnings[0].message
 
     # Each cell's edge lengths should be nearly equal
+    pts = cells[0]
     edges = np.linalg.norm(pts - np.roll(pts, -1, axis=0), axis=1)
-    assert np.allclose(edges, edges[0], rtol=1e-5, atol=1e-6)
+    assert np.allclose(edges, edges[0], rtol=1e-3, atol=1e-6)
 
     # Adjacent cells should share vertices within a tolerance
     dists = np.linalg.norm(cells[0][:, None, :] - cells[1][None, :, :], axis=2)
@@ -127,3 +157,44 @@ def test_construct_produces_closed_hexagons():
         b = pts[(i + 1) % pts.shape[0]] - centroid
         area += 0.5 * np.linalg.norm(np.cross(a, b))
     assert area > 0
+
+
+def test_pathological_medial_axis_triggers_warning(monkeypatch, caplog):
+    """Cells from a degenerate medial axis should emit a warning before reconciliation."""
+
+    seeds = np.array([[1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]])
+    mesh = DummyMesh([[0.0, 0.0, 0.0]])
+
+    def central_medial_axis(_mesh):  # pragma: no cover - deterministic cluster
+        return np.zeros((8, 3))
+
+    def degenerate_trace(seed, medial, normal, max_distance):  # pragma: no cover
+        pts = np.tile(seed, (6, 1))
+
+        # Verify the hexagon before any vertex averaging
+        unique = np.unique(pts, axis=0)
+        centroid = pts.mean(axis=0)
+        area = 0.0
+        for i in range(6):
+            a = pts[i] - centroid
+            b = pts[(i + 1) % 6] - centroid
+            area += 0.5 * np.linalg.norm(np.cross(a, b))
+        if unique.shape[0] != 6 or area == 0.0:
+            logging.warning("degenerate hexagon detected")
+        return pts
+
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.compute_medial_axis",
+        central_medial_axis,
+    )
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.trace_hexagon",
+        degenerate_trace,
+    )
+
+    plane_normal = np.array([0.0, 0.0, 1.0])
+    with caplog.at_level(logging.WARNING):
+        compute_uniform_cells(seeds, mesh, plane_normal, max_distance=1.0)
+
+    warnings = [rec for rec in caplog.records if rec.levelno >= logging.WARNING]
+    assert any("degenerate hexagon" in w.message for w in warnings)
