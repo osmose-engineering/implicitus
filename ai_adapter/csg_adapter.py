@@ -712,6 +712,31 @@ def update_request(sid: str, spec: list, raw: str):
             op = 'intersection'
         summary = f"Applied {op} operation to shapes"
         return spec, summary
+
+    # Quick parse for simple voronoi infill request without LLM
+    if 'voronoi' in cmd and 'infill' in cmd:
+        for action in spec:
+            prim_dict = action.get('primitive')
+            if not prim_dict:
+                continue
+            shape, params = next(iter(prim_dict.items()))
+            bbox_min, bbox_max = _compute_bbox_from_primitive({shape: params})
+            size = [bbox_max[i] - bbox_min[i] for i in range(3)]
+            min_dist = max(size) / 20.0
+            infill = {
+                'pattern': 'voronoi',
+                'min_dist': min_dist,
+                'bbox_min': list(bbox_min),
+                'bbox_max': list(bbox_max),
+            }
+            seeds = _auto_generate_seed_points(shape, params, bbox_min, bbox_max, min_dist)
+            if len(seeds) > MAX_SEED_POINTS:
+                seeds = seeds[:MAX_SEED_POINTS]
+            infill['seed_points'] = seeds
+            infill['num_points'] = len(seeds)
+            action.setdefault('modifiers', {})['infill'] = infill
+        summary = "Added voronoi infill"
+        return spec, summary
     old_spec = spec
     # Reuse review_request to get updated spec
     request_data = {"raw": raw, "spec": old_spec, "sid": sid}

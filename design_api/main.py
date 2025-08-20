@@ -1,6 +1,7 @@
 import logging
 from pydantic import Field
 import time
+import numpy as np
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -22,6 +23,7 @@ from design_api.services.llm_service import generate_design_spec
 from design_api.services.mapping import map_primitive as map_to_proto_dict
 from design_api.services.validator import validate_model_spec as validate_proto
 from ai_adapter.csg_adapter import review_request, generate_summary, update_request
+from design_api.services.voronoi_gen.organic.construct import construct_voronoi_cells
 
 @dataclass
 class DesignState:
@@ -112,6 +114,21 @@ async def review(req: dict, sid: Optional[str] = None):
             return {"sid": sid, "question": question}
         # Otherwise we have a spec and summary tuple
         spec, summary = result
+        # Optionally generate Voronoi cell previews for any infill modifiers
+        for node in spec:
+            inf = node.get("modifiers", {}).get("infill")
+            if isinstance(inf, dict) and inf.get("pattern") == "voronoi":
+                seed_points = inf.get("seed_points")
+                bbox_min = inf.get("bbox_min")
+                bbox_max = inf.get("bbox_max")
+                if seed_points and bbox_min and bbox_max:
+                    pts_arr = np.asarray(seed_points)
+                    try:
+                        inf["cells"] = construct_voronoi_cells(
+                            pts_arr, tuple(bbox_min), tuple(bbox_max)
+                        )
+                    except Exception:
+                        logging.exception("Failed to generate Voronoi cells")
         design_states[sid].draft_spec = spec
         log_turn(sid, "review", req.get("raw", ""), spec, summary=summary)
         return {"sid": sid, "spec": spec, "summary": summary}
