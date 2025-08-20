@@ -48,7 +48,8 @@ def trace_hexagon(
     medial_points: np.ndarray,
     plane_normal: np.ndarray,
     max_distance: Optional[float] = None,
-) -> np.ndarray:
+    report_method: bool = False,
+) -> Union[np.ndarray, Tuple[np.ndarray, bool]]:
     """
     Trace approximate hexagonal cell vertices around ``seed_pt`` using
     perpendicular bisectors to its nearest neighbors in the slicing plane.
@@ -60,7 +61,11 @@ def trace_hexagon(
         max_distance: fallback ray length if no neighbor data is available.
 
     Returns:
-        hex_pts: (6,3) array of hexagon vertex positions.
+        If ``report_method`` is ``False`` (default), returns an ``(6,3)`` array
+        of hexagon vertex positions.
+        If ``report_method`` is ``True``, returns a tuple ``(hex_pts, used_fallback)``
+        where ``used_fallback`` is ``True`` when the ray casting fallback was
+        used instead of the bisector method.
     """
     # Create orthonormal basis (u, v) spanning the plane
     arbitrary = np.array([1.0, 0.0, 0.0])
@@ -106,15 +111,16 @@ def trace_hexagon(
 
     hex_success = False
     if vecs.shape[0] >= 6:
-        # Select six nearest neighbors
-        idx = np.argpartition(dists, 6)[:6]
-        neighbor_vecs = vecs[idx]
-        # 2D coordinates in plane basis
-        neighbor_2d = np.column_stack((neighbor_vecs.dot(u), neighbor_vecs.dot(v)))
-        # Sort neighbors by angle around the seed for consistency
+        # Project all candidate neighbors into the plane
+        neighbor_2d = np.column_stack((vecs.dot(u), vecs.dot(v)))
+        # Sort neighbors by polar angle around the seed
         ang = np.arctan2(neighbor_2d[:, 1], neighbor_2d[:, 0])
         order = np.argsort(ang)
         neighbor_2d = neighbor_2d[order]
+        # If more than six points are present, sample roughly evenly in angle
+        if neighbor_2d.shape[0] > 6:
+            step = neighbor_2d.shape[0] // 6
+            neighbor_2d = neighbor_2d[::step][:6]
 
         normals = neighbor_2d
         bs = np.sum(neighbor_2d ** 2, axis=1) / 2.0
@@ -149,6 +155,8 @@ def trace_hexagon(
                 raise ValueError("No valid intersection for ray; resample seed point")
         hex_pts = np.vstack(hex_pts)
 
+    used_fallback = not hex_success
+
     # Attempt to regularize edge lengths if available
     try:
         from design_api.services.voronoi_gen.uniform.regularizer import regularize_hexagon
@@ -156,4 +164,6 @@ def trace_hexagon(
     except ImportError:
         pass
 
+    if report_method:
+        return hex_pts, used_fallback
     return hex_pts
