@@ -1,6 +1,7 @@
 import numpy as np
 import pytest
 
+from design_api.services.voronoi_gen.organic import construct as construct_module
 from design_api.services.voronoi_gen.organic.construct import (
     construct_voronoi_cells,
     construct_surface_voronoi_cells,
@@ -20,7 +21,12 @@ def bbox():
     # Axis-aligned bounding box
     return np.array([-1.0, -1.0, -1.0]), np.array([1.0, 1.0, 1.0])
 
-def test_construct_voronoi_cells_smoke(seeds, bbox):
+def test_construct_voronoi_cells_smoke(seeds, bbox, monkeypatch):
+    monkeypatch.setattr(
+        construct_module,
+        "compute_voronoi_adjacency",
+        lambda *args, **kwargs: {i: [] for i in range(len(seeds))},
+    )
     min_corner, max_corner = bbox
     cells = construct_voronoi_cells(seeds, min_corner, max_corner)
     assert isinstance(cells, list)
@@ -31,7 +37,12 @@ def test_construct_voronoi_cells_smoke(seeds, bbox):
         assert isinstance(grid, np.ndarray)
         assert grid.ndim == 3
 
-def test_construct_surface_voronoi_cells_smoke(seeds, bbox):
+def test_construct_surface_voronoi_cells_smoke(seeds, bbox, monkeypatch):
+    monkeypatch.setattr(
+        construct_module,
+        "compute_voronoi_adjacency",
+        lambda *args, **kwargs: {i: [] for i in range(len(seeds))},
+    )
     min_corner, max_corner = bbox
     cells = construct_surface_voronoi_cells(seeds, min_corner, max_corner)
     assert isinstance(cells, list)
