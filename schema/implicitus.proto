@@ -88,18 +88,18 @@ message Infill {
   string pattern = 1;  // name of the infill pattern, e.g., "grid", "hex"
   double density = 2;  // fill density, between 0 (empty) and 1 (solid)
 
-  // honeycomb infill parameters
-  repeated Vector3 seed_points = 3;  // 3D seed positions for honeycomb
+  // Voronoi lattice parameters
+  repeated Vector3 seed_points = 3;  // 3D seed positions for lattice
   double spacing = 4;                // target cell spacing
-  repeated Edge2D edges = 5;         // 2D slice edges for honeycomb cells
-  repeated Cell3D cells = 6;         // 3D cell meshes for honeycomb infill
+  repeated Edge2D edges = 5;         // 2D slice edges for lattice cells
+  repeated Cell3D cells = 6;         // 3D cell meshes for lattice infill
   repeated float bbox_min = 11;  // length-3 or length-2 for a slice
   repeated float bbox_max = 12;
   float wall_thickness = 13;
   bool uniform = 14;
 }
 
-// Honeycomb helper types
+// Infill helper types
 message Edge2D {
   Vector2 start = 1;
   Vector2 end   = 2;

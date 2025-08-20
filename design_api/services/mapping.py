@@ -1,8 +1,6 @@
 import uuid
 from ai_adapter.schema.implicitus_pb2 import Primitive
 from ai_adapter.schema.implicitus_pb2 import Modifier, Infill, Shell, BooleanOp, VoronoiLattice
-from design_api.services.voronoi_gen.honeycomb import seed as hc_seed
-from design_api.services.voronoi_gen.voronoi_gen import derive_bbox_from_primitive
 import logging
 logger = logging.getLogger(__name__)
 logging.basicConfig(level=logging.DEBUG)
@@ -77,34 +75,15 @@ def map_primitive(node: dict) -> dict:
             "children": [root, {"primitive": {"shell": shell_params}}]
         }
 
-    # Apply infill modifier (supports Voronoi and honeycomb)
+    # Apply infill modifier (supports Voronoi)
     if 'infill' in modifiers:
         logger.debug(f"Applying infill with params: {modifiers.get('infill')}")
         infill_params = modifiers['infill']
-        pattern = infill_params.get('pattern')
-        # Choose primitive key based on pattern type
-        if pattern == 'honeycomb':
-            primitive_key = 'honeycomb'
-            infill_params.setdefault("spacing", 2.0)
-            infill_params.setdefault("wall_thickness", 1.0)
-            infill_params.setdefault("uniform", True)
-            bbox_min, bbox_max = derive_bbox_from_primitive(node["primitive"])
-            infill_params["bbox_min"], infill_params["bbox_max"] = bbox_min, bbox_max
-            pts = hc_seed.generate_seed_points(
-                shape=node["primitive"],
-                spacing=infill_params["spacing"],
-                bbox_min=bbox_min,
-                bbox_max=bbox_max
-            )
-            logger.debug(f"Generated {len(pts)} honeycomb seed points")
-            infill_params["seed_points"] = [list(p) for p in pts]
-        else:
-            primitive_key = 'lattice'
         root = {
             "booleanOp": {"intersection": {}},
             "children": [
                 root,
-                {"primitive": {primitive_key: infill_params}}
+                {"primitive": {'lattice': infill_params}}
             ]
         }
 

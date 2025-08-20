@@ -6,6 +6,7 @@ from design_api.services.voronoi_gen.organic.sampler import (
     sample_seed_points,
     sample_seed_points_anisotropic,
     sample_surface_seed_points,
+    _hex_lattice,
 )
 
 @pytest.fixture
@@ -47,9 +48,7 @@ def test_sample_seed_points_with_density_field(bbox):
 def test_sample_seed_points_hex_pattern(bbox):
     min_corner, max_corner = bbox
     seeds = sample_seed_points(10, min_corner, max_corner, min_dist=0.5, pattern="hex")
-    from design_api.services.voronoi_gen.honeycomb.seed import sample_seed_points as hc_sample
-
-    expected = hc_sample(min_corner, max_corner, cell_size=0.5, slice_thickness=0.5)
+    expected = _hex_lattice(min_corner, max_corner, cell_size=0.5, slice_thickness=0.5)
     assert np.array(seeds).shape == expected.shape
     assert np.allclose(np.array(seeds), expected)
 
