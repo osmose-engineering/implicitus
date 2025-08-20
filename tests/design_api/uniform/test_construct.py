@@ -157,3 +157,44 @@ def test_construct_produces_closed_hexagons():
         b = pts[(i + 1) % pts.shape[0]] - centroid
         area += 0.5 * np.linalg.norm(np.cross(a, b))
     assert area > 0
+
+
+def test_pathological_medial_axis_triggers_warning(monkeypatch, caplog):
+    """Cells from a degenerate medial axis should emit a warning before reconciliation."""
+
+    seeds = np.array([[1.0, 0.0, 0.0], [-1.0, 0.0, 0.0]])
+    mesh = DummyMesh([[0.0, 0.0, 0.0]])
+
+    def central_medial_axis(_mesh):  # pragma: no cover - deterministic cluster
+        return np.zeros((8, 3))
+
+    def degenerate_trace(seed, medial, normal, max_distance):  # pragma: no cover
+        pts = np.tile(seed, (6, 1))
+
+        # Verify the hexagon before any vertex averaging
+        unique = np.unique(pts, axis=0)
+        centroid = pts.mean(axis=0)
+        area = 0.0
+        for i in range(6):
+            a = pts[i] - centroid
+            b = pts[(i + 1) % 6] - centroid
+            area += 0.5 * np.linalg.norm(np.cross(a, b))
+        if unique.shape[0] != 6 or area == 0.0:
+            logging.warning("degenerate hexagon detected")
+        return pts
+
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.compute_medial_axis",
+        central_medial_axis,
+    )
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.trace_hexagon",
+        degenerate_trace,
+    )
+
+    plane_normal = np.array([0.0, 0.0, 1.0])
+    with caplog.at_level(logging.WARNING):
+        compute_uniform_cells(seeds, mesh, plane_normal, max_distance=1.0)
+
+    warnings = [rec for rec in caplog.records if rec.levelno >= logging.WARNING]
+    assert any("degenerate hexagon" in w.message for w in warnings)
