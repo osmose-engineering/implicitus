@@ -24,10 +24,15 @@ def sample_seed_points(
     *,
     density_field: Optional[Callable[[Tuple[float, float, float]], float]] = None,
     min_dist: Optional[float] = None,
-    max_trials: int = 10000
+    max_trials: int = 10000,
+    pattern: str = "poisson"
 ) -> List[Tuple[float, float, float]]:
     """
-    Sample seed points using Poisson-disk sampling (Bridson's algorithm) within the axis-aligned bounding box.
+    Sample seed points within the axis-aligned bounding box.
+
+    When ``pattern`` is ``"poisson"`` (the default) Bridson's Poisson-disk
+    sampling is used.  When ``pattern`` is ``"hex"`` a deterministic hexagonal
+    lattice is generated via the honeycomb seed generator.
 
     Args:
         num_points (int): Number of points to sample.
@@ -35,14 +40,36 @@ def sample_seed_points(
         bbox_max (tuple): Maximum (x, y, z) of bounding box.
         min_dist (float, optional): Minimum distance between points. If not provided, spacing is chosen to target num_points by volume.
         max_trials (int): Maximum number of points to attempt to generate.
+        pattern (str): ``"poisson"`` or ``"hex"``.
     """
-    logging.debug(f"[sample_seed_points] called with num_points={num_points}, bbox_min={bbox_min}, bbox_max={bbox_max}, min_dist={min_dist}, density_field={'yes' if density_field is not None else 'no'}")
+    logging.debug(
+        f"[sample_seed_points] called with num_points={num_points}, bbox_min={bbox_min}, bbox_max={bbox_max}, min_dist={min_dist}, density_field={'yes' if density_field is not None else 'no'}, pattern={pattern}"
+    )
     # Compute domain volume and minimal distance r
     xmin, ymin, zmin = bbox_min
     xmax, ymax, zmax = bbox_max
     volume = (xmax - xmin) * (ymax - ymin) * (zmax - zmin)
     if num_points <= 0 or volume <= 0:
         return []
+
+    if pattern == "hex":
+        if min_dist is not None:
+            r = min_dist
+        else:
+            r = (volume / num_points) ** (1 / 3)
+        from ..honeycomb import seed as honeycomb_seed
+
+        seeds = honeycomb_seed.sample_seed_points(
+            bbox_min, bbox_max, cell_size=r, slice_thickness=r
+        )
+        logging.debug(
+            f"[sample_seed_points] returning {len(seeds)} hex lattice points with spacing {r:.3f}"
+        )
+        return [tuple(pt) for pt in seeds.tolist()]
+
+    if pattern != "poisson":
+        raise ValueError(f"Unsupported pattern '{pattern}'")
+
     if min_dist is not None:
         r = min_dist
     else:
