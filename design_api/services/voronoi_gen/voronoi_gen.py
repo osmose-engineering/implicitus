@@ -5,6 +5,7 @@ from typing import Tuple, List, Optional, Dict
 from typing import Callable
 
 import math
+from .organic.construct import construct_voronoi_cells
 def derive_bbox_from_primitive(primitive: Dict[str, Any]) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
     """
     Compute axis-aligned bounding box (min and max) for the given primitive spec.
@@ -327,6 +328,7 @@ def build_hex_lattice(
 
     if return_cells:
         from .organic.construct import construct_voronoi_cells
+
         cells = construct_voronoi_cells(
             pts, bbox_min, bbox_max, **cell_kwargs
         )
