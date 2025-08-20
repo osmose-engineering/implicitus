@@ -18,21 +18,15 @@ def test_compute_voronoi_adjacency_basic():
         [1.0, 0.0, 0.0],
         [0.0, 1.0, 0.0],
     ])
-    adj = compute_voronoi_adjacency(seeds)
-    assert isinstance(adj, dict)
-    assert set(adj.keys()) == {0, 1, 2}
-    for i, neighbors in adj.items():
-        assert isinstance(neighbors, list)
-        for n in neighbors:
-            assert isinstance(n, int)
-            assert n != i
+    adj = compute_voronoi_adjacency(seeds, 1.0)
+    assert isinstance(adj, list)
+    assert all(isinstance(pair, tuple) and len(pair) == 2 for pair in adj)
 
 def test_compute_voronoi_adjacency_single_site():
     seeds = np.array([[0.0, 0.0, 0.0]])
-    adj = compute_voronoi_adjacency(seeds)
-    assert isinstance(adj, dict)
-    assert set(adj.keys()) == {0}
-    assert adj[0] == []
+    adj = compute_voronoi_adjacency(seeds, 1.0)
+    assert isinstance(adj, list)
+    assert adj == []
 
 def test_call_sdf_with_array_input():
     def sdf(pts):
