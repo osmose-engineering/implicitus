@@ -8,32 +8,57 @@ from typing import Dict, Callable
 import itertools
 from scipy.spatial import Voronoi
 
-def compute_medial_axis(imds_mesh: Any) -> np.ndarray:
+
+def compute_medial_axis(imds_mesh: Any, tol: float = 1e-8) -> np.ndarray:
+    """Compute an approximation of the medial axis of the interface mesh.
+
+    Parameters
+    ----------
+    imds_mesh: Any
+        Object exposing a ``vertices`` attribute as an ``(N, 3)`` array.
+    tol: float, optional
+        Extra tolerance to expand the mesh bounds when filtering Voronoi
+        vertices.  Larger values keep more vertices; a value of ``0`` clips
+        strictly to the axis-aligned bounding box of the mesh.
+
+    Returns
+    -------
+    np.ndarray
+        Array of Voronoi vertices that fall within the mesh bounds.
     """
-    Compute an approximation of the medial axis of the interface mesh.
-    imds_mesh should have a `.vertices` attribute as an (N,3) numpy array.
-    Returns:
-        medial_points: (M,3) numpy array of medial axis vertex positions.
-    """
+
     vertices = getattr(imds_mesh, "vertices", None)
     if vertices is None:
         raise ValueError("imds_mesh must have a 'vertices' attribute")
+
     # Compute full Voronoi diagram of the mesh vertices
     vor = Voronoi(vertices)
-    # TODO: Prune Voronoi vertices to medial axis subset within mesh boundaries
-    medial_points = vor.vertices
+
+    # Clip Voronoi vertices to lie within the mesh's bounding box (+/- tol)
+    bbox_min = vertices.min(axis=0) - tol
+    bbox_max = vertices.max(axis=0) + tol
+    inside = np.all((vor.vertices >= bbox_min) & (vor.vertices <= bbox_max), axis=1)
+    medial_points = vor.vertices[inside]
+
     return medial_points
 
 
-def trace_hexagon(seed_pt: np.ndarray, medial_points: np.ndarray, plane_normal: np.ndarray, max_distance: Optional[float] = None) -> np.ndarray:
+def trace_hexagon(
+    seed_pt: np.ndarray,
+    medial_points: np.ndarray,
+    plane_normal: np.ndarray,
+    max_distance: Optional[float] = None,
+) -> np.ndarray:
     """
-    Trace approximate hexagonal cell vertices around seed_pt by casting six rays
-    in the plane defined by plane_normal and intersecting with medial_points.
+    Trace approximate hexagonal cell vertices around ``seed_pt`` using
+    perpendicular bisectors to its nearest neighbors in the slicing plane.
+
     Args:
         seed_pt: (3,) array, seed point location.
-        medial_points: (M,3) array of medial axis points.
+        medial_points: (M,3) array of medial axis or seed points.
         plane_normal: (3,) array normal to the slicing plane.
-        max_distance: fallback ray length if no medial intersection found.
+        max_distance: fallback ray length if no neighbor data is available.
+
     Returns:
         hex_pts: (6,3) array of hexagon vertex positions.
     """
@@ -46,7 +71,6 @@ def trace_hexagon(seed_pt: np.ndarray, medial_points: np.ndarray, plane_normal: 
     v = np.cross(plane_normal, u)
     v /= np.linalg.norm(v)
 
-    angles = np.linspace(0, 2 * np.pi, 6, endpoint=False)
     hex_pts: List[np.ndarray] = []
 
     # Pre-compute bounding box of the medial points for ray fallback
@@ -73,32 +97,58 @@ def trace_hexagon(seed_pt: np.ndarray, medial_points: np.ndarray, plane_normal: 
             return None
         return tmin if tmin > 0 else tmax
 
-    for theta in angles:
-        dir_vec = np.cos(theta) * u + np.sin(theta) * v
-        # Vector from seed to all medial points
-        vecs = medial_points - seed_pt
-        # Projection lengths along dir_vec
-        t = vecs.dot(dir_vec)
-        mask = t > 0
-        if not np.any(mask):
-            # Fallback: intersect with bounding box or expected radius
+    # Vector from seed to all other points
+    vecs = medial_points - seed_pt
+    dists = np.linalg.norm(vecs, axis=1)
+    mask = dists > 1e-8
+    vecs = vecs[mask]
+    dists = dists[mask]
+
+    hex_success = False
+    if vecs.shape[0] >= 6:
+        # Select six nearest neighbors
+        idx = np.argpartition(dists, 6)[:6]
+        neighbor_vecs = vecs[idx]
+        # 2D coordinates in plane basis
+        neighbor_2d = np.column_stack((neighbor_vecs.dot(u), neighbor_vecs.dot(v)))
+        # Sort neighbors by angle around the seed for consistency
+        ang = np.arctan2(neighbor_2d[:, 1], neighbor_2d[:, 0])
+        order = np.argsort(ang)
+        neighbor_2d = neighbor_2d[order]
+
+        normals = neighbor_2d
+        bs = np.sum(neighbor_2d ** 2, axis=1) / 2.0
+        verts_2d: List[np.ndarray] = []
+        for i in range(6):
+            j = (i + 1) % 6
+            N = np.vstack([normals[i], normals[j]])
+            B = np.array([bs[i], bs[j]])
+            try:
+                x = np.linalg.solve(N, B)
+            except np.linalg.LinAlgError:
+                verts_2d = []
+                break
+            verts_2d.append(x)
+
+        if len(verts_2d) == 6:
+            hex_pts = [seed_pt + x[0] * u + x[1] * v for x in verts_2d]
+            hex_pts = np.vstack(hex_pts)
+            hex_success = True
+
+    if not hex_success:
+        # Neighbor data unavailable or computation failed; fallback to bbox rays
+        angles = np.linspace(0, 2 * np.pi, 6, endpoint=False)
+        for theta in angles:
+            dir_vec = np.cos(theta) * u + np.sin(theta) * v
             length = _ray_box_intersection(seed_pt, dir_vec)
             if length is not None:
                 hex_pts.append(seed_pt + dir_vec * length)
-                continue
-            if max_distance is not None:
+            elif max_distance is not None:
                 hex_pts.append(seed_pt + dir_vec * max_distance)
-                continue
-            raise ValueError("No valid intersection for ray; resample seed point")
-        pts_masked = medial_points[mask]
-        t_masked = t[mask]
-        # Compute perpendicular distances to the ray
-        perp = pts_masked - seed_pt - np.outer(t_masked, dir_vec)
-        perp_dists = np.linalg.norm(perp, axis=1)
-        idx = np.argmin(perp_dists)
-        hex_pts.append(pts_masked[idx])
+            else:
+                raise ValueError("No valid intersection for ray; resample seed point")
+        hex_pts = np.vstack(hex_pts)
 
-    hex_pts = np.vstack(hex_pts)
     # Attempt to regularize edge lengths if available
     try:
         from design_api.services.voronoi_gen.uniform.regularizer import regularize_hexagon
