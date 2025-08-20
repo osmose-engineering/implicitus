@@ -5,6 +5,7 @@ from typing import Tuple, List, Optional, Dict
 from typing import Callable
 
 import math
+from .organic.construct import construct_voronoi_cells
 def derive_bbox_from_primitive(primitive: Dict[str, Any]) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
     """
     Compute axis-aligned bounding box (min and max) for the given primitive spec.
@@ -264,11 +265,22 @@ def build_hex_lattice(
     bbox_min: Tuple[float, float, float],
     bbox_max: Tuple[float, float, float],
     spacing: float,
-    primitive: Dict[str, Any]
-) -> Tuple[List[Tuple[float, float, float]], List[Tuple[int, int]]]:
+    primitive: Dict[str, Any],
+    *,
+    return_cells: bool = False,
+    **cell_kwargs: Any,
+) -> Union[
+    Tuple[List[Tuple[float, float, float]], List[Tuple[int, int]]],
+    Tuple[List[Tuple[float, float, float]], List[Tuple[int, int]], List[Dict[str, Any]]],
+]:
     """
     Generate a 3D hexagonally-packed lattice of points within the given AABB,
     and return both the list of points and the nearest-neighbor edges.
+
+    If ``return_cells`` is True, the function also constructs full Voronoi cell
+    geometry for each seed using :func:`construct_voronoi_cells` and returns the
+    resulting cell dictionaries as a third element.  Additional keyword
+    arguments are forwarded to ``construct_voronoi_cells`` (e.g. ``resolution``).
     """
     # Unpack bounds
     x0, y0, z0 = bbox_min
@@ -313,6 +325,12 @@ def build_hex_lattice(
 
     # Build adjacency efficiently via spatial pruning
     edges = prune_adjacency_via_grid(pts, spacing)
+
+    if return_cells:
+        cells = construct_voronoi_cells(
+            pts, bbox_min, bbox_max, **cell_kwargs
+        )
+        return pts, edges, cells
 
     return pts, edges
 
