@@ -381,7 +381,7 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
             color={strutColor}
           />
         )}
-        {showInfill && validInfillEdges.length > 0 && (
+        {showInfill && !showStruts && validInfillEdges.length > 0 && (
           <lineSegments>
             <bufferGeometry attach="geometry">
               <bufferAttribute
