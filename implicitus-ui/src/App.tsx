@@ -203,9 +203,11 @@ function App() {
           sampleEdges: infill?.edges?.slice(0, 5),
         });
         setSpec(data.spec);
-        setEdges(infill?.edges ?? []);
-        setInfillPoints(infill?.seed_points ?? []);
-        setInfillEdges(infill?.edges ?? []);
+
+        setEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
+        setInfillPoints(data.spec[0]?.modifiers?.infill?.seed_points ?? []);
+        setInfillEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
+
         setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
         if (data.summary) {
           setSummary(data.summary);
