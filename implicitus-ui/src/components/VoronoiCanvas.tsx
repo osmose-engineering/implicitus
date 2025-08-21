@@ -118,8 +118,8 @@ interface VoronoiCanvasProps {
   strutColor?: string | number;
   infillPoints?: [number, number, number][];
   infillEdges?: [number, number][];
-  /** Infill cells */
-  cells: Array<{ verts: number[][]; faces: number[][] }>;
+  /** Optional full cell geometry */
+  cells?: Array<{ verts: number[][]; faces: number[][] }>;
 }
 
 // Toggle verbose logging
@@ -156,6 +156,9 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
   const safeInfillEdges = Array.isArray(infillEdges)
     ? infillEdges
     : (typeof infillEdges === 'string' ? JSON.parse(infillEdges) : []);
+  const safeCells = Array.isArray(cells)
+    ? cells
+    : (typeof cells === 'string' ? JSON.parse(cells) : []);
   // Ensure only well-formed point and edge arrays
   const validSeedPoints = Array.isArray(safeSeedPoints)
     ? safeSeedPoints.filter(p => Array.isArray(p) && p.length === 3 && p.every(coord => typeof coord === 'number'))
@@ -169,8 +172,12 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
   const validInfillEdges = Array.isArray(safeInfillEdges)
     ? safeInfillEdges.filter(e => Array.isArray(e) && e.length === 2 && e.every(idx => Number.isInteger(idx)))
     : [];
+  const validCells = Array.isArray(safeCells)
+    ? safeCells.filter(c => Array.isArray(c?.verts) && Array.isArray(c?.faces))
+    : [];
   DEBUG_CANVAS && console.log('VoronoiCanvas validInfillPoints count:', validInfillPoints.length);
   DEBUG_CANVAS && console.log('VoronoiCanvas validInfillEdges count:', validInfillEdges.length);
+  DEBUG_CANVAS && console.log('VoronoiCanvas validCells count:', validCells.length);
   DEBUG_CANVAS && console.log('VoronoiCanvas sample validInfillPoints (first 5):', validInfillPoints.slice(0,5));
   DEBUG_CANVAS && console.log('VoronoiCanvas sample validInfillEdges (first 5):', validInfillEdges.slice(0,5));
   DEBUG_CANVAS && console.log('VoronoiCanvas safe data:', { safeSeedPoints, safeEdges });
@@ -254,7 +261,7 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
 
   // Merge all cell geometries into a single mesh
   const mergedCellGeometry = useMemo(() => {
-    if (cells.length === 0) return null;
+    if (validCells.length === 0) return null;
     // filter cells to only those inside the seed-points bounding sphere
     const xs = validSeedPoints.map(p => p[0]);
     const ys = validSeedPoints.map(p => p[1]);
@@ -267,7 +274,8 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
     const sphereCz = (minZ + maxZ) / 2;
     const sphereR  = Math.max(maxX - minX, maxY - minY, maxZ - minZ) / 2;
 
-    const filteredCells = cells.filter(cell => {
+    const filteredCells = validCells.filter(cell => {
+      if (!Array.isArray(cell.verts) || cell.verts.length === 0) return false;
       // compute centroid of this cell
       const centroid = cell.verts.reduce(
         (acc, [x, y, z]) => [acc[0] + x, acc[1] + y, acc[2] + z],
@@ -306,7 +314,7 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
     geom.setIndex(indices);
     geom.computeVertexNormals();
     return geom;
-  }, [cells, validSeedPoints]);
+  }, [validCells, validSeedPoints]);
 
   return (
     <div style={{
