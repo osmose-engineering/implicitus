@@ -1,5 +1,6 @@
 import numpy as np
 import pytest
+import logging
 
 from design_api.services.voronoi_gen.uniform.sampler import compute_medial_axis, trace_hexagon
 
@@ -63,12 +64,14 @@ def test_compute_medial_axis_sphere_mesh():
     assert unique_medial.shape[0] > 10
 
 
-def test_trace_hexagon_fallback():
+def test_trace_hexagon_fallback(caplog):
     seed = np.array([0.0, 0.0, 0.0])
     # All medial points are behind the seed (negative x direction)
     medial = np.tile(np.array([-1.0, 0.0, 0.0]), (10, 1))
     plane_normal = np.array([0.0, 0.0, 1.0])
-    hex_pts = trace_hexagon(seed, medial, plane_normal, max_distance=2.0)
+    with caplog.at_level(logging.WARNING):
+        hex_pts = trace_hexagon(seed, medial, plane_normal, max_distance=2.0)
+    assert "fallback" in caplog.text.lower()
     # Should be a (6,3) array of points not exceeding the expected radius
     assert isinstance(hex_pts, np.ndarray)
     assert hex_pts.shape == (6, 3)
@@ -78,6 +81,9 @@ def test_trace_hexagon_fallback():
     assert np.all(dists <= max_dist + 1e-6)
     # At least one ray should hit the bounding box before reaching max_dist
     assert np.any(dists < max_dist)
+    # Hexagon should form connected edges
+    edges = np.linalg.norm(np.roll(hex_pts, -1, axis=0) - hex_pts, axis=1)
+    assert np.all(edges > 0)
 
 
 def test_trace_hexagon_basic():
@@ -93,6 +99,41 @@ def test_trace_hexagon_basic():
     # Should produce exactly 6 unique points
     unique_pts = {tuple(pt) for pt in hex_pts}
     assert len(unique_pts) == 6
+
+
+def test_hexagons_share_vertices_with_adjacent_seeds():
+    s = np.sqrt(3) / 2
+    seeds = np.array(
+        [
+            [0, 0, 0],
+            [1, 0, 0],
+            [0.5, s, 0],
+            [-0.5, s, 0],
+            [-1, 0, 0],
+            [-0.5, -s, 0],
+            [0.5, -s, 0],
+            [2, 0, 0],
+            [1.5, s, 0],
+            [1.5, -s, 0],
+        ]
+    )
+    plane_normal = np.array([0.0, 0.0, 1.0])
+
+    hex_center, fb1 = trace_hexagon(seeds[0], seeds, plane_normal, report_method=True)
+    hex_neighbor, fb2 = trace_hexagon(seeds[1], seeds, plane_normal, report_method=True)
+    assert fb1 is False and fb2 is False
+
+    # Vertex of the center cell closest to the neighbor seed should be influenced by it
+    idx = np.argmin(np.linalg.norm(hex_center - seeds[1], axis=1))
+    v = hex_center[idx]
+    close = np.argsort(np.linalg.norm(seeds - v, axis=1))[:2]
+    assert 1 in close
+
+    # Similarly, the neighbor cell should have a vertex influenced by the center seed
+    idx2 = np.argmin(np.linalg.norm(hex_neighbor - seeds[0], axis=1))
+    v2 = hex_neighbor[idx2]
+    close2 = np.argsort(np.linalg.norm(seeds - v2, axis=1))[:2]
+    assert 0 in close2
 
 
 def test_trace_hexagon_no_intersection_error():
