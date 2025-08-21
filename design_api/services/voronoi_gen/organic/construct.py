@@ -6,14 +6,14 @@ from typing import Union, Any
 from typing import Tuple, List, Optional
 from typing import Dict, Callable
 import itertools
-from ..voronoi_gen import (
-    compute_voronoi_adjacency,
-    _call_sdf,
-    smooth_union,
-    smooth_intersection,
-    smooth_difference,
-)
 from .adaptive import OctreeNode, generate_adaptive_grid
+
+
+def _voronoi_helpers():
+    """Lazy import of core Voronoi routines to avoid circular imports."""
+    from .. import voronoi_gen as vg
+
+    return vg
 
 def construct_voronoi_cells(
     points: List[Tuple[float, float, float]],
@@ -26,6 +26,12 @@ def construct_voronoi_cells(
     cap_blend: float = 0.0,
     adaptive_grid: Optional[OctreeNode] = None
 ) -> List[Dict]:
+    vg = _voronoi_helpers()
+    _call_sdf = vg._call_sdf
+    smooth_union = vg.smooth_union
+    smooth_intersection = vg.smooth_intersection
+    smooth_difference = vg.smooth_difference
+    compute_voronoi_adjacency = vg.compute_voronoi_adjacency
     # Ensure integer-indexed neighbors: convert NumPy array of points to list of tuples
     if isinstance(points, np.ndarray):
         points = [tuple(pt) for pt in points]
@@ -233,6 +239,12 @@ def construct_surface_voronoi_cells(
     adaptive_grid: Optional[OctreeNode] = None,
     resolution: Tuple[int, int, int] = (64, 64, 64)
 ) -> list:
+    vg = _voronoi_helpers()
+    _call_sdf = vg._call_sdf
+    smooth_union = vg.smooth_union
+    smooth_intersection = vg.smooth_intersection
+    smooth_difference = vg.smooth_difference
+    compute_voronoi_adjacency = vg.compute_voronoi_adjacency
     # Support shorthand signature: shift args if body_sdf is array
     if not callable(body_sdf):
         # Called as (seed_points, bbox_min, bbox_max)
