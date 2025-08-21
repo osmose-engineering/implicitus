@@ -24,16 +24,49 @@ const VoronoiLatticePreview: React.FC<VoronoiLatticePreviewProps> = ({
 }) => {
   const seedPoints = spec.seed_points ?? [];
 
-  const seedPointsUnits = useMemo(() =>
-    (spec.seed_points ?? []).map(([x, y, z]) => [x * MM_TO_UNIT, y * MM_TO_UNIT, z * MM_TO_UNIT] as [number, number, number]),
-  [spec.seed_points]);
+  const seedPointsUnits = useMemo(
+    () =>
+      (spec.seed_points ?? []).map(
+        ([x, y, z]) => [x * MM_TO_UNIT, y * MM_TO_UNIT, z * MM_TO_UNIT] as [number, number, number]
+      ),
+    [spec.seed_points]
+  );
 
-  // strut thickness in scene units (prefer wall_thickness if provided)
-  const thicknessUnits = ((spec.wall_thickness ?? ((spec.min_dist ?? 1) * 0.1)) as number) * MM_TO_UNIT;
+  // Strut thickness in scene units.  If wall_thickness is omitted, fall back to
+  // min_dist, and finally a 1mm default.
+  const thicknessUnits = ((spec.wall_thickness ?? spec.min_dist ?? 1) as number) * MM_TO_UNIT;
 
-  // Compute Voronoi edge segments by connecting neighbors within cutoff distance
+  // Compute Voronoi edge segments by connecting neighboring seeds.  When
+  // min_dist is not provided (e.g. when a fixed seed count is requested), the
+  // previous implementation used a constant 1 mm cutoff which was often much
+  // smaller than the actual seed spacing.  This resulted in most seeds having
+  // no neighbors and the preview showing many disjoint short struts. To make
+  // the visualization robust, estimate a reasonable cutoff from the seed
+  // distribution by averaging the nearest-neighbor distance.
   const edgePositions = useMemo(() => {
-    const cutoff = (spec.min_dist ?? 1) * MM_TO_UNIT * 2;
+    if (seedPointsUnits.length === 0) return new Float32Array();
+
+    let cutoff = spec.min_dist ? spec.min_dist * MM_TO_UNIT * 2 : 0;
+    if (!spec.min_dist) {
+      let total = 0;
+      for (let i = 0; i < seedPointsUnits.length; i++) {
+        let minD2 = Infinity;
+        const [xi, yi, zi] = seedPointsUnits[i];
+        for (let j = 0; j < seedPointsUnits.length; j++) {
+          if (i === j) continue;
+          const [xj, yj, zj] = seedPointsUnits[j];
+          const dx = xi - xj;
+          const dy = yi - yj;
+          const dz = zi - zj;
+          const d2 = dx * dx + dy * dy + dz * dz;
+          if (d2 < minD2) minD2 = d2;
+        }
+        if (minD2 < Infinity) total += Math.sqrt(minD2);
+      }
+      const avg = total / seedPointsUnits.length;
+      cutoff = avg * 1.5; // generous neighbor radius
+    }
+
     const cutoff2 = cutoff * cutoff;
     const arr: number[] = [];
     for (let i = 0; i < seedPointsUnits.length; i++) {
@@ -95,7 +128,7 @@ const VoronoiLatticePreview: React.FC<VoronoiLatticePreviewProps> = ({
   return (
     <>
       <instancedMesh ref={meshRef} args={[undefined, undefined, edgeMatrices.length]}>
-        <cylinderGeometry args={[thicknessUnits, thicknessUnits, 1, 8]} />
+        <cylinderGeometry args={[1, 1, 1, 8]} />
         <meshStandardMaterial color="white" />
       </instancedMesh>
       <points>
