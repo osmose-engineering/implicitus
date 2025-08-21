@@ -15,6 +15,12 @@ def _voronoi_helpers():
 
     return vg
 
+
+def compute_voronoi_adjacency(*args, **kwargs):
+    """Proxy to :mod:`voronoi_gen.compute_voronoi_adjacency` for monkeypatching."""
+    vg = _voronoi_helpers()
+    return vg.compute_voronoi_adjacency(*args, **kwargs)
+
 def construct_voronoi_cells(
     points: List[Tuple[float, float, float]],
     bbox_min: Tuple[float, float, float],
@@ -220,7 +226,14 @@ def construct_voronoi_cells(
         })
 
     # Attach neighbor lists by index
-    adjacency = compute_voronoi_adjacency(points, bbox_min, bbox_max, resolution)
+    adjacency_raw = compute_voronoi_adjacency(points, bbox_min, bbox_max, resolution)
+    if isinstance(adjacency_raw, list):
+        adjacency = {i: [] for i in range(len(points))}
+        for i, j in adjacency_raw:
+            adjacency[i].append(j)
+            adjacency[j].append(i)
+    else:
+        adjacency = adjacency_raw
     for idx, cell in enumerate(cells):
         cell["neighbors"] = adjacency.get(idx, [])
 
@@ -331,9 +344,16 @@ def construct_surface_voronoi_cells(
                 "neighbors": []
             })
         # Compute adjacency via compute_voronoi_adjacency
-        adjacency = compute_voronoi_adjacency(
+        adjacency_raw = compute_voronoi_adjacency(
             seed_points, bbox_min, bbox_max, resolution
         )
+        if isinstance(adjacency_raw, list):
+            adjacency = {i: [] for i in range(len(seed_points))}
+            for i, j in adjacency_raw:
+                adjacency[i].append(j)
+                adjacency[j].append(i)
+        else:
+            adjacency = adjacency_raw
         for idx, cell in enumerate(cells):
             cell["neighbors"] = adjacency.get(idx, [])
         return cells
@@ -403,9 +423,16 @@ def construct_surface_voronoi_cells(
             "area": 0.0
         })
     # Compute adjacency and add to each cell dict
-    adjacency = compute_voronoi_adjacency(
+    adjacency_raw = compute_voronoi_adjacency(
         seed_points, bbox_min, bbox_max, resolution
     )
+    if isinstance(adjacency_raw, list):
+        adjacency = {i: [] for i in range(len(seed_points))}
+        for i, j in adjacency_raw:
+            adjacency[i].append(j)
+            adjacency[j].append(i)
+    else:
+        adjacency = adjacency_raw
     for idx, cell in enumerate(cells):
         cell["neighbors"] = adjacency.get(idx, [])
     return cells
