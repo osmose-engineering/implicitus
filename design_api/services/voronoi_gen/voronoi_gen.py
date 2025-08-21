@@ -43,7 +43,7 @@ def build_spatial_index(
         A dict mapping (i,j,k) cell keys to lists of seed indices in that cell.
     """
     grid: Dict[Tuple[int, int, int], List[int]] = {}
-    cell_size = 2 * spacing
+    cell_size = max(2 * spacing, 1e-9)
     for idx, (x, y, z) in enumerate(seeds):
         i = math.floor(x / cell_size)
         j = math.floor(y / cell_size)
@@ -323,8 +323,31 @@ def build_hex_lattice(
         else:
             coords, pts = [], []
 
-    # Build adjacency efficiently via spatial pruning
-    edges = prune_adjacency_via_grid(pts, spacing)
+    # Build Voronoi diagram and extract ridge segments (finite edges)
+    try:
+        from scipy.spatial import Voronoi  # type: ignore
+        vor = Voronoi(pts)
+        vertex_map: Dict[int, int] = {}
+        verts: List[Tuple[float, float, float]] = []
+        edge_list: List[Tuple[int, int]] = []
+        for rv in vor.ridge_vertices:
+            if len(rv) != 2 or rv[0] == -1 or rv[1] == -1:
+                continue  # skip infinite ridges
+            v0, v1 = rv
+            p0 = vor.vertices[v0]
+            p1 = vor.vertices[v1]
+            if primitive:
+                if not point_in_primitive(tuple(p0), primitive) or not point_in_primitive(tuple(p1), primitive):
+                    continue
+            for vi, p in ((v0, p0), (v1, p1)):
+                if vi not in vertex_map:
+                    vertex_map[vi] = len(verts)
+                    verts.append((float(p[0]), float(p[1]), float(p[2])))
+            edge_list.append((vertex_map[v0], vertex_map[v1]))
+    except Exception:
+        # Fall back to seed adjacency when SciPy is unavailable
+        verts = list(pts)
+        edge_list = prune_adjacency_via_grid(pts, spacing)
 
     if return_cells:
         from .organic.construct import construct_voronoi_cells
@@ -332,9 +355,9 @@ def build_hex_lattice(
         cells = construct_voronoi_cells(
             pts, bbox_min, bbox_max, **cell_kwargs
         )
-        return pts, edges, cells
+        return verts, edge_list, cells
 
-    return pts, edges
+    return verts, edge_list
 
 
 
@@ -343,32 +366,32 @@ def compute_voronoi_adjacency(
     *args: Any,
     spacing: Optional[float] = None,
     **kwargs: Any,
-) -> Dict[int, List[int]]:
+) -> List[Tuple[int, int]]:
     """
-    Compute adjacency of seed points using a spatial hash grid.
+    Compute a list of neighboring seed index pairs using a spatial hash grid.
 
     Parameters
     ----------
     points
-        Seed coordinates as ``(x, y, z)`` tuples.
+        Seed coordinates as ``(x, y, z)`` tuples or arrays.
     spacing
         Optional minimum spacing between seeds. If omitted, it is inferred
         from the closest pair of points.
     *args, **kwargs
-        Additional positional/keyword arguments are ignored, allowing this
-        function to be called with legacy signatures such as
-        ``(points, bbox_min, bbox_max, resolution)``.
+        Additional positional/keyword arguments are ignored for backward
+        compatibility with older call signatures.
 
     Returns
     -------
-    Dict[int, List[int]]
-        Mapping of seed index to a list of neighboring seed indices.
+    List[Tuple[int, int]]
+        Each tuple ``(i, j)`` denotes an undirected edge between seeds ``i`` and
+        ``j``.  The list contains only ``i < j`` pairs.
     """
     # Ignore legacy positional arguments (e.g., bbox, resolution)
     if spacing is None or isinstance(spacing, (tuple, list)):
         spacing = None
 
-    if spacing is None and points:
+    if spacing is None and len(points) > 0:
         min_dist = float("inf")
         for i, (x0, y0, z0) in enumerate(points):
             for j in range(i + 1, len(points)):
@@ -379,9 +402,4 @@ def compute_voronoi_adjacency(
                     min_dist = dist
         spacing = min_dist / 2.0 if min_dist < float("inf") else 0.0
 
-    edges = prune_adjacency_via_grid(points, spacing or 0.0)
-    adjacency: Dict[int, List[int]] = {i: [] for i in range(len(points))}
-    for i, j in edges:
-        adjacency[i].append(j)
-        adjacency[j].append(i)
-    return adjacency
+    return prune_adjacency_via_grid(points, spacing or 0.0)
