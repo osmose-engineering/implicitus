@@ -23,7 +23,10 @@ from design_api.services.llm_service import generate_design_spec
 from design_api.services.mapping import map_primitive as map_to_proto_dict
 from design_api.services.validator import validate_model_spec as validate_proto
 from ai_adapter.csg_adapter import review_request, generate_summary, update_request
-from design_api.services.voronoi_gen.voronoi_gen import compute_voronoi_adjacency
+from design_api.services.voronoi_gen.voronoi_gen import (
+    compute_voronoi_adjacency,
+    construct_voronoi_cells,
+)
 
 @dataclass
 class DesignState:
@@ -147,9 +150,17 @@ async def review(req: dict, sid: Optional[str] = None):
                     else:
                         for i, j in adjacency:
                             edge_list.append([i, j])
-                    # expose both raw edges and combined cell data for frontend
+
                     inf["edges"] = edge_list
-                    inf["cells"] = {"points": pts, "edges": edge_list}
+
+                    try:
+                        cells = construct_voronoi_cells(
+                            pts, bbox_min, bbox_max, return_cells=True
+                        )
+                    except TypeError:
+                        # Fallback for older signature without return_cells
+                        cells = construct_voronoi_cells(pts, bbox_min, bbox_max)
+                    inf["cells"] = cells
 
                     logging.debug(
                         f"[DEBUG review] spacing={spacing} produced {len(edge_list)} edges; sample: {edge_list[:10]}"
@@ -159,8 +170,15 @@ async def review(req: dict, sid: Optional[str] = None):
         # sanitize spec to convert numpy arrays into lists for JSON serialization
         def _sanitize(o):
             import numpy as np
+
             if isinstance(o, np.ndarray):
                 return o.tolist()
+            if isinstance(o, (np.floating, float)):
+                return float(o)
+            if isinstance(o, (np.integer, int)):
+                return int(o)
+            if isinstance(o, tuple):
+                return [_sanitize(i) for i in o]
             if isinstance(o, list):
                 return [_sanitize(i) for i in o]
             if isinstance(o, dict):
@@ -231,7 +249,13 @@ async def update(req: UpdateRequest):
                         edge_list.append([i, j])
 
                 inf["edges"] = edge_list
-                inf["cells"] = {"points": pts, "edges": edge_list}
+                try:
+                    cells = construct_voronoi_cells(
+                        pts, bbox_min, bbox_max, return_cells=True
+                    )
+                except TypeError:
+                    cells = construct_voronoi_cells(pts, bbox_min, bbox_max)
+                inf["cells"] = cells
 
                 logging.debug(
                     f"[DEBUG update] spacing={spacing} produced {len(edge_list)} edges; sample: {edge_list[:10]}"
@@ -241,8 +265,15 @@ async def update(req: UpdateRequest):
     # sanitize new_spec to convert numpy arrays into lists for JSON serialization
     def _sanitize(o):
         import numpy as np
+
         if isinstance(o, np.ndarray):
             return o.tolist()
+        if isinstance(o, (np.floating, float)):
+            return float(o)
+        if isinstance(o, (np.integer, int)):
+            return int(o)
+        if isinstance(o, tuple):
+            return [_sanitize(i) for i in o]
         if isinstance(o, list):
             return [_sanitize(i) for i in o]
         if isinstance(o, dict):
