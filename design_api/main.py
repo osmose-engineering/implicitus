@@ -127,8 +127,26 @@ async def review(req: dict, sid: Optional[str] = None):
                 pattern = inf.get("pattern")
                 logging.debug(f"PATTERN {pattern}")
                 if pattern == "voronoi":
-                    spacing = inf.get("spacing", 2.0)
-                    inf["edges"] = compute_voronoi_adjacency(pts, spacing)
+                    # prefer explicit spacing, otherwise fall back to min_dist or a sane default
+                    spacing = (
+                        inf.get("spacing")
+                        or inf.get("min_dist")
+                        or 2.0
+                    )
+                    # compute adjacency of seed points using spatial pruning
+                    adjacency = compute_voronoi_adjacency(pts, spacing=spacing)
+                    # convert adjacency map -> unique edge list (i<j)
+                    edge_list = []
+                    for i, nbrs in adjacency.items():
+                        for j in nbrs:
+                            if j > i:
+                                edge_list.append([i, j])
+                    # expose both raw edges and combined cell data for frontend
+                    inf["edges"] = edge_list
+                    inf["cells"] = {"points": pts, "edges": edge_list}
+                    logging.debug(
+                        f"[DEBUG review] spacing={spacing} produced {len(edge_list)} edges; sample: {edge_list[:10]}"
+                    )
 
         # sanitize spec to convert numpy arrays into lists for JSON serialization
         def _sanitize(o):
@@ -186,9 +204,22 @@ async def update(req: UpdateRequest):
         if pts and bbox_min and bbox_max:
             pattern = inf.get("pattern")
             if pattern == "voronoi":
-                spacing = inf.get("spacing", 2.0)
-                inf["edges"] = compute_voronoi_adjacency(pts, spacing)
-            logging.debug(f"[DEBUG update] got {len(inf.get('edges', []))} edges, sample first 10: {inf.get('edges', [])[:10]}")
+                spacing = (
+                    inf.get("spacing")
+                    or inf.get("min_dist")
+                    or 2.0
+                )
+                adjacency = compute_voronoi_adjacency(pts, spacing=spacing)
+                edge_list = []
+                for i, nbrs in adjacency.items():
+                    for j in nbrs:
+                        if j > i:
+                            edge_list.append([i, j])
+                inf["edges"] = edge_list
+                inf["cells"] = {"points": pts, "edges": edge_list}
+            logging.debug(
+                f"[DEBUG update] spacing={spacing} produced {len(inf.get('edges', []))} edges; sample: {inf.get('edges', [])[:10]}"
+            )
 
     # sanitize new_spec to convert numpy arrays into lists for JSON serialization
     def _sanitize(o):
