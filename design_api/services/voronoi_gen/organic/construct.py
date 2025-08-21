@@ -6,6 +6,10 @@ from typing import Union, Any
 from typing import Tuple, List, Optional
 from typing import Dict, Callable
 import itertools
+try:
+    from scipy.spatial import Delaunay
+except ImportError:  # pragma: no cover - optional dependency
+    Delaunay = None
 from ..voronoi_gen import (
     compute_voronoi_adjacency,
     _call_sdf,
@@ -106,30 +110,28 @@ def construct_voronoi_cells(
                 "volume": 0.0,
                 "neighbors": []
             })
-        # Compute adjacency via Delaunay triangulation of seed points
+        # Compute adjacency for seeds
         if Delaunay is not None and len(points) >= 2:
             try:
                 pts_np = np.array(points)
                 tri = Delaunay(pts_np)
-                adj_map = {tuple(seed): set() for seed in points}
+                adj_sets = [set() for _ in points]
                 for simplex in tri.simplices:
                     for i in range(len(simplex)):
-                        for j in range(i+1, len(simplex)):
-                            si = tuple(points[simplex[i]])
-                            sj = tuple(points[simplex[j]])
-                            adj_map[si].add(sj)
-                            adj_map[sj].add(si)
-                # Assign neighbor lists
-                for cell in cells:
-                    cell['neighbors'] = list(adj_map[cell['site']])
+                        for j in range(i + 1, len(simplex)):
+                            a, b = simplex[i], simplex[j]
+                            adj_sets[a].add(b)
+                            adj_sets[b].add(a)
+                for idx, cell in enumerate(cells):
+                    cell['neighbors'] = [points[j] for j in adj_sets[idx]]
             except Exception:
-                # Fallback with no neighbors
-                for cell in cells:
-                    cell['neighbors'] = []
+                adjacency = compute_voronoi_adjacency(points, bbox_min, bbox_max, resolution)
+                for idx, cell in enumerate(cells):
+                    cell['neighbors'] = [points[j] for j in adjacency.get(idx, [])]
         else:
-            # Fallback with no neighbors
-            for cell in cells:
-                cell['neighbors'] = []
+            adjacency = compute_voronoi_adjacency(points, bbox_min, bbox_max, resolution)
+            for idx, cell in enumerate(cells):
+                cell['neighbors'] = [points[j] for j in adjacency.get(idx, [])]
         return cells
 
     nx, ny, nz = resolution
@@ -213,10 +215,28 @@ def construct_voronoi_cells(
             "volume": 0.0
         })
 
-    # Attach neighbor lists by index
-    adjacency = compute_voronoi_adjacency(points, bbox_min, bbox_max, resolution)
-    for idx, cell in enumerate(cells):
-        cell["neighbors"] = adjacency.get(idx, [])
+    # Attach neighbor lists using Delaunay if available
+    if Delaunay is not None and len(points) >= 2:
+        try:
+            pts_np = np.array(points)
+            tri = Delaunay(pts_np)
+            adj_sets = [set() for _ in points]
+            for simplex in tri.simplices:
+                for i in range(len(simplex)):
+                    for j in range(i + 1, len(simplex)):
+                        a, b = simplex[i], simplex[j]
+                        adj_sets[a].add(b)
+                        adj_sets[b].add(a)
+            for idx, cell in enumerate(cells):
+                cell["neighbors"] = [points[j] for j in adj_sets[idx]]
+        except Exception:
+            adjacency = compute_voronoi_adjacency(points, bbox_min, bbox_max, resolution)
+            for idx, cell in enumerate(cells):
+                cell["neighbors"] = [points[j] for j in adjacency.get(idx, [])]
+    else:
+        adjacency = compute_voronoi_adjacency(points, bbox_min, bbox_max, resolution)
+        for idx, cell in enumerate(cells):
+            cell["neighbors"] = [points[j] for j in adjacency.get(idx, [])]
 
     return cells
 
@@ -318,12 +338,32 @@ def construct_surface_voronoi_cells(
                 "area": 0.0,
                 "neighbors": []
             })
-        # Compute adjacency via compute_voronoi_adjacency
-        adjacency = compute_voronoi_adjacency(
-            seed_points, bbox_min, bbox_max, resolution
-        )
-        for idx, cell in enumerate(cells):
-            cell["neighbors"] = adjacency.get(idx, [])
+        # Compute adjacency for seeds
+        if Delaunay is not None and len(seed_points) >= 2:
+            try:
+                pts_np = np.array(seed_points)
+                tri = Delaunay(pts_np)
+                adj_sets = [set() for _ in seed_points]
+                for simplex in tri.simplices:
+                    for i in range(len(simplex)):
+                        for j in range(i + 1, len(simplex)):
+                            a, b = simplex[i], simplex[j]
+                            adj_sets[a].add(b)
+                            adj_sets[b].add(a)
+                for idx, cell in enumerate(cells):
+                    cell["neighbors"] = [seed_points[j] for j in adj_sets[idx]]
+            except Exception:
+                adjacency = compute_voronoi_adjacency(
+                    seed_points, bbox_min, bbox_max, resolution
+                )
+                for idx, cell in enumerate(cells):
+                    cell["neighbors"] = [seed_points[j] for j in adjacency.get(idx, [])]
+        else:
+            adjacency = compute_voronoi_adjacency(
+                seed_points, bbox_min, bbox_max, resolution
+            )
+            for idx, cell in enumerate(cells):
+                cell["neighbors"] = [seed_points[j] for j in adjacency.get(idx, [])]
         return cells
     if bbox_min is None or bbox_max is None:
         xs, ys, zs = zip(*seed_points)
@@ -391,10 +431,30 @@ def construct_surface_voronoi_cells(
             "area": 0.0
         })
     # Compute adjacency and add to each cell dict
-    adjacency = compute_voronoi_adjacency(
-        seed_points, bbox_min, bbox_max, resolution
-    )
-    for idx, cell in enumerate(cells):
-        cell["neighbors"] = adjacency.get(idx, [])
+    if Delaunay is not None and len(seed_points) >= 2:
+        try:
+            pts_np = np.array(seed_points)
+            tri = Delaunay(pts_np)
+            adj_sets = [set() for _ in seed_points]
+            for simplex in tri.simplices:
+                for i in range(len(simplex)):
+                    for j in range(i + 1, len(simplex)):
+                        a, b = simplex[i], simplex[j]
+                        adj_sets[a].add(b)
+                        adj_sets[b].add(a)
+            for idx, cell in enumerate(cells):
+                cell["neighbors"] = [seed_points[j] for j in adj_sets[idx]]
+        except Exception:
+            adjacency = compute_voronoi_adjacency(
+                seed_points, bbox_min, bbox_max, resolution
+            )
+            for idx, cell in enumerate(cells):
+                cell["neighbors"] = [seed_points[j] for j in adjacency.get(idx, [])]
+    else:
+        adjacency = compute_voronoi_adjacency(
+            seed_points, bbox_min, bbox_max, resolution
+        )
+        for idx, cell in enumerate(cells):
+            cell["neighbors"] = [seed_points[j] for j in adjacency.get(idx, [])]
     return cells
 

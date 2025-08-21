@@ -41,3 +41,16 @@ def test_construct_surface_voronoi_cells_smoke(seeds, bbox):
         grid = cell['sdf']
         assert isinstance(grid, np.ndarray)
         assert grid.ndim == 3
+
+
+def test_nearby_seeds_are_neighbors():
+    seeds = [
+        (0.0, 0.0, 0.0),
+        (0.1, 0.1, 0.1),
+        (0.8, 0.8, 0.8),
+    ]
+    bbox_min, bbox_max = (-1.0, -1.0, -1.0), (1.0, 1.0, 1.0)
+    cells = construct_voronoi_cells(seeds, bbox_min, bbox_max, resolution=(16, 16, 16))
+    neighbor_map = {tuple(cell['site']): set(map(tuple, cell['neighbors'])) for cell in cells}
+    assert tuple(seeds[0]) in neighbor_map[tuple(seeds[1])]
+    assert tuple(seeds[1]) in neighbor_map[tuple(seeds[0])]
