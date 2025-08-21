@@ -36,60 +36,42 @@ def test_compute_uniform_cells_basic():
         assert np.all(np.isfinite(pts))
 
 
-def test_uniform_cells_hex_shared_edges(monkeypatch):
+def test_uniform_cells_adjacent_share_edge():
     import math
-    from design_api.services.voronoi_gen.voronoi_gen import compute_voronoi_adjacency
 
-    R = 1.0
-    dx = math.sqrt(3) * R
-    seeds = np.array([
-        [0.0, 0.0, 0.0],
-        [dx, 0.0, 0.0],
-    ])
-
-    monkeypatch.setattr(
-        "design_api.services.voronoi_gen.uniform.sampler.compute_medial_axis",
-        lambda mesh: np.zeros((0, 3)),
-    )
-    monkeypatch.setattr(
-        "design_api.services.voronoi_gen.uniform.construct.compute_medial_axis",
-        lambda mesh: np.zeros((0, 3)),
-    )
-
-    def fake_trace_hexagon(seed_pt, medial_points, plane_normal, max_distance=None):
-        angles = np.radians(np.arange(6) * 60 + 30)
-        pts = []
-        for ang in angles:
-            pts.append(seed_pt + np.array([math.cos(ang), math.sin(ang), 0.0]) * R)
-        return np.array(pts)
-
-    monkeypatch.setattr(
-        "design_api.services.voronoi_gen.uniform.sampler.trace_hexagon",
-        fake_trace_hexagon,
-    )
-    monkeypatch.setattr(
-        "design_api.services.voronoi_gen.uniform.construct.trace_hexagon",
-        fake_trace_hexagon,
-    )
+    # Generate hexagonal lattice of seeds (radius=2) so interior cells have 6 neighbors
+    rad = 2
+    coords = []
+    for q in range(-rad, rad + 1):
+        r1 = max(-rad, -q - rad)
+        r2 = min(rad, -q + rad)
+        for r in range(r1, r2 + 1):
+            x = math.sqrt(3) * (q + r / 2)
+            y = 1.5 * r
+            coords.append([x, y, 0.0])
+    seeds = np.array(coords)
 
     mesh = DummyMesh([])
     plane_normal = np.array([0.0, 0.0, 1.0])
-    cells = compute_uniform_cells(seeds, mesh, plane_normal)
+    cells = compute_uniform_cells(seeds, mesh, plane_normal, max_distance=2.0)
 
-    assert all(cell.shape == (6, 3) for cell in cells.values())
+    idx_center = int(np.where((seeds == np.array([0.0, 0.0, 0.0])).all(axis=1))[0][0])
+    idx_neighbor = int(
+        np.where((seeds == np.array([math.sqrt(3) * 1.0, 0.0, 0.0])).all(axis=1))[0][0]
+    )
+
+    cell_a = cells[idx_center]
+    cell_b = cells[idx_neighbor]
 
     shared = []
-    for i, v in enumerate(cells[0]):
-        for j, w in enumerate(cells[1]):
+    for i, v in enumerate(cell_a):
+        for j, w in enumerate(cell_b):
             if np.allclose(v, w, atol=1e-6):
                 shared.append((i, j))
-    assert len(shared) == 2
-    i0, i1 = shared[0][0], shared[1][0]
-    assert abs(i0 - i1) in (1, 5)
 
-    bbox_min = (-1.0, -1.0, -1.0)
-    bbox_max = (dx + 1.0, 1.0, 1.0)
-    adj = compute_voronoi_adjacency(seeds.tolist(), bbox_min, bbox_max, resolution=(16, 16, 16))
-    assert set(adj[0]) == {1}
-    assert set(adj[1]) == {0}
+    assert len(shared) == 2
+
+    (i0, j0), (i1, j1) = shared
+    assert abs(i0 - i1) in (1, 5)
+    assert abs(j0 - j1) in (1, 5)
 

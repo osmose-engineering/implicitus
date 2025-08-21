@@ -8,7 +8,8 @@ from typing import Dict, Callable
 import itertools
 
 from typing import Any, Dict, Optional
-from .sampler import compute_medial_axis, trace_hexagon
+from design_api.services.voronoi_gen.voronoi_gen import compute_voronoi_adjacency
+from .sampler import trace_hexagon
 from .regularizer import hexagon_metrics
 
 def compute_uniform_cells(
@@ -27,11 +28,11 @@ def compute_uniform_cells(
     Returns:
         cells: dict mapping seed index to (6,3) array of hexagon vertices.
     """
-    # Extract medial axis points
-    medial_points = compute_medial_axis(imds_mesh)
+    adjacency = compute_voronoi_adjacency(seeds.tolist())
     cells: Dict[int, np.ndarray] = {}
     for idx, seed in enumerate(seeds):
-        hex_pts = trace_hexagon(seed, medial_points, plane_normal, max_distance)
+        neighbors = adjacency.get(idx, [])
+        hex_pts = trace_hexagon(idx, seeds, neighbors, plane_normal, max_distance)
         # Optionally log metrics
         metrics = hexagon_metrics(hex_pts)
         logging.debug(
