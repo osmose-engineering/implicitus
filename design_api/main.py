@@ -135,7 +135,9 @@ async def review(req: dict, sid: Optional[str] = None):
                         or 2.0
                     )
                     # compute adjacency of seed points using spatial pruning
-                    adjacency = compute_voronoi_adjacency(pts, spacing=spacing)
+                    # compute_voronoi_adjacency expects half the target spacing so that
+                    # prune_adjacency_via_grid caps edge length at one spacing
+                    adjacency = compute_voronoi_adjacency(pts, spacing=spacing * 0.5)
 
                     # convert adjacency (edge list or neighbor map) -> unique edge list
                     edge_list = []
@@ -218,7 +220,9 @@ async def update(req: UpdateRequest):
                     or inf.get("min_dist")
                     or 2.0
                 )
-                adjacency = compute_voronoi_adjacency(pts, spacing=spacing)
+                # compute_voronoi_adjacency expects half the target spacing so that
+                # prune_adjacency_via_grid caps edge length at one spacing
+                adjacency = compute_voronoi_adjacency(pts, spacing=spacing * 0.5)
 
                 edge_list = []
                 if isinstance(adjacency, dict):
