@@ -74,8 +74,6 @@ function App() {
   const [edges, setEdges] = useState<number[][]>([]);
   const [infillPoints, setInfillPoints] = useState<[number, number, number][]>([]);
   const [infillEdges, setInfillEdges] = useState<number[][]>([]);
-  // Track infill cells
-  const [infillCells, setInfillCells] = useState<any[]>([]);
   // Debug: log infillPoints and infillEdges state updates
   useEffect(() => {
     console.log('[UI] infillPoints state updated:', infillPoints);
@@ -200,15 +198,8 @@ function App() {
       if (data.spec && Array.isArray(data.spec)) {
         setSpec(data.spec);
         setEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
-        setInfillPoints(data.spec[0]?.modifiers?.infill?.cells?.points ?? []);
-        setInfillEdges(data.spec[0]?.modifiers?.infill?.cells?.edges ?? []);
-        // NEW: extract and store all infill cell objects
-        const cells = data.spec.flatMap(node => node.modifiers?.infill?.cells || []);
-        console.debug("Loaded infill cells:", cells.length, cells.slice(0,2));
-        setInfillCells(cells);
-        console.log('[UI] backend infill.cells:', data.spec[0]?.modifiers?.infill?.cells);
-        console.log('[UI] incoming infillPoints:', data.spec[0]?.modifiers?.infill?.cells?.points);
-        console.log('[UI] incoming infillEdges:', data.spec[0]?.modifiers?.infill?.cells?.edges);
+        setInfillPoints(data.spec[0]?.modifiers?.infill?.seed_points ?? []);
+        setInfillEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
         setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
         if (data.summary) {
           setSummary(data.summary);
@@ -559,7 +550,6 @@ function App() {
                   edges={edges}
                   infillPoints={infillPoints}
                   infillEdges={infillEdges}
-                  cells={infillCells}           // NEW
                   bbox={[0, 0, 0, 1, 1, 1]}
                   thickness={0.35}
                   maxSteps={256}
@@ -579,7 +569,6 @@ function App() {
                   edges={edges}
                   infillPoints={infillPoints}
                   infillEdges={infillEdges}
-                  cells={infillCells}           // NEW
                   bbox={[0, 0, 0, 1, 1, 1]}
                   thickness={0.35}
                   maxSteps={256}
