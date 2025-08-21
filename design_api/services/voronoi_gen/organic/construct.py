@@ -8,6 +8,11 @@ from typing import Dict, Callable
 import itertools
 from .adaptive import OctreeNode, generate_adaptive_grid
 
+try:  # SciPy is optional
+    from scipy.spatial import Delaunay  # type: ignore
+except Exception:  # pragma: no cover - fallback when SciPy missing
+    Delaunay = None  # type: ignore
+
 
 def _voronoi_helpers():
     """Lazy import of core Voronoi routines to avoid circular imports."""
@@ -119,6 +124,20 @@ def construct_voronoi_cells(
                 "neighbors": []
             })
         # Compute adjacency via Delaunay triangulation of seed points
+        def _assign_neighbors_from_adjacency():
+            adjacency_raw = compute_voronoi_adjacency(
+                points, bbox_min, bbox_max, resolution
+            )
+            if isinstance(adjacency_raw, list):
+                adjacency_idx = {i: [] for i in range(len(points))}
+                for i, j in adjacency_raw:
+                    adjacency_idx[i].append(j)
+                    adjacency_idx[j].append(i)
+            else:
+                adjacency_idx = adjacency_raw
+            for idx, cell in enumerate(cells):
+                cell["neighbors"] = [points[j] for j in adjacency_idx.get(idx, [])]
+
         if Delaunay is not None and len(points) >= 2:
             try:
                 pts_np = np.array(points)
@@ -126,22 +145,17 @@ def construct_voronoi_cells(
                 adj_map = {tuple(seed): set() for seed in points}
                 for simplex in tri.simplices:
                     for i in range(len(simplex)):
-                        for j in range(i+1, len(simplex)):
+                        for j in range(i + 1, len(simplex)):
                             si = tuple(points[simplex[i]])
                             sj = tuple(points[simplex[j]])
                             adj_map[si].add(sj)
                             adj_map[sj].add(si)
-                # Assign neighbor lists
                 for cell in cells:
-                    cell['neighbors'] = list(adj_map[cell['site']])
+                    cell["neighbors"] = list(adj_map[cell["site"]])
             except Exception:
-                # Fallback with no neighbors
-                for cell in cells:
-                    cell['neighbors'] = []
+                _assign_neighbors_from_adjacency()
         else:
-            # Fallback with no neighbors
-            for cell in cells:
-                cell['neighbors'] = []
+            _assign_neighbors_from_adjacency()
         return cells
 
     nx, ny, nz = resolution
