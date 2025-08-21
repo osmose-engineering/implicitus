@@ -331,7 +331,11 @@ function App() {
       if (data.spec && Array.isArray(data.spec)) {
         setSpec(data.spec);
         setEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
+        // also refresh infill seed points and edges so the viewer reflects updates
+        setInfillPoints(data.spec[0]?.modifiers?.infill?.seed_points ?? []);
+        setInfillEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
         setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
+        setIsDirty(false);
         if (data.summary) {
           setSummary(data.summary);
           setMessages(prev => [...prev, { speaker: 'assistant', text: data.summary }]);
