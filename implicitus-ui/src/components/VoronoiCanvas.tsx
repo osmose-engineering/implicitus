@@ -275,7 +275,9 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
     const sphereR  = Math.max(maxX - minX, maxY - minY, maxZ - minZ) / 2;
 
     const filteredCells = validCells.filter(cell => {
+
       if (!Array.isArray(cell.verts) || cell.verts.length === 0) return false;
+
       // compute centroid of this cell
       const centroid = cell.verts.reduce(
         (acc, [x, y, z]) => [acc[0] + x, acc[1] + y, acc[2] + z],
