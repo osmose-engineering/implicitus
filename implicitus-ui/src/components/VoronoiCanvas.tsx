@@ -107,7 +107,8 @@ export function generateHexTest3D(bboxMin, bboxMax, spacing) {
 // Exposed for testing: remove unusually long edges relative to the average
 export function computeFilteredEdges(
   seedPoints: [number, number, number][],
-  edges: [number, number][]
+  edges: [number, number][],
+  thresholdFactor: number = 1.5
 ) {
   if (!Array.isArray(edges) || edges.length === 0) return [];
   const lengths = edges.map(([i, j]) => {
@@ -119,7 +120,7 @@ export function computeFilteredEdges(
     return Math.sqrt(dx * dx + dy * dy + dz * dz);
   });
   const avg = lengths.reduce((sum, d) => sum + d, 0) / lengths.length;
-  const threshold = avg * 1.5;
+  const threshold = avg * thresholdFactor;
   return edges.filter((_, idx) => lengths[idx] <= threshold);
 }
 
@@ -139,6 +140,8 @@ interface VoronoiCanvasProps {
   infillEdges?: [number, number][];
   /** Optional full cell geometry */
   cells?: Array<{ verts: number[][]; faces: number[][] }>;
+  /** Optional multiplier for edge-length filtering */
+  edgeLengthThreshold?: number;
 }
 
 // Toggle verbose logging
@@ -159,6 +162,7 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
   infillPoints = [],
   infillEdges = [],
   cells = [],
+  edgeLengthThreshold = 1.5,
 }) => {
   // In debug mode, hide the ray-march solid box
   if (DEBUG_HEX_TEST) showSolid = false;
@@ -206,9 +210,9 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
   DEBUG_CANVAS && console.log('VoronoiCanvas sample validSeedPoints (first 5):', validSeedPoints.slice(0,5));
   // Filter out long edges to avoid hairball: only keep edges shorter than ~1.5× the average edge length
   const filteredEdges = useMemo(() => {
-    DEBUG_CANVAS && console.log('VoronoiCanvas useMemo input:', { validSeedPoints, validEdges });
-    return computeFilteredEdges(validSeedPoints, validEdges);
-  }, [validEdges, validSeedPoints]);
+    DEBUG_CANVAS && console.log('VoronoiCanvas useMemo input:', { validSeedPoints, validEdges, edgeLengthThreshold });
+    return computeFilteredEdges(validSeedPoints, validEdges, edgeLengthThreshold);
+  }, [validEdges, validSeedPoints, edgeLengthThreshold]);
   DEBUG_CANVAS && console.log('VoronoiCanvas filteredEdges count:', filteredEdges.length);
   DEBUG_CANVAS && console.log('VoronoiCanvas sample filteredEdges (first 5):', filteredEdges.slice(0,5));
   // For debug: only render seed points inside the sphere when no edges
@@ -385,7 +389,7 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
         {showStruts && (
           <VoronoiStruts
             seedPoints={validSeedPoints}
-            edges={validEdges}
+            edges={filteredEdges}
             strutRadius={strutRadius}
             color={strutColor}
           />
