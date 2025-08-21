@@ -196,10 +196,18 @@ function App() {
       }
       // Handle updated spec with nested modifiers
       if (data.spec && Array.isArray(data.spec)) {
+        const infill = data.spec[0]?.modifiers?.infill;
+        console.log('[UI] backend infill counts:', {
+          points: infill?.seed_points?.length,
+          edges: infill?.edges?.length,
+          sampleEdges: infill?.edges?.slice(0, 5),
+        });
         setSpec(data.spec);
+
         setEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
         setInfillPoints(data.spec[0]?.modifiers?.infill?.seed_points ?? []);
         setInfillEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
+
         setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
         if (data.summary) {
           setSummary(data.summary);

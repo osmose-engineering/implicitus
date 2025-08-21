@@ -201,6 +201,7 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
     return validEdges.filter((_, idx) => lengths[idx] <= threshold);
   }, [validEdges, validSeedPoints]);
   DEBUG_CANVAS && console.log('VoronoiCanvas filteredEdges count:', filteredEdges.length);
+  DEBUG_CANVAS && console.log('VoronoiCanvas sample filteredEdges (first 5):', filteredEdges.slice(0,5));
   // For debug: only render seed points inside the sphere when no edges
   const debugSeedPoints = useMemo(() => {
     if (filteredEdges.length > 0) return [];
@@ -276,7 +277,9 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
 
     const filteredCells = validCells.filter(cell => {
 
+
       if (!Array.isArray(cell.verts) || cell.verts.length === 0) return false;
+
 
       // compute centroid of this cell
       const centroid = cell.verts.reduce(
