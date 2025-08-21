@@ -311,7 +311,7 @@ def build_hex_lattice(
             x = x0 + offset_x
             while x <= x1:
                 coords.append((i, j, k))
-                pts.append((x, y, z))
+                pts.append((float(x), float(y), float(z)))
                 i += 1
                 x = x0 + offset_x + i * dx
             j += 1
@@ -328,12 +328,22 @@ def build_hex_lattice(
         else:
             coords, pts = [], []
 
-    adjacency = prune_adjacency_via_grid(pts, spacing)
+    adjacency = prune_adjacency_via_grid(pts, spacing * 0.5)
     if use_voronoi_edges:
         # Build Voronoi diagram and extract ridge segments (finite edges)
         try:
             from scipy.spatial import Voronoi  # type: ignore
-            vor = Voronoi(pts)
+            arr = np.array(pts)
+            if len(arr) == 0:
+                raise ValueError("No seed points for Voronoi")
+            if np.allclose(arr[:, 2], arr[0, 2]):
+                # 2D planar case: compute Voronoi in XY plane
+                vor = Voronoi(arr[:, :2])
+                z_val = float(arr[0, 2])
+                get_vertex = lambda v: (float(v[0]), float(v[1]), z_val)
+            else:
+                vor = Voronoi(arr)
+                get_vertex = lambda v: (float(v[0]), float(v[1]), float(v[2]))
             vertex_map: Dict[int, int] = {}
             verts: List[Tuple[float, float, float]] = []
             edge_list: List[Tuple[int, int]] = []
@@ -349,7 +359,7 @@ def build_hex_lattice(
                 for vi, p in ((v0, p0), (v1, p1)):
                     if vi not in vertex_map:
                         vertex_map[vi] = len(verts)
-                        verts.append((float(p[0]), float(p[1]), float(p[2])))
+                        verts.append(get_vertex(p))
                 edge_list.append((vertex_map[v0], vertex_map[v1]))
         except Exception:
             # Fall back to seed adjacency when SciPy is unavailable
@@ -377,6 +387,8 @@ def build_hex_lattice(
         )
         return verts, edge_list, cells
 
+    # Ensure edges are bidirectional
+    edge_list = edge_list + [(j, i) for i, j in edge_list]
     return verts, edge_list
 
 
