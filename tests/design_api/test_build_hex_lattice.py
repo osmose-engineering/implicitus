@@ -12,6 +12,7 @@ def test_build_hex_lattice_returns_cells():
         spacing,
         primitive,
         return_cells=True,
+        use_voronoi_edges=True,
         resolution=(8, 8, 8),
     )
 
@@ -19,3 +20,23 @@ def test_build_hex_lattice_returns_cells():
     assert pts and edges
     # Returned cells should contain SDF grids describing each seed cell
     assert cells and all("sdf" in cell for cell in cells)
+
+
+def test_build_hex_lattice_midpoints():
+    bbox_min = (-1.0, -1.0, -1.0)
+    bbox_max = (1.0, 1.0, 1.0)
+    spacing = 0.5
+    primitive = {"sphere": {"radius": 1.0}}
+
+    pts, edges = build_hex_lattice(
+        bbox_min,
+        bbox_max,
+        spacing,
+        primitive,
+        use_voronoi_edges=False,
+    )
+
+    # Expect midpoints only with no explicit edge list
+    assert pts and not edges
+    for x, y, z in pts:
+        assert x * x + y * y + z * z <= 1.0 + 1e-6

@@ -268,6 +268,7 @@ def build_hex_lattice(
     primitive: Dict[str, Any],
     *,
     return_cells: bool = False,
+    use_voronoi_edges: bool = False,
     **cell_kwargs: Any,
 ) -> Union[
     Tuple[List[Tuple[float, float, float]], List[Tuple[int, int]]],
@@ -275,7 +276,11 @@ def build_hex_lattice(
 ]:
     """
     Generate a 3D hexagonally-packed lattice of points within the given AABB,
-    and return both the list of points and the nearest-neighbor edges.
+    returning a list of points and edges.  By default the edges are derived
+    from a full Voronoi diagram (using SciPy when available).  If
+    ``use_voronoi_edges`` is ``False``, edges are instead approximated via
+    ``prune_adjacency_via_grid``/``compute_voronoi_adjacency`` and represented
+    by the midpoints of adjacent seed pairs.
 
     If ``return_cells`` is True, the function also constructs full Voronoi cell
     geometry for each seed using :func:`construct_voronoi_cells` and returns the
@@ -323,31 +328,46 @@ def build_hex_lattice(
         else:
             coords, pts = [], []
 
-    # Build Voronoi diagram and extract ridge segments (finite edges)
-    try:
-        from scipy.spatial import Voronoi  # type: ignore
-        vor = Voronoi(pts)
-        vertex_map: Dict[int, int] = {}
-        verts: List[Tuple[float, float, float]] = []
-        edge_list: List[Tuple[int, int]] = []
-        for rv in vor.ridge_vertices:
-            if len(rv) != 2 or rv[0] == -1 or rv[1] == -1:
-                continue  # skip infinite ridges
-            v0, v1 = rv
-            p0 = vor.vertices[v0]
-            p1 = vor.vertices[v1]
-            if primitive:
-                if not point_in_primitive(tuple(p0), primitive) or not point_in_primitive(tuple(p1), primitive):
-                    continue
-            for vi, p in ((v0, p0), (v1, p1)):
-                if vi not in vertex_map:
-                    vertex_map[vi] = len(verts)
-                    verts.append((float(p[0]), float(p[1]), float(p[2])))
-            edge_list.append((vertex_map[v0], vertex_map[v1]))
-    except Exception:
-        # Fall back to seed adjacency when SciPy is unavailable
-        verts = list(pts)
-        edge_list = prune_adjacency_via_grid(pts, spacing)
+    adjacency = prune_adjacency_via_grid(pts, spacing)
+    if use_voronoi_edges:
+        # Build Voronoi diagram and extract ridge segments (finite edges)
+        try:
+            from scipy.spatial import Voronoi  # type: ignore
+            vor = Voronoi(pts)
+            vertex_map: Dict[int, int] = {}
+            verts: List[Tuple[float, float, float]] = []
+            edge_list: List[Tuple[int, int]] = []
+            for rv in vor.ridge_vertices:
+                if len(rv) != 2 or rv[0] == -1 or rv[1] == -1:
+                    continue  # skip infinite ridges
+                v0, v1 = rv
+                p0 = vor.vertices[v0]
+                p1 = vor.vertices[v1]
+                if primitive:
+                    if not point_in_primitive(tuple(p0), primitive) or not point_in_primitive(tuple(p1), primitive):
+                        continue
+                for vi, p in ((v0, p0), (v1, p1)):
+                    if vi not in vertex_map:
+                        vertex_map[vi] = len(verts)
+                        verts.append((float(p[0]), float(p[1]), float(p[2])))
+                edge_list.append((vertex_map[v0], vertex_map[v1]))
+        except Exception:
+            # Fall back to seed adjacency when SciPy is unavailable
+            verts = list(pts)
+            edge_list = adjacency
+    else:
+        # Approximate edges using midpoints of adjacent seed pairs
+        verts = []
+        for i, j in adjacency:
+            mid = (
+                (pts[i][0] + pts[j][0]) * 0.5,
+                (pts[i][1] + pts[j][1]) * 0.5,
+                (pts[i][2] + pts[j][2]) * 0.5,
+            )
+            if primitive and not point_in_primitive(mid, primitive):
+                continue
+            verts.append(mid)
+        edge_list = []
 
     if return_cells:
         from .organic.construct import construct_voronoi_cells
