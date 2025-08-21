@@ -137,12 +137,16 @@ async def review(req: dict, sid: Optional[str] = None):
                     # compute adjacency of seed points using spatial pruning
                     adjacency = compute_voronoi_adjacency(pts, spacing=spacing)
 
-                    # convert adjacency map -> unique edge list (i<j)
+                    # convert adjacency (edge list or neighbor map) -> unique edge list
                     edge_list = []
-                    for i, nbrs in adjacency.items():
-                        for j in nbrs:
-                            if j > i:
-                                edge_list.append([i, j])
+                    if isinstance(adjacency, dict):
+                        for i, nbrs in adjacency.items():
+                            for j in nbrs:
+                                if j > i:
+                                    edge_list.append([i, j])
+                    else:
+                        for i, j in adjacency:
+                            edge_list.append([i, j])
                     # expose both raw edges and combined cell data for frontend
                     inf["edges"] = edge_list
                     inf["cells"] = {"points": pts, "edges": edge_list}
@@ -217,18 +221,21 @@ async def update(req: UpdateRequest):
                 adjacency = compute_voronoi_adjacency(pts, spacing=spacing)
 
                 edge_list = []
-                for i, nbrs in adjacency.items():
-                    for j in nbrs:
-                        if j > i:
-                            edge_list.append([i, j])
+                if isinstance(adjacency, dict):
+                    for i, nbrs in adjacency.items():
+                        for j in nbrs:
+                            if j > i:
+                                edge_list.append([i, j])
+                else:
+                    for i, j in adjacency:
+                        edge_list.append([i, j])
+
                 inf["edges"] = edge_list
                 inf["cells"] = {"points": pts, "edges": edge_list}
 
-            logging.debug(
-                f"[DEBUG update] spacing={spacing} produced {len(inf.get('edges', []))} edges; sample: {inf.get('edges', [])[:10]}"
-            )
-
-            logging.debug(f"[DEBUG update] got {len(inf.get('edges', []))} edges, sample first 10: {inf.get('edges', [])[:10]}")
+                logging.debug(
+                    f"[DEBUG update] spacing={spacing} produced {len(edge_list)} edges; sample: {edge_list[:10]}"
+                )
 
 
     # sanitize new_spec to convert numpy arrays into lists for JSON serialization

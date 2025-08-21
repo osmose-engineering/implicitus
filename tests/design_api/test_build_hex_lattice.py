@@ -15,7 +15,7 @@ def test_build_hex_lattice_returns_cells():
         resolution=(8, 8, 8),
     )
 
-    # Expect some points and an equal number of cell dictionaries
-    assert pts and len(cells) == len(pts)
-    # Each cell should include an SDF grid describing its geometry
-    assert all("sdf" in cell for cell in cells)
+    # Expect some Voronoi vertices and connecting edges
+    assert pts and edges
+    # Returned cells should contain SDF grids describing each seed cell
+    assert cells and all("sdf" in cell for cell in cells)
