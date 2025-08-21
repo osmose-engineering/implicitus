@@ -44,7 +44,7 @@ function generateHexTest(bboxMin, bboxMax, spacing) {
 }
 
 // Debug: generate a small 3D hexagonal block for testing
-function generateHexTest3D(bboxMin, bboxMax, spacing) {
+export function generateHexTest3D(bboxMin, bboxMax, spacing) {
   const pts = [];
   const edges = [];
   const coords3D = [];
@@ -102,6 +102,25 @@ function generateHexTest3D(bboxMin, bboxMax, spacing) {
   }
 
   return [pts, edges];
+}
+
+// Exposed for testing: remove unusually long edges relative to the average
+export function computeFilteredEdges(
+  seedPoints: [number, number, number][],
+  edges: [number, number][]
+) {
+  if (!Array.isArray(edges) || edges.length === 0) return [];
+  const lengths = edges.map(([i, j]) => {
+    const [xi, yi, zi] = seedPoints[i];
+    const [xj, yj, zj] = seedPoints[j];
+    const dx = xi - xj,
+      dy = yi - yj,
+      dz = zi - zj;
+    return Math.sqrt(dx * dx + dy * dy + dz * dz);
+  });
+  const avg = lengths.reduce((sum, d) => sum + d, 0) / lengths.length;
+  const threshold = avg * 1.5;
+  return edges.filter((_, idx) => lengths[idx] <= threshold);
 }
 
 interface VoronoiCanvasProps {
@@ -188,17 +207,7 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
   // Filter out long edges to avoid hairball: only keep edges shorter than ~1.5× the average edge length
   const filteredEdges = useMemo(() => {
     DEBUG_CANVAS && console.log('VoronoiCanvas useMemo input:', { validSeedPoints, validEdges });
-    if (validEdges.length === 0) return [];
-    // compute lengths
-    const lengths = validEdges.map(([i, j]) => {
-      const [xi, yi, zi] = validSeedPoints[i];
-      const [xj, yj, zj] = validSeedPoints[j];
-      const dx = xi - xj, dy = yi - yj, dz = zi - zj;
-      return Math.sqrt(dx*dx + dy*dy + dz*dz);
-    });
-    const avg = lengths.reduce((sum, d) => sum + d, 0) / lengths.length;
-    const threshold = avg * 1.5;
-    return validEdges.filter((_, idx) => lengths[idx] <= threshold);
+    return computeFilteredEdges(validSeedPoints, validEdges);
   }, [validEdges, validSeedPoints]);
   DEBUG_CANVAS && console.log('VoronoiCanvas filteredEdges count:', filteredEdges.length);
   DEBUG_CANVAS && console.log('VoronoiCanvas sample filteredEdges (first 5):', filteredEdges.slice(0,5));
