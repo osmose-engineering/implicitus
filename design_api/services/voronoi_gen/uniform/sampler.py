@@ -88,6 +88,7 @@ def trace_hexagon(
     plane_normal: np.ndarray,
     max_distance: Optional[float] = None,
     report_method: bool = False,
+    neighbor_resampler: Optional[Callable[[], np.ndarray]] = None,
 ) -> Union[np.ndarray, Tuple[np.ndarray, bool]]:
     """
     Trace approximate hexagonal cell vertices around ``seed_pt`` using
@@ -98,6 +99,9 @@ def trace_hexagon(
         medial_points: (M,3) array of medial axis or seed points.
         plane_normal: (3,) array normal to the slicing plane.
         max_distance: fallback ray length if no neighbor data is available.
+        neighbor_resampler: optional callable returning additional medial points
+            if the initial neighbor set is insufficient.  It is invoked before
+            resorting to the bounding-box ray fallback.
 
     Returns:
         If ``report_method`` is ``False`` (default), returns an ``(6,3)`` array
@@ -141,20 +145,13 @@ def trace_hexagon(
             return None
         return tmin if tmin > 0 else tmax
 
-    # Vector from seed to all other points
-    vecs = medial_points - seed_pt
-    dists = np.linalg.norm(vecs, axis=1)
-    mask = dists > 1e-8
-    vecs = vecs[mask]
-
-    hex_success = False
-    if vecs.shape[0] >= 6:
-
-        # Project all neighbor vectors into the slicing plane
+    def _construct_from_vecs(vecs: np.ndarray) -> Optional[np.ndarray]:
+        """Attempt to construct hexagon from neighbor vectors."""
+        if vecs.shape[0] < 6:
+            return None
         neighbor_2d_all = np.column_stack((vecs.dot(u), vecs.dot(v)))
         angles = np.mod(np.arctan2(neighbor_2d_all[:, 1], neighbor_2d_all[:, 0]), 2 * np.pi)
 
-        # Select six neighbors roughly evenly spaced by angle
         sel_2d: List[np.ndarray] = []
         used = np.zeros(len(angles), dtype=bool)
         for k in range(6):
@@ -166,11 +163,9 @@ def trace_hexagon(
             sel_2d.append(neighbor_2d_all[idx])
 
         neighbor_2d = np.vstack(sel_2d)
-        # Sort the selected neighbors by angle so adjacent pairs form edges
         ang = np.arctan2(neighbor_2d[:, 1], neighbor_2d[:, 0])
         order = np.argsort(ang)
         neighbor_2d = neighbor_2d[order]
-
 
         normals = neighbor_2d
         bs = np.sum(neighbor_2d ** 2, axis=1) / 2.0
@@ -182,17 +177,54 @@ def trace_hexagon(
             try:
                 x = np.linalg.solve(N, B)
             except np.linalg.LinAlgError:
-                verts_2d = []
-                break
+                return None
             verts_2d.append(x)
 
-        if len(verts_2d) == 6:
-            hex_pts = [seed_pt + x[0] * u + x[1] * v for x in verts_2d]
-            hex_pts = np.vstack(hex_pts)
-            hex_success = True
+        if len(verts_2d) != 6:
+            return None
+        pts = [seed_pt + x[0] * u + x[1] * v for x in verts_2d]
+        return np.vstack(pts)
 
-    if not hex_success:
-        # Neighbor data unavailable or computation failed; fallback to bbox rays
+    # Initial attempt using provided medial points
+    vecs = medial_points - seed_pt
+    dists = np.linalg.norm(vecs, axis=1)
+    vecs = vecs[dists > 1e-8]
+    hex_pts_arr = _construct_from_vecs(vecs)
+
+    # Retry using adjacency-derived neighbors if necessary
+    if hex_pts_arr is None:
+        try:  # pragma: no cover - import guarded for optional module
+            from design_api.services.voronoi_gen.voronoi_gen import compute_voronoi_adjacency
+
+            pts = np.vstack([seed_pt, medial_points])
+            pairs = compute_voronoi_adjacency(pts.tolist())
+            neigh_idx: List[int] = []
+            for i, j in pairs:
+                if i == 0:
+                    neigh_idx.append(j)
+                elif j == 0:
+                    neigh_idx.append(i)
+            if neigh_idx:
+                vecs_adj = pts[neigh_idx] - seed_pt
+                hex_pts_arr = _construct_from_vecs(vecs_adj)
+        except Exception:  # pragma: no cover - any failure just skips
+            pass
+
+    # Allow caller to supply extra neighbors before falling back
+    if hex_pts_arr is None and neighbor_resampler is not None:
+        extra = neighbor_resampler()
+        if extra is not None and len(extra) > 0:
+            all_points = np.vstack([medial_points, extra])
+            vecs = all_points - seed_pt
+            dists = np.linalg.norm(vecs, axis=1)
+            vecs = vecs[dists > 1e-8]
+            hex_pts_arr = _construct_from_vecs(vecs)
+
+    if hex_pts_arr is not None:
+        hex_pts = hex_pts_arr
+        hex_success = True
+    else:
+        logging.warning("trace_hexagon: using bounding-box fallback; consider resampling or expanding search radius")
         angles = np.linspace(0, 2 * np.pi, 6, endpoint=False)
         for theta in angles:
             dir_vec = np.cos(theta) * u + np.sin(theta) * v
@@ -204,6 +236,7 @@ def trace_hexagon(
             else:
                 raise ValueError("No valid intersection for ray; resample seed point")
         hex_pts = np.vstack(hex_pts)
+        hex_success = False
 
     used_fallback = not hex_success
 
