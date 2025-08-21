@@ -25,7 +25,6 @@ from design_api.services.validator import validate_model_spec as validate_proto
 from ai_adapter.csg_adapter import review_request, generate_summary, update_request
 from design_api.services.voronoi_gen.voronoi_gen import (
     compute_voronoi_adjacency,
-    construct_voronoi_cells,
 )
 
 @dataclass
@@ -155,15 +154,6 @@ async def review(req: dict, sid: Optional[str] = None):
 
                     inf["edges"] = edge_list
 
-                    try:
-                        cells = construct_voronoi_cells(
-                            pts, bbox_min, bbox_max, return_cells=True
-                        )
-                    except TypeError:
-                        # Fallback for older signature without return_cells
-                        cells = construct_voronoi_cells(pts, bbox_min, bbox_max)
-                    inf["cells"] = cells
-
                     logging.debug(
                         f"[DEBUG review] spacing={spacing} produced {len(edge_list)} edges; sample: {edge_list[:10]}"
                     )
@@ -253,13 +243,6 @@ async def update(req: UpdateRequest):
                         edge_list.append([i, j])
 
                 inf["edges"] = edge_list
-                try:
-                    cells = construct_voronoi_cells(
-                        pts, bbox_min, bbox_max, return_cells=True
-                    )
-                except TypeError:
-                    cells = construct_voronoi_cells(pts, bbox_min, bbox_max)
-                inf["cells"] = cells
 
                 logging.debug(
                     f"[DEBUG update] spacing={spacing} produced {len(edge_list)} edges; sample: {edge_list[:10]}"
