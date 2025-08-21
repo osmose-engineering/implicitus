@@ -7,30 +7,23 @@ from typing import Tuple, List, Optional
 from typing import Dict, Callable
 import itertools
 
-def regularize_hexagon(hex_pts: np.ndarray) -> np.ndarray:
+def regularize_hexagon(hex_pts: np.ndarray, plane_normal: np.ndarray) -> np.ndarray:
     """
-    Normalize a hexagon to uniform edge lengths, preserving centroid.
-    hex_pts: (6,3) array of hexagon vertices in order.
+    Lightly regularize a hexagon by projecting its vertices onto the plane
+    defined by ``plane_normal`` while preserving their in-plane positions.
+
+    Args:
+        hex_pts: (N,3) array of hexagon vertices in order.
+        plane_normal: (3,) array normal to the slicing plane.
+
     Returns:
-        new_pts: (6,3) array of regularized hexagon vertices.
+        (N,3) array of vertices constrained to the provided plane.
     """
-    # Compute centroid
     centroid = np.mean(hex_pts, axis=0)
-    # Compute current edge lengths
-    edges = hex_pts - np.roll(hex_pts, -1, axis=0)
-    edge_lengths = np.linalg.norm(edges, axis=1)
-    # Average edge length
-    avg_edge = float(np.mean(edge_lengths))
-    # Generate perfect hexagon directions in the XY plane
-    angles = np.linspace(0, 2 * np.pi, 6, endpoint=False)
-    dirs = np.stack([
-        np.cos(angles),
-        np.sin(angles),
-        np.zeros_like(angles)
-    ], axis=1)
-    # Build new points at uniform edge length radius
-    new_pts = centroid + dirs * avg_edge
-    return new_pts
+    n = plane_normal / np.linalg.norm(plane_normal)
+    rel = hex_pts - centroid
+    rel -= np.outer(rel.dot(n), n)
+    return centroid + rel
 
 def hexagon_metrics(hex_pts: np.ndarray) -> Dict[str, Any]:
     """
