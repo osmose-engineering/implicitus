@@ -137,12 +137,16 @@ async def review(req: dict, sid: Optional[str] = None):
                     # compute adjacency of seed points using spatial pruning
                     adjacency = compute_voronoi_adjacency(pts, spacing=spacing)
 
-                    # convert adjacency map -> unique edge list (i<j)
+                    # convert adjacency (edge list or neighbor map) -> unique edge list
                     edge_list = []
-                    for i, nbrs in adjacency.items():
-                        for j in nbrs:
-                            if j > i:
-                                edge_list.append([i, j])
+                    if isinstance(adjacency, dict):
+                        for i, nbrs in adjacency.items():
+                            for j in nbrs:
+                                if j > i:
+                                    edge_list.append([i, j])
+                    else:
+                        for i, j in adjacency:
+                            edge_list.append([i, j])
                     # expose both raw edges and combined cell data for frontend
                     inf["edges"] = edge_list
                     inf["cells"] = {"points": pts, "edges": edge_list}
