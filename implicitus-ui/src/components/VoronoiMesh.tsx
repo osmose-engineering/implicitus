@@ -28,6 +28,12 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
   sphereCenter,
   sphereRadius
 }) => {
+  // If there are no seed points, there is nothing to render.
+  // Returning early avoids creating geometries with infinite or NaN
+  // dimensions which would stall the renderer and hide the grid.
+  if (!seedPoints || seedPoints.length === 0) {
+    return null;
+  }
   // Derive world-space bounding box from seedPoints
   const xs = seedPoints.map(p => p[0]);
   const ys = seedPoints.map(p => p[1]);
