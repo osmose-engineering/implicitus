@@ -4,6 +4,8 @@ import { extend } from '@react-three/fiber';
 
 const MAX_SEEDS = 512;
 const texSize = Math.ceil(Math.sqrt(MAX_SEEDS));
+const GRID_CELL_CAPACITY = 8;
+const GRID_TEX_HEIGHT = Math.ceil(GRID_CELL_CAPACITY / 4);
 
 // Create and configure seed DataTexture
 const seedTexture = new THREE.DataTexture(
@@ -19,11 +21,30 @@ seedTexture.wrapT    = THREE.ClampToEdgeWrapping;
 seedTexture.flipY    = false;
 seedTexture.needsUpdate = true;
 
+// Placeholder grid texture
+const gridTexture = new THREE.DataTexture(
+  new Float32Array(GRID_TEX_HEIGHT * 4),
+  1,
+  GRID_TEX_HEIGHT,
+  THREE.RGBAFormat,
+  THREE.FloatType
+);
+gridTexture.magFilter = THREE.NearestFilter;
+gridTexture.minFilter = THREE.NearestFilter;
+gridTexture.wrapS = THREE.ClampToEdgeWrapping;
+gridTexture.wrapT = THREE.ClampToEdgeWrapping;
+gridTexture.flipY = false;
+gridTexture.needsUpdate = true;
+
 export const VoronoiMaterial = shaderMaterial(
   {
     uSeedsTex: seedTexture,
+    uGridTex: gridTexture,
     uTexSize: texSize,
     uNumSeeds: 0,
+    uGridRes: new THREE.Vector3(1, 1, 1),
+    uCellSize: 1.0,
+    uNumCells: 1,
     uBoxMin: new THREE.Vector3(0, 0, 0),
     uBoxMax: new THREE.Vector3(0, 0, 0),
     uThickness: 0.1,
@@ -48,13 +69,19 @@ export const VoronoiMaterial = shaderMaterial(
   // fragment shader
   `
 #define MAX_SEEDS ${MAX_SEEDS}
+#define GRID_CELL_CAPACITY ${GRID_CELL_CAPACITY}
+#define GRID_TEX_HEIGHT ${GRID_TEX_HEIGHT}
 precision highp float;
 precision highp int;
 varying vec3 vWorldPos;
 
 uniform sampler2D uSeedsTex;
+uniform sampler2D uGridTex;
 uniform int       uTexSize;
 uniform int       uNumSeeds;
+uniform vec3      uGridRes;
+uniform float     uCellSize;
+uniform int       uNumCells;
 uniform vec3      uBoxMin;
 uniform vec3      uBoxMax;
 uniform float     uThickness;
@@ -104,17 +131,44 @@ vec3 getSeed(int i) {
 float voronoiSDF(vec3 p) {
   float d1 = 1e20;
   float d2 = 1e20;
-  for (int i = 0; i < MAX_SEEDS; ++i) {
-    if (i >= uNumSeeds) break;
-    float d = distance(p, getSeed(i));
-    if (d < d1) {
-      d2 = d1;
-      d1 = d;
-    } else if (d < d2) {
-      d2 = d;
+  vec3 rel = (p - uBoxMin) / uCellSize;
+  ivec3 gridResI = ivec3(uGridRes);
+  ivec3 base = ivec3(clamp(floor(rel), vec3(0.0), uGridRes - 1.0));
+  for (int dz = -1; dz <= 1; ++dz) {
+    for (int dy = -1; dy <= 1; ++dy) {
+      for (int dx = -1; dx <= 1; ++dx) {
+        ivec3 cell = base + ivec3(dx, dy, dz);
+        if (cell.x < 0 || cell.y < 0 || cell.z < 0) continue;
+        if (cell.x >= gridResI.x || cell.y >= gridResI.y || cell.z >= gridResI.z) continue;
+        int cellIndex = cell.x + cell.y * gridResI.x + cell.z * gridResI.x * gridResI.y;
+        for (int j = 0; j < GRID_TEX_HEIGHT; ++j) {
+          vec2 uv = vec2((float(cellIndex) + 0.5) / float(uNumCells), (float(j) + 0.5) / float(GRID_TEX_HEIGHT));
+          vec4 idx4 = texture(uGridTex, uv);
+          int idx;
+          idx = int(idx4.r + 0.5);
+          if (idx >= 0 && idx < uNumSeeds) {
+            float d = distance(p, getSeed(idx));
+            if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) { d2 = d; }
+          }
+          idx = int(idx4.g + 0.5);
+          if (idx >= 0 && idx < uNumSeeds) {
+            float d = distance(p, getSeed(idx));
+            if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) { d2 = d; }
+          }
+          idx = int(idx4.b + 0.5);
+          if (idx >= 0 && idx < uNumSeeds) {
+            float d = distance(p, getSeed(idx));
+            if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) { d2 = d; }
+          }
+          idx = int(idx4.a + 0.5);
+          if (idx >= 0 && idx < uNumSeeds) {
+            float d = distance(p, getSeed(idx));
+            if (d < d1) { d2 = d1; d1 = d; } else if (d < d2) { d2 = d; }
+          }
+        }
+      }
     }
   }
-  // Signed distance to the planar Voronoi boundary, offset by thickness
   float sd = (d2 - d1) * 0.5 - uThickness;
   return sd;
 }

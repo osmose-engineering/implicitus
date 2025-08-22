@@ -6,6 +6,9 @@ import { VoronoiMaterial } from './VoronoiMaterial';
 const DEBUG = false;
 
 const MAX_SEEDS = 512;
+const GRID_CELL_CAPACITY = 8;
+const GRID_TEX_HEIGHT = Math.ceil(GRID_CELL_CAPACITY / 4);
+const CELL_SIZE_FACTOR = 1.5; // Tunable factor balancing lookup vs iteration
 
 interface VoronoiMeshProps {
   seedPoints: [number, number, number][];
@@ -75,6 +78,34 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     return tex;
   }, [texData, texSize]);
 
+  const { gridTexture, gridTexData, gridRes, cellSize, numCells } = useMemo(() => {
+    const volume = (maxX - minX) * (maxY - minY) * (maxZ - minZ);
+    const baseSize = Math.cbrt(volume / Math.max(1, count));
+    const cellSize = baseSize * CELL_SIZE_FACTOR;
+    const gridRes = [
+      Math.max(1, Math.ceil((maxX - minX) / cellSize)),
+      Math.max(1, Math.ceil((maxY - minY) / cellSize)),
+      Math.max(1, Math.ceil((maxZ - minZ) / cellSize))
+    ];
+    const numCells = gridRes[0] * gridRes[1] * gridRes[2];
+    const gridTexData = new Float32Array(numCells * GRID_TEX_HEIGHT * 4);
+    gridTexData.fill(-1);
+    const gridTexture = new THREE.DataTexture(
+      gridTexData,
+      numCells,
+      GRID_TEX_HEIGHT,
+      THREE.RGBAFormat,
+      THREE.FloatType
+    );
+    gridTexture.magFilter = THREE.NearestFilter;
+    gridTexture.minFilter = THREE.NearestFilter;
+    gridTexture.wrapS = THREE.ClampToEdgeWrapping;
+    gridTexture.wrapT = THREE.ClampToEdgeWrapping;
+    gridTexture.flipY = false;
+    gridTexture.needsUpdate = true;
+    return { gridTexture, gridTexData, gridRes, cellSize, numCells };
+  }, [minX, maxX, minY, maxY, minZ, maxZ, count]);
+
   // Nearest‐neighbor seed spacing diagnostics
   useEffect(() => {
     if (!DEBUG) return;
@@ -100,6 +131,15 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     // Bind the dynamic DataTexture of seeds
     m.uniforms.uSeedsTex.value = seedTexture;
     m.uniforms.uSeedsTex.needsUpdate = true;
+    // Bind grid texture and parameters
+    m.uniforms.uGridTex.value = gridTexture;
+    m.uniforms.uGridTex.needsUpdate = true;
+    m.uniforms.uGridRes.value = new THREE.Vector3(gridRes[0], gridRes[1], gridRes[2]);
+    m.uniforms.uGridRes.needsUpdate = true;
+    m.uniforms.uCellSize.value = cellSize;
+    m.uniforms.uCellSize.needsUpdate = true;
+    m.uniforms.uNumCells.value = numCells;
+    m.uniforms.uNumCells.needsUpdate = true;
     // Initialize SDF offset thickness (from prop) and a thin edge thickness
     m.uniforms.uThickness.value = thickness;
     m.uniforms.uThickness.needsUpdate = true;
@@ -116,7 +156,7 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     m.uniforms.uSphereRadius.value = radiusVal;
     m.uniforms.uSphereRadius.needsUpdate = true;
     return m;
-  }, [seedTexture, thickness, showSolid, showInfill, centerVec, radiusVal]);
+  }, [seedTexture, gridTexture, gridRes, cellSize, numCells, thickness, showSolid, showInfill, centerVec, radiusVal]);
 
   const { camera } = useThree();
 
@@ -217,6 +257,31 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
       texData[i * 4 + 2] = seedsArray[i * 3 + 2];
     }
     seedTexture.needsUpdate = true;
+
+    // Build spatial hash grid of seed indices
+    const buckets: number[][] = Array.from({ length: numCells }, () => []);
+    for (let i = 0; i < count; i++) {
+      const x = seedsArray[i * 3 + 0];
+      const y = seedsArray[i * 3 + 1];
+      const z = seedsArray[i * 3 + 2];
+      const cx = Math.min(gridRes[0] - 1, Math.max(0, Math.floor((x - minX) / cellSize)));
+      const cy = Math.min(gridRes[1] - 1, Math.max(0, Math.floor((y - minY) / cellSize)));
+      const cz = Math.min(gridRes[2] - 1, Math.max(0, Math.floor((z - minZ) / cellSize)));
+      const cellIdx = cx + cy * gridRes[0] + cz * gridRes[0] * gridRes[1];
+      const bucket = buckets[cellIdx];
+      if (bucket.length < GRID_CELL_CAPACITY) bucket.push(i);
+    }
+    gridTexData.fill(-1);
+    for (let c = 0; c < numCells; c++) {
+      const bucket = buckets[c];
+      for (let j = 0; j < GRID_CELL_CAPACITY; j++) {
+        const val = j < bucket.length ? bucket[j] : -1;
+        const texel = Math.floor(j / 4);
+        const comp = j % 4;
+        gridTexData[(c * GRID_TEX_HEIGHT + texel) * 4 + comp] = val;
+      }
+    }
+    gridTexture.needsUpdate = true;
     
     // Debug: are we bound to the right DataTexture?
     //{
@@ -236,6 +301,14 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     // Update uniforms
     mat.uniforms.uNumSeeds.value = count;
     mat.uniforms.uNumSeeds.needsUpdate = true;
+    mat.uniforms.uGridTex.value = gridTexture;
+    mat.uniforms.uGridTex.needsUpdate = true;
+    mat.uniforms.uGridRes.value = new THREE.Vector3(gridRes[0], gridRes[1], gridRes[2]);
+    mat.uniforms.uGridRes.needsUpdate = true;
+    mat.uniforms.uCellSize.value = cellSize;
+    mat.uniforms.uCellSize.needsUpdate = true;
+    mat.uniforms.uNumCells.value = numCells;
+    mat.uniforms.uNumCells.needsUpdate = true;
     mat.uniforms.uBoxMin.value = new THREE.Vector3(minX, minY, minZ);
     mat.uniforms.uBoxMin.needsUpdate = true;
     mat.uniforms.uBoxMax.value = new THREE.Vector3(maxX, maxY, maxZ);
