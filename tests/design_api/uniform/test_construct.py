@@ -5,6 +5,10 @@ import pytest
 import logging
 
 from design_api.services.voronoi_gen.uniform.construct import compute_uniform_cells
+from design_api.services.voronoi_gen.uniform.regularizer import (
+    regularize_hexagon,
+    hexagon_metrics,
+)
 
 
 class DummyMesh:
@@ -157,6 +161,71 @@ def test_construct_produces_closed_hexagons():
         b = pts[(i + 1) % pts.shape[0]] - centroid
         area += 0.5 * np.linalg.norm(np.cross(a, b))
     assert area > 0
+
+
+def test_regularization_reduces_edge_variance(monkeypatch):
+    """Regularizing the hexagon should lower edge-length variance."""
+
+    # Slightly perturb seed positions
+    base_seeds = np.array([[0.0, 0.0, 0.0], [0.1, 0.0, 0.0]])
+    perturb = np.array([[0.002, -0.001, 0.001], [-0.0015, 0.0025, -0.0003]])
+    seeds = base_seeds + perturb
+
+    mesh = DummyMesh([[0.0, 0.0, 0.0]])
+
+    def fake_medial_axis(_mesh):  # pragma: no cover - simple stub
+        return np.zeros((1, 3))
+
+    base_hex = np.array(
+        [
+            [1.0, 0.0, 0.0],
+            [0.5, np.sqrt(3) / 2, 0.0],
+            [-0.5, np.sqrt(3) / 2, 0.0],
+            [-1.0, 0.0, 0.0],
+            [-0.5, -np.sqrt(3) / 2, 0.0],
+            [0.5, -np.sqrt(3) / 2, 0.0],
+        ]
+    )
+
+    def fake_trace_hexagon(seed, medial, normal, max_distance):  # pragma: no cover
+        perturbed = base_hex.copy()
+        if np.allclose(seed, seeds[0]):
+            perturbed[0] += [0.1, 0.0, 0.0]
+            perturbed[3] -= [0.1, 0.0, 0.0]
+        else:
+            perturbed[1] += [0.05, 0.0, 0.0]
+            perturbed[4] -= [0.05, 0.0, 0.0]
+        return perturbed
+
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.compute_medial_axis", fake_medial_axis
+    )
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.trace_hexagon", fake_trace_hexagon
+    )
+
+    plane_normal = np.array([0.0, 0.0, 1.0])
+    cells = compute_uniform_cells(seeds, mesh, plane_normal, max_distance=2.0)
+
+    unit_normal = plane_normal / np.linalg.norm(plane_normal)
+    for pts in cells.values():
+        metrics_before = hexagon_metrics(pts)
+        reg_pts = regularize_hexagon(pts, plane_normal)
+        metrics_after = hexagon_metrics(reg_pts)
+
+        var_before = np.var(metrics_before["edge_lengths"])
+        var_after = np.var(metrics_after["edge_lengths"])
+        assert var_after < var_before
+
+        # Ensure regularized cell remains coplanar with the slicing plane
+        edge1 = reg_pts[1] - reg_pts[0]
+        edge2 = reg_pts[2] - reg_pts[1]
+        cell_normal = np.cross(edge1, edge2)
+        cell_normal /= np.linalg.norm(cell_normal)
+        angle = np.arccos(
+            np.clip(np.abs(np.dot(cell_normal, unit_normal)), -1.0, 1.0)
+        )
+        assert angle < 1e-6
 
 
 def test_pathological_medial_axis_triggers_warning(monkeypatch, caplog):
