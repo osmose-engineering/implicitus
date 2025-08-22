@@ -164,3 +164,40 @@ def test_trace_hexagon_origin_medial_cluster(monkeypatch):
     # Fallback rays yield a highly irregular hexagon
     assert np.ptp(edges) > 0.3
 
+
+def test_construct_from_vecs_handles_duplicates_and_collinear():
+    sampler = pytest.importorskip("design_api.services.voronoi_gen.uniform.sampler")
+    _construct_from_vecs = getattr(sampler, "_construct_from_vecs", None)
+    if _construct_from_vecs is None:
+        pytest.skip("_construct_from_vecs not available")
+
+    seed = np.zeros(3)
+    plane_normal = np.array([0.0, 0.0, 1.0])
+    medial = np.array(
+        [
+            [1.0, 0.0, 0.0],
+            [1.0, 0.0, 0.0],  # duplicate
+            [0.999999, 0.001, 0.0],  # nearly collinear
+            [-1.0, 0.0, 0.0],
+            [0.0, 1.0, 0.0],
+            [0.0, -1.0, 0.0],
+            [0.0, 0.0, 1.0],
+            [0.0, 0.0, -1.0],
+            [0.707, 0.707, 0.0],
+            [-0.707, 0.707, 0.0],
+            [0.707, -0.707, 0.0],
+            [-0.707, -0.707, 0.0],
+        ]
+    )
+    vecs = medial - seed
+
+    try:
+        hex_pts = _construct_from_vecs(seed, vecs, plane_normal)
+    except np.linalg.LinAlgError:
+        pytest.fail("LinAlgError raised")
+
+    assert hex_pts.shape[0] == 6
+    directions = hex_pts - seed
+    unique = np.unique(directions, axis=0)
+    assert unique.shape[0] == 6
+
