@@ -43,10 +43,12 @@ export const VoronoiStruts: React.FC<VoronoiStrutsProps> = ({
         dir.normalize()
       );
       // build matrix
-      const mat = new THREE.Matrix4()
-        .makeRotationFromQuaternion(quat)
-        .setPosition(mid)
-        .scale(new THREE.Vector3(strutRadius, len * 0.5, strutRadius));
+      const mat = new THREE.Matrix4();
+      mat.compose(
+        mid,
+        quat,
+        new THREE.Vector3(strutRadius, len, strutRadius)
+      );
       mesh.setMatrixAt(i, mat);
     });
     mesh.instanceMatrix.needsUpdate = true;
