@@ -14,6 +14,14 @@ MAX_SEED_POINTS = 7500
 import random
 import numpy as np
 
+def _parse_bool(value):
+    """Robustly interpret a JSON boolean that may arrive as a string."""
+    if isinstance(value, bool):
+        return value
+    if isinstance(value, str):
+        return value.strip().lower() in {"1", "true", "yes", "on"}
+    return bool(value)
+
 def _auto_generate_seed_points(
     shape: str,
     params: dict,
@@ -430,7 +438,7 @@ def interpret_llm_request(llm_output):
                 shape, params = next(iter(node['primitive'].items()))
                 if 'seed_points' not in infill:
                     # include uniform/resolution flags in update branch
-                    uniform = bool(infill.get('uniform', False))
+                    uniform = _parse_bool(infill.get('uniform', False))
                     resolution = tuple(infill.get('resolution', [32, 32, 32]))
                     logging.debug(f"interpret_llm_request update-branch: uniform sampling={uniform}, resolution={resolution}")
                     seeds = _auto_generate_seed_points(
@@ -509,7 +517,7 @@ def interpret_llm_request(llm_output):
             if 'seed_points' not in infill:
                 shape, params = next(iter(node['primitive'].items()))
                 # include uniform/resolution flags in update branch
-                uniform = bool(infill.get('uniform', False))
+                uniform = _parse_bool(infill.get('uniform', False))
                 resolution = tuple(infill.get('resolution', [32, 32, 32]))
                 logging.debug(f"interpret_llm_request update-branch: uniform sampling={uniform}, resolution={resolution}")
                 seeds = _auto_generate_seed_points(
@@ -743,7 +751,7 @@ def update_request(sid: str, spec: list, raw: str):
             infill.setdefault('shell_offset', 0.0)
             infill.setdefault('auto_cap', False)
             # always regenerate seed points, and expose num_points parameter
-            uniform = bool(infill.get('uniform', False))
+            uniform = _parse_bool(infill.get('uniform', False))
             resolution = tuple(infill.get('resolution', [32, 32, 32]))
             seeds = _auto_generate_seed_points(
                 shape, params, bbox_min, bbox_max,
