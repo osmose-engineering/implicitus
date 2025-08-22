@@ -3,6 +3,7 @@ import pytest
 import logging
 
 from design_api.services.voronoi_gen.uniform.sampler import compute_medial_axis, trace_hexagon
+from hypothesis import given, strategies as st, settings, event, assume
 
 
 class DummyMesh:
@@ -99,6 +100,48 @@ def test_trace_hexagon_basic():
     # Should produce exactly 6 unique points
     unique_pts = {tuple(pt) for pt in hex_pts}
     assert len(unique_pts) == 6
+
+
+@settings(max_examples=50, deadline=None)
+@given(
+    seed=st.tuples(
+        st.floats(min_value=-1.0, max_value=1.0),
+        st.floats(min_value=-1.0, max_value=1.0),
+        st.floats(min_value=-1.0, max_value=1.0),
+    ),
+    medial=st.lists(
+        st.tuples(
+            st.floats(min_value=-2.0, max_value=2.0),
+            st.floats(min_value=-2.0, max_value=2.0),
+            st.floats(min_value=-2.0, max_value=2.0),
+        ),
+        min_size=6,
+        max_size=30,
+    ),
+)
+def test_trace_hexagon_random_inputs(seed, medial):
+    seed_arr = np.array(seed, dtype=float)
+    medial_arr = np.array(medial, dtype=float)
+    plane_normal = np.array([0.0, 0.0, 1.0])
+    assume(np.unique(medial_arr, axis=0).shape[0] >= 3)
+    assume(np.any(np.linalg.norm(medial_arr - seed_arr, axis=1) > 1e-6))
+
+    try:
+        hex_pts, used_fallback = trace_hexagon(
+            seed_arr, medial_arr, plane_normal, report_method=True
+        )
+    except ValueError:
+        assume(False)
+
+    event("fallback" if used_fallback else "direct")
+
+    assert isinstance(hex_pts, np.ndarray)
+    assert hex_pts.shape == (6, 3)
+    # All edges should connect to form a closed polygon with unique vertices
+    edges = np.linalg.norm(np.roll(hex_pts, -1, axis=0) - hex_pts, axis=1)
+    assert np.all(edges > 0)
+    unique = np.unique(hex_pts, axis=0)
+    assert unique.shape[0] == 6
 
 
 def test_hexagons_share_vertices_with_adjacent_seeds():
