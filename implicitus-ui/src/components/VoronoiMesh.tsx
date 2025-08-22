@@ -78,6 +78,17 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     return tex;
   }, [texData, texSize]);
 
+
+  useEffect(() => {
+    texData.fill(0);
+    for (let i = 0; i < count; i++) {
+      texData[i * 4 + 0] = seedsArray[i * 3 + 0];
+      texData[i * 4 + 1] = seedsArray[i * 3 + 1];
+      texData[i * 4 + 2] = seedsArray[i * 3 + 2];
+    }
+    seedTexture.needsUpdate = true;
+  }, [seedPoints, texData, seedTexture, count, seedsArray]);
+
   const { gridTexture, gridTexData, gridRes, cellSize, numCells } = useMemo(() => {
     const volume = (maxX - minX) * (maxY - minY) * (maxZ - minZ);
     const baseSize = Math.cbrt(volume / Math.max(1, count));
@@ -106,6 +117,7 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     return { gridTexture, gridTexData, gridRes, cellSize, numCells };
   }, [minX, maxX, minY, maxY, minZ, maxZ, count]);
 
+
   // Nearest‐neighbor seed spacing diagnostics
   useEffect(() => {
     if (!DEBUG) return;
@@ -125,6 +137,58 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     const avgD = dists.reduce((a, b) => a + b, 0) / dists.length;
     console.log('NN spacing (mm):', { minD, avgD, maxD });
   }, [seedPoints]);
+
+
+  const material = useMemo(() => new VoronoiMaterial(), []);
+
+  useEffect(() => {
+    material.uniforms.uSeedsTex.value = seedTexture;
+    material.uniforms.uSeedsTex.needsUpdate = true;
+  }, [material, seedTexture]);
+
+  useEffect(() => {
+    material.uniforms.uThickness.value = thickness;
+    material.uniforms.uThickness.needsUpdate = true;
+    material.uniforms.uEdgeThickness.value = thickness;
+    material.uniforms.uEdgeThickness.needsUpdate = true;
+  }, [material, thickness]);
+
+
+  useEffect(() => {
+    material.uniforms.uSphereCenter.value.copy(centerVec);
+    material.uniforms.uSphereCenter.needsUpdate = true;
+    material.uniforms.uSphereRadius.value = radiusVal;
+    material.uniforms.uSphereRadius.needsUpdate = true;
+  }, [material, centerVec, radiusVal]);
+
+  useEffect(() => {
+    material.uniforms.uNumSeeds.value = count;
+    material.uniforms.uNumSeeds.needsUpdate = true;
+    material.uniforms.uBoxMin.value.set(minX, minY, minZ);
+    material.uniforms.uBoxMin.needsUpdate = true;
+    material.uniforms.uBoxMax.value.set(maxX, maxY, maxZ);
+    material.uniforms.uBoxMax.needsUpdate = true;
+  }, [material, count, minX, minY, minZ, maxX, maxY, maxZ]);
+
+  useEffect(() => {
+    material.uniforms.uMaxSteps.value = maxSteps;
+    material.uniforms.uMaxSteps.needsUpdate = true;
+  }, [material, maxSteps]);
+
+  useEffect(() => {
+    material.uniforms.uEpsilon.value = epsilon;
+    material.uniforms.uEpsilon.needsUpdate = true;
+  }, [material, epsilon]);
+
+  useEffect(() => {
+    material.uniforms.uShowSolid.value = showSolid;
+    material.uniforms.uShowSolid.needsUpdate = true;
+  }, [material, showSolid]);
+
+  useEffect(() => {
+    material.uniforms.uShowInfill.value = showInfill;
+    material.uniforms.uShowInfill.needsUpdate = true;
+  }, [material, showInfill]);
 
   const material = useMemo(() => {
     const m = new VoronoiMaterial();
@@ -157,6 +221,7 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     m.uniforms.uSphereRadius.needsUpdate = true;
     return m;
   }, [seedTexture, gridTexture, gridRes, cellSize, numCells, thickness, showSolid, showInfill, centerVec, radiusVal]);
+
 
   const { camera } = useThree();
 
@@ -245,6 +310,7 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
       ) - thickness;
       console.log('SDF @ entry:', entryDist);
     }
+
 
     const mat = material;
     if (!mat) return;
@@ -335,6 +401,7 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
       //uBoxMin:   mat.uniforms.uBoxMin.value.toArray ? mat.uniforms.uBoxMin.value.toArray() : mat.uniforms.uBoxMin.value,
       //uBoxMax:   mat.uniforms.uBoxMax.value.toArray ? mat.uniforms.uBoxMax.value.toArray() : mat.uniforms.uBoxMax.value
     //});
+
   });
 
   return (
