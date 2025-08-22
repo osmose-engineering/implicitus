@@ -33,9 +33,42 @@ def compute_uniform_cells(
     """
     # Extract medial axis points
     medial_points = compute_medial_axis(imds_mesh)
+
+    # Derive an axis-aligned bounding box from the interface mesh to provide
+    # additional sampling locations if the medial axis alone is insufficient.
+    verts = getattr(imds_mesh, "vertices", None)
+    if verts is None:
+        raise ValueError("imds_mesh must have a 'vertices' attribute")
+    bbox_min = np.min(verts, axis=0)
+    bbox_max = np.max(verts, axis=0)
+    rng = np.random.default_rng(0)
+
+    def _resample() -> np.ndarray:
+        """Return extra candidate points within the mesh bounds."""
+        return rng.uniform(bbox_min, bbox_max, size=(30, 3))
+
     cells: Dict[int, np.ndarray] = {}
     for idx, seed in enumerate(seeds):
-        hex_pts = trace_hexagon(seed, medial_points, plane_normal, max_distance)
+        # Provide the resampler so that trace_hexagon has enough neighbor
+        # directions and avoids the axis-aligned bounding-box fallback that
+        # produces cubic cells. Older ``trace_hexagon`` implementations may not
+        # accept the ``neighbor_resampler`` argument, so we fall back to calling
+        # it without that parameter when necessary.
+        try:
+            hex_pts = trace_hexagon(
+                seed,
+                medial_points,
+                plane_normal,
+                max_distance,
+                neighbor_resampler=_resample,
+            )
+        except TypeError:  # pragma: no cover - legacy signature
+            hex_pts = trace_hexagon(
+                seed,
+                medial_points,
+                plane_normal,
+                max_distance,
+            )
         # Optionally log metrics
         metrics = hexagon_metrics(hex_pts)
         logging.debug(
