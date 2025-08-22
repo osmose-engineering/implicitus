@@ -102,6 +102,11 @@ def compute_uniform_cells(
             f"{metrics['area']:.3f}"
         )
         cells[idx] = hex_pts
+        dump_data["cells"][str(idx)] = {
+            "seed": seed.tolist(),
+            "vertices": hex_pts.tolist(),
+            "used_fallback": bool(used_fallback),
+        }
 
         dump_data["cells"][str(idx)] = {
             "seed": seed.tolist(),
@@ -177,8 +182,12 @@ def compute_uniform_cells(
         else:
             logging.info("Shared vertex adjustment: no coincident vertices found")
 
-    dump_path = Path("UNIFORM_CELL_DUMP.json")
+
+    repo_root = Path(__file__).resolve().parents[4]
+    dump_path = repo_root / "logs" / "UNIFORM_CELL_DUMP.json"
     try:
+        dump_path.parent.mkdir(parents=True, exist_ok=True)
+
         with dump_path.open("w", encoding="utf-8") as f:
             json.dump(dump_data, f)
     except Exception as exc:  # pragma: no cover - best effort

@@ -5,6 +5,9 @@ import pytest
 import logging
 import json
 
+from pathlib import Path
+
+
 from design_api.services.voronoi_gen.uniform.construct import compute_uniform_cells
 from design_api.services.voronoi_gen.uniform.regularizer import (
     regularize_hexagon,
@@ -270,7 +273,9 @@ def test_pathological_medial_axis_triggers_warning(monkeypatch, caplog):
     assert any("degenerate hexagon" in w.message for w in warnings)
 
 
-def test_uniform_cell_dump(tmp_path, monkeypatch):
+
+def test_uniform_cell_dump(monkeypatch):
+
     seeds = np.array([[0.0, 0.0, 0.0]])
     mesh = _sample_mesh()
     plane_normal = np.array([0.0, 0.0, 1.0])
@@ -293,7 +298,10 @@ def test_uniform_cell_dump(tmp_path, monkeypatch):
     )
 
 
-    monkeypatch.chdir(tmp_path)
+    dump_file = Path(__file__).resolve().parents[3] / "logs" / "UNIFORM_CELL_DUMP.json"
+    if dump_file.exists():
+        dump_file.unlink()
+
 
     compute_uniform_cells(
         seeds,
@@ -302,8 +310,9 @@ def test_uniform_cell_dump(tmp_path, monkeypatch):
         max_distance=1.0,
     )
 
-    dump_file = tmp_path / "UNIFORM_CELL_DUMP.json"
 
     assert dump_file.exists()
     data = json.loads(dump_file.read_text())
     assert data["cells"]["0"]["used_fallback"] is True
+    dump_file.unlink()
+
