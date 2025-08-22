@@ -141,58 +141,6 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     console.log('NN spacing (mm):', { minD, avgD, maxD });
   }, [seedPoints]);
 
-
-  const material = useMemo(() => new VoronoiMaterial(), []);
-
-  useEffect(() => {
-    material.uniforms.uSeedsTex.value = seedTexture;
-    material.uniforms.uSeedsTex.needsUpdate = true;
-  }, [material, seedTexture]);
-
-  useEffect(() => {
-    material.uniforms.uThickness.value = thickness;
-    material.uniforms.uThickness.needsUpdate = true;
-    material.uniforms.uEdgeThickness.value = thickness;
-    material.uniforms.uEdgeThickness.needsUpdate = true;
-  }, [material, thickness]);
-
-
-  useEffect(() => {
-    material.uniforms.uSphereCenter.value.copy(centerVec);
-    material.uniforms.uSphereCenter.needsUpdate = true;
-    material.uniforms.uSphereRadius.value = radiusVal;
-    material.uniforms.uSphereRadius.needsUpdate = true;
-  }, [material, centerVec, radiusVal]);
-
-  useEffect(() => {
-    material.uniforms.uNumSeeds.value = count;
-    material.uniforms.uNumSeeds.needsUpdate = true;
-    material.uniforms.uBoxMin.value.set(minX, minY, minZ);
-    material.uniforms.uBoxMin.needsUpdate = true;
-    material.uniforms.uBoxMax.value.set(maxX, maxY, maxZ);
-    material.uniforms.uBoxMax.needsUpdate = true;
-  }, [material, count, minX, minY, minZ, maxX, maxY, maxZ]);
-
-  useEffect(() => {
-    material.uniforms.uMaxSteps.value = maxSteps;
-    material.uniforms.uMaxSteps.needsUpdate = true;
-  }, [material, maxSteps]);
-
-  useEffect(() => {
-    material.uniforms.uEpsilon.value = epsilon;
-    material.uniforms.uEpsilon.needsUpdate = true;
-  }, [material, epsilon]);
-
-  useEffect(() => {
-    material.uniforms.uShowSolid.value = showSolid;
-    material.uniforms.uShowSolid.needsUpdate = true;
-  }, [material, showSolid]);
-
-  useEffect(() => {
-    material.uniforms.uShowInfill.value = showInfill;
-    material.uniforms.uShowInfill.needsUpdate = true;
-  }, [material, showInfill]);
-
   const material = useMemo(() => {
     const m = new VoronoiMaterial();
     // Bind the dynamic DataTexture of seeds
