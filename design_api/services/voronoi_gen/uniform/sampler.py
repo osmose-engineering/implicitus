@@ -181,8 +181,11 @@ def trace_hexagon(
         angles = np.array(uniq_angles)
         proj = np.vstack(uniq_proj)
 
+        # Preselect nearest neighbors in six angular bins but retain
+        # additional candidates for potential fallback.
         sel_2d: List[np.ndarray] = []
         used = np.zeros(len(angles), dtype=bool)
+        candidate_lists: List[List[int]] = []
         for k in range(6):
             target = 2 * np.pi * k / 6
             diffs = np.abs(np.angle(np.exp(1j * (angles - target))))
@@ -190,23 +193,81 @@ def trace_hexagon(
             idx = int(np.argmin(diffs))
             used[idx] = True
             sel_2d.append(proj[idx])
+            order = np.argsort(diffs)
+            idx = None
+            for cand in order:
+                if not used[cand]:
+                    idx = cand
+                    used[cand] = True
+                    break
+            if idx is None:
+                return None
+            sel_2d.append(neighbor_2d_all[idx])
+            # store remaining unused candidates for this bin
+            remaining = [c for c in order if not used[c]]
+            candidate_lists.append(remaining)
 
+        # Sort neighbors counter-clockwise and reorder candidate lists
         neighbor_2d = np.vstack(sel_2d)
         ang = np.arctan2(neighbor_2d[:, 1], neighbor_2d[:, 0])
         order = np.argsort(ang)
         neighbor_2d = neighbor_2d[order]
+        candidate_lists = [candidate_lists[i] for i in order]
 
         normals = neighbor_2d
         bs = np.sum(neighbor_2d ** 2, axis=1) / 2.0
         verts_2d: List[np.ndarray] = []
+        det_tol = 1e-8
         for i in range(6):
             j = (i + 1) % 6
             N = np.vstack([normals[i], normals[j]])
             B = np.array([bs[i], bs[j]])
+            det = float(np.linalg.det(N))
+
+            # Attempt to swap in alternative neighbors if matrix is nearly singular
+            if abs(det) < det_tol:
+                replaced = False
+                for alt in candidate_lists[j]:
+                    if used[alt]:
+                        continue
+                    cand = neighbor_2d_all[alt]
+                    det_alt = float(np.linalg.det(np.vstack([normals[i], cand])))
+                    if abs(det_alt) >= det_tol:
+                        logging.debug("trace_hexagon: replaced neighbor %d with alternative to avoid singular matrix", j)
+                        normals[j] = cand
+                        bs[j] = np.sum(cand ** 2) / 2.0
+                        used[alt] = True
+                        candidate_lists[j] = [c for c in candidate_lists[j] if c != alt]
+                        det = det_alt
+                        replaced = True
+                        break
+                if not replaced:
+                    for alt in candidate_lists[i]:
+                        if used[alt]:
+                            continue
+                        cand = neighbor_2d_all[alt]
+                        det_alt = float(np.linalg.det(np.vstack([cand, normals[j]])))
+                        if abs(det_alt) >= det_tol:
+                            logging.debug("trace_hexagon: replaced neighbor %d with alternative to avoid singular matrix", i)
+                            normals[i] = cand
+                            bs[i] = np.sum(cand ** 2) / 2.0
+                            used[alt] = True
+                            candidate_lists[i] = [c for c in candidate_lists[i] if c != alt]
+                            det = det_alt
+                            replaced = True
+                            break
+                if not replaced:
+                    logging.debug("trace_hexagon: degenerate neighbor pair (%d,%d); resampling", i, j)
+                    return None
+
             try:
                 x = np.linalg.solve(N, B)
             except np.linalg.LinAlgError:
-                return None
+                logging.debug("trace_hexagon: using least-squares fallback for singular matrix")
+                try:
+                    x, *_ = np.linalg.lstsq(N, B, rcond=None)
+                except Exception:
+                    x = np.linalg.pinv(N) @ B
             verts_2d.append(x)
 
         if len(verts_2d) != 6:
