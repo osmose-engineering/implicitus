@@ -12,6 +12,109 @@ except Exception:  # pragma: no cover - fallback when scipy missing
     Voronoi = None
 
 
+def _construct_from_vecs(
+    seed_pt: np.ndarray, vecs: np.ndarray, plane_normal: np.ndarray
+) -> Optional[np.ndarray]:
+    """Construct hexagon vertices from neighbor vectors.
+
+    Parameters
+    ----------
+    seed_pt:
+        Seed point for the cell.
+    vecs:
+        Vectors from the seed to candidate neighbor points.
+    plane_normal:
+        Normal of the slicing plane used for projection.
+
+    Returns
+    -------
+    Optional[np.ndarray]
+        ``(6,3)`` array of hexagon vertices or ``None`` if construction
+        fails.
+    """
+
+    if vecs.shape[0] < 6:
+        return None
+
+    # Build orthonormal basis spanning the slicing plane
+    arbitrary = np.array([1.0, 0.0, 0.0])
+    if np.allclose(np.cross(arbitrary, plane_normal), 0):
+        arbitrary = np.array([0.0, 1.0, 0.0])
+    u = np.cross(plane_normal, arbitrary)
+    u /= np.linalg.norm(u)
+    v = np.cross(plane_normal, u)
+    v /= np.linalg.norm(v)
+
+    # Project neighbor vectors onto the plane
+    proj = np.column_stack((vecs.dot(u), vecs.dot(v)))
+    norms = np.linalg.norm(proj, axis=1)
+    valid = norms > 1e-12
+    proj = proj[valid]
+    norms = norms[valid]
+
+    if proj.shape[0] < 6:
+        return None
+
+    # Remove near-duplicate directions for robustness
+    normed = proj / norms[:, None]
+    angles = np.mod(np.arctan2(normed[:, 1], normed[:, 0]), 2 * np.pi)
+    order = np.argsort(angles)
+    angles = angles[order]
+    proj = proj[order]
+
+    uniq_proj: List[np.ndarray] = []
+    uniq_angles: List[float] = []
+    thresh = math.radians(1.0)
+    for p, ang in zip(proj, angles):
+        if not any(abs(np.angle(np.exp(1j * (ang - a)))) < thresh for a in uniq_angles):
+            uniq_proj.append(p)
+            uniq_angles.append(ang)
+
+    if len(uniq_proj) < 6:
+        return None
+
+    angles = np.array(uniq_angles)
+    proj = np.vstack(uniq_proj)
+
+    # Select one neighbor in each of six angular bins
+    neighbor_2d: List[np.ndarray] = []
+    used = np.zeros(len(angles), dtype=bool)
+    for k in range(6):
+        target = 2 * np.pi * k / 6
+        diffs = np.abs(np.angle(np.exp(1j * (angles - target))))
+        diffs[used] = np.inf
+        idx = int(np.argmin(diffs))
+        if np.isinf(diffs[idx]):
+            return None
+        used[idx] = True
+        neighbor_2d.append(proj[idx])
+
+    # Sort neighbors counter-clockwise
+    neighbor_2d = np.vstack(neighbor_2d)
+    ang = np.arctan2(neighbor_2d[:, 1], neighbor_2d[:, 0])
+    order = np.argsort(ang)
+    neighbor_2d = neighbor_2d[order]
+
+    normals = neighbor_2d
+    bs = np.sum(neighbor_2d ** 2, axis=1) / 2.0
+    verts_2d: List[np.ndarray] = []
+    for i in range(6):
+        j = (i + 1) % 6
+        N = np.vstack([normals[i], normals[j]])
+        B = np.array([bs[i], bs[j]])
+        try:
+            x = np.linalg.solve(N, B)
+        except np.linalg.LinAlgError:
+            x, *_ = np.linalg.lstsq(N, B, rcond=None)
+        verts_2d.append(x)
+
+    if len(verts_2d) != 6:
+        return None
+
+    pts = [seed_pt + x[0] * u + x[1] * v for x in verts_2d]
+    return np.vstack(pts)
+
+
 def compute_medial_axis(imds_mesh: Any, tol: float = 1e-8) -> np.ndarray:
     """Compute an approximation of the medial axis of the interface mesh.
 
@@ -145,141 +248,11 @@ def trace_hexagon(
             return None
         return tmin if tmin > 0 else tmax
 
-    def _construct_from_vecs(vecs: np.ndarray) -> Optional[np.ndarray]:
-        """Attempt to construct hexagon from neighbor vectors."""
-        if vecs.shape[0] < 6:
-            return None
-
-        # Project neighbor vectors onto the slicing plane
-        proj = np.column_stack((vecs.dot(u), vecs.dot(v)))
-        norms = np.linalg.norm(proj, axis=1)
-        valid = norms > 1e-12
-        proj = proj[valid]
-        norms = norms[valid]
-
-        if proj.shape[0] < 6:
-            return None
-
-        # Normalize for robust angle comparison and remove near-duplicates
-        normed = proj / norms[:, None]
-        angles = np.mod(np.arctan2(normed[:, 1], normed[:, 0]), 2 * np.pi)
-        order = np.argsort(angles)
-        angles = angles[order]
-        proj = proj[order]
-
-        uniq_proj: List[np.ndarray] = []
-        uniq_angles: List[float] = []
-        thresh = math.radians(1.0)
-        for p, ang in zip(proj, angles):
-            if not any(abs(np.angle(np.exp(1j * (ang - a)))) < thresh for a in uniq_angles):
-                uniq_proj.append(p)
-                uniq_angles.append(ang)
-
-        if len(uniq_proj) < 6:
-            return None
-
-        angles = np.array(uniq_angles)
-        proj = np.vstack(uniq_proj)
-
-        # Preselect nearest neighbors in six angular bins but retain
-        # additional candidates for potential fallback.
-        sel_2d: List[np.ndarray] = []
-        used = np.zeros(len(angles), dtype=bool)
-        candidate_lists: List[List[int]] = []
-        for k in range(6):
-            target = 2 * np.pi * k / 6
-            diffs = np.abs(np.angle(np.exp(1j * (angles - target))))
-            diffs[used] = np.inf
-            idx = int(np.argmin(diffs))
-            used[idx] = True
-            sel_2d.append(proj[idx])
-            order = np.argsort(diffs)
-            idx = None
-            for cand in order:
-                if not used[cand]:
-                    idx = cand
-                    used[cand] = True
-                    break
-            if idx is None:
-                return None
-            sel_2d.append(neighbor_2d_all[idx])
-            # store remaining unused candidates for this bin
-            remaining = [c for c in order if not used[c]]
-            candidate_lists.append(remaining)
-
-        # Sort neighbors counter-clockwise and reorder candidate lists
-        neighbor_2d = np.vstack(sel_2d)
-        ang = np.arctan2(neighbor_2d[:, 1], neighbor_2d[:, 0])
-        order = np.argsort(ang)
-        neighbor_2d = neighbor_2d[order]
-        candidate_lists = [candidate_lists[i] for i in order]
-
-        normals = neighbor_2d
-        bs = np.sum(neighbor_2d ** 2, axis=1) / 2.0
-        verts_2d: List[np.ndarray] = []
-        det_tol = 1e-8
-        for i in range(6):
-            j = (i + 1) % 6
-            N = np.vstack([normals[i], normals[j]])
-            B = np.array([bs[i], bs[j]])
-            det = float(np.linalg.det(N))
-
-            # Attempt to swap in alternative neighbors if matrix is nearly singular
-            if abs(det) < det_tol:
-                replaced = False
-                for alt in candidate_lists[j]:
-                    if used[alt]:
-                        continue
-                    cand = neighbor_2d_all[alt]
-                    det_alt = float(np.linalg.det(np.vstack([normals[i], cand])))
-                    if abs(det_alt) >= det_tol:
-                        logging.debug("trace_hexagon: replaced neighbor %d with alternative to avoid singular matrix", j)
-                        normals[j] = cand
-                        bs[j] = np.sum(cand ** 2) / 2.0
-                        used[alt] = True
-                        candidate_lists[j] = [c for c in candidate_lists[j] if c != alt]
-                        det = det_alt
-                        replaced = True
-                        break
-                if not replaced:
-                    for alt in candidate_lists[i]:
-                        if used[alt]:
-                            continue
-                        cand = neighbor_2d_all[alt]
-                        det_alt = float(np.linalg.det(np.vstack([cand, normals[j]])))
-                        if abs(det_alt) >= det_tol:
-                            logging.debug("trace_hexagon: replaced neighbor %d with alternative to avoid singular matrix", i)
-                            normals[i] = cand
-                            bs[i] = np.sum(cand ** 2) / 2.0
-                            used[alt] = True
-                            candidate_lists[i] = [c for c in candidate_lists[i] if c != alt]
-                            det = det_alt
-                            replaced = True
-                            break
-                if not replaced:
-                    logging.debug("trace_hexagon: degenerate neighbor pair (%d,%d); resampling", i, j)
-                    return None
-
-            try:
-                x = np.linalg.solve(N, B)
-            except np.linalg.LinAlgError:
-                logging.debug("trace_hexagon: using least-squares fallback for singular matrix")
-                try:
-                    x, *_ = np.linalg.lstsq(N, B, rcond=None)
-                except Exception:
-                    x = np.linalg.pinv(N) @ B
-            verts_2d.append(x)
-
-        if len(verts_2d) != 6:
-            return None
-        pts = [seed_pt + x[0] * u + x[1] * v for x in verts_2d]
-        return np.vstack(pts)
-
     # Initial attempt using provided medial points
     vecs = medial_points - seed_pt
     dists = np.linalg.norm(vecs, axis=1)
     vecs = vecs[dists > 1e-8]
-    hex_pts_arr = _construct_from_vecs(vecs)
+    hex_pts_arr = _construct_from_vecs(seed_pt, vecs, plane_normal)
 
     # Request additional neighbors if filtering removed too many
     if hex_pts_arr is None and neighbor_resampler is not None:
@@ -289,7 +262,7 @@ def trace_hexagon(
             vecs = all_points - seed_pt
             dists = np.linalg.norm(vecs, axis=1)
             vecs = vecs[dists > 1e-8]
-            hex_pts_arr = _construct_from_vecs(vecs)
+            hex_pts_arr = _construct_from_vecs(seed_pt, vecs, plane_normal)
 
     # Retry using adjacency-derived neighbors if still unsuccessful
     if hex_pts_arr is None:
@@ -306,7 +279,7 @@ def trace_hexagon(
                     neigh_idx.append(i)
             if neigh_idx:
                 vecs_adj = pts[neigh_idx] - seed_pt
-                hex_pts_arr = _construct_from_vecs(vecs_adj)
+                hex_pts_arr = _construct_from_vecs(seed_pt, vecs_adj, plane_normal)
         except Exception:  # pragma: no cover - any failure just skips
             pass
 
