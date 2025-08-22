@@ -173,6 +173,7 @@ def test_construct_from_vecs_handles_duplicates_and_collinear():
 
     seed = np.zeros(3)
     plane_normal = np.array([0.0, 0.0, 1.0])
+
     medial = np.array(
         [
             [1.0, 0.0, 0.0],
@@ -193,6 +194,7 @@ def test_construct_from_vecs_handles_duplicates_and_collinear():
 
     try:
         hex_pts = _construct_from_vecs(seed, vecs, plane_normal)
+
     except np.linalg.LinAlgError:
         pytest.fail("LinAlgError raised")
 
