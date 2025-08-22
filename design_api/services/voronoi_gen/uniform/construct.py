@@ -98,10 +98,15 @@ def compute_uniform_cells(
         cells: dict mapping seed index to (6,3) array of hexagon vertices.
     """
     # Build Delaunay triangulation to gather neighbor sets
-    delaunay = Delaunay(seeds)
     neighbor_sets: Dict[int, set] = {i: set() for i in range(len(seeds))}
-    for simplex in delaunay.simplices:
-        for i, j in itertools.combinations(simplex, 2):
+    if len(seeds) >= 4:
+        delaunay = Delaunay(seeds)
+        for simplex in delaunay.simplices:
+            for i, j in itertools.combinations(simplex, 2):
+                neighbor_sets[i].add(j)
+                neighbor_sets[j].add(i)
+    else:
+        for i, j in itertools.combinations(range(len(seeds)), 2):
             neighbor_sets[i].add(j)
             neighbor_sets[j].add(i)
 
