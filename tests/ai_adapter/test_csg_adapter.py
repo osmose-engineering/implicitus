@@ -130,6 +130,25 @@ def test_review_request_with_dict_input_multiple_primitives():
     assert "box" in summary.lower()
 
 
+def test_uniform_string_false_parsing(monkeypatch):
+    called = {}
+
+    def fake_auto(shape, params, bbox_min, bbox_max, spacing, *, uniform=False, grid_resolution=(32, 32, 32)):
+        called['uniform'] = uniform
+        return []
+
+    import ai_adapter.csg_adapter as csg
+    monkeypatch.setattr(csg, '_auto_generate_seed_points', fake_auto)
+
+    request_data = {
+        'shape': 'sphere',
+        'size_mm': 10,
+        'infill': {'pattern': 'voronoi', 'uniform': 'false'}
+    }
+    csg.interpret_llm_request(request_data)
+    assert called['uniform'] is False
+
+
 # Additional tests for review_request with existing/modified spec
 def test_review_request_with_existing_spec():
     # Simulate UI sending back the spec without parsing again
