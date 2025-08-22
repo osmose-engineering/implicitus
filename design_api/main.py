@@ -24,6 +24,7 @@ from design_api.services.mapping import map_primitive as map_to_proto_dict
 from design_api.services.validator import validate_model_spec as validate_proto
 from ai_adapter.csg_adapter import review_request, generate_summary, update_request
 from design_api.services.voronoi_gen.organic.construct import construct_voronoi_cells
+from design_api.services.voronoi_gen.uniform.construct import compute_uniform_cells
 
 @dataclass
 class DesignState:
@@ -124,9 +125,17 @@ async def review(req: dict, sid: Optional[str] = None):
                 if seed_points and bbox_min and bbox_max:
                     pts_arr = np.asarray(seed_points)
                     try:
-                        inf["cells"] = construct_voronoi_cells(
-                            pts_arr, tuple(bbox_min), tuple(bbox_max)
-                        )
+                        if inf.get("uniform"):
+                            plane = np.array([0.0, 0.0, 1.0])
+                            extent = np.linalg.norm(np.array(bbox_max) - np.array(bbox_min)) * 0.5
+                            cells = compute_uniform_cells(
+                                pts_arr, None, plane, max_distance=extent
+                            )
+                            inf["cells"] = [poly.tolist() for poly in cells.values()]
+                        else:
+                            inf["cells"] = construct_voronoi_cells(
+                                pts_arr, tuple(bbox_min), tuple(bbox_max)
+                            )
                     except Exception:
                         logging.exception("Failed to generate Voronoi cells")
         design_states[sid].draft_spec = spec
