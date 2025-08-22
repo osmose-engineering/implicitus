@@ -75,6 +75,16 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     return tex;
   }, [texData, texSize]);
 
+  useEffect(() => {
+    texData.fill(0);
+    for (let i = 0; i < count; i++) {
+      texData[i * 4 + 0] = seedsArray[i * 3 + 0];
+      texData[i * 4 + 1] = seedsArray[i * 3 + 1];
+      texData[i * 4 + 2] = seedsArray[i * 3 + 2];
+    }
+    seedTexture.needsUpdate = true;
+  }, [seedPoints, texData, seedTexture, count, seedsArray]);
+
   // Nearest‐neighbor seed spacing diagnostics
   useEffect(() => {
     if (!DEBUG) return;
@@ -95,28 +105,56 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     console.log('NN spacing (mm):', { minD, avgD, maxD });
   }, [seedPoints]);
 
-  const material = useMemo(() => {
-    const m = new VoronoiMaterial();
-    // Bind the dynamic DataTexture of seeds
-    m.uniforms.uSeedsTex.value = seedTexture;
-    m.uniforms.uSeedsTex.needsUpdate = true;
-    // Initialize SDF offset thickness (from prop) and a thin edge thickness
-    m.uniforms.uThickness.value = thickness;
-    m.uniforms.uThickness.needsUpdate = true;
-    m.uniforms.uEdgeThickness.value = thickness;
-    m.uniforms.uEdgeThickness.needsUpdate = true;
-    // Wire up visibility toggles
-    m.uniforms.uShowSolid.value = showSolid;
-    m.uniforms.uShowSolid.needsUpdate = true;
-    m.uniforms.uShowInfill.value = showInfill;
-    m.uniforms.uShowInfill.needsUpdate = true;
-    // Bind sphere shape parameters
-    m.uniforms.uSphereCenter.value.copy(centerVec);
-    m.uniforms.uSphereCenter.needsUpdate = true;
-    m.uniforms.uSphereRadius.value = radiusVal;
-    m.uniforms.uSphereRadius.needsUpdate = true;
-    return m;
-  }, [seedTexture, thickness, showSolid, showInfill, centerVec, radiusVal]);
+  const material = useMemo(() => new VoronoiMaterial(), []);
+
+  useEffect(() => {
+    material.uniforms.uSeedsTex.value = seedTexture;
+    material.uniforms.uSeedsTex.needsUpdate = true;
+  }, [material, seedTexture]);
+
+  useEffect(() => {
+    material.uniforms.uThickness.value = thickness;
+    material.uniforms.uThickness.needsUpdate = true;
+    material.uniforms.uEdgeThickness.value = thickness;
+    material.uniforms.uEdgeThickness.needsUpdate = true;
+  }, [material, thickness]);
+
+
+  useEffect(() => {
+    material.uniforms.uSphereCenter.value.copy(centerVec);
+    material.uniforms.uSphereCenter.needsUpdate = true;
+    material.uniforms.uSphereRadius.value = radiusVal;
+    material.uniforms.uSphereRadius.needsUpdate = true;
+  }, [material, centerVec, radiusVal]);
+
+  useEffect(() => {
+    material.uniforms.uNumSeeds.value = count;
+    material.uniforms.uNumSeeds.needsUpdate = true;
+    material.uniforms.uBoxMin.value.set(minX, minY, minZ);
+    material.uniforms.uBoxMin.needsUpdate = true;
+    material.uniforms.uBoxMax.value.set(maxX, maxY, maxZ);
+    material.uniforms.uBoxMax.needsUpdate = true;
+  }, [material, count, minX, minY, minZ, maxX, maxY, maxZ]);
+
+  useEffect(() => {
+    material.uniforms.uMaxSteps.value = maxSteps;
+    material.uniforms.uMaxSteps.needsUpdate = true;
+  }, [material, maxSteps]);
+
+  useEffect(() => {
+    material.uniforms.uEpsilon.value = epsilon;
+    material.uniforms.uEpsilon.needsUpdate = true;
+  }, [material, epsilon]);
+
+  useEffect(() => {
+    material.uniforms.uShowSolid.value = showSolid;
+    material.uniforms.uShowSolid.needsUpdate = true;
+  }, [material, showSolid]);
+
+  useEffect(() => {
+    material.uniforms.uShowInfill.value = showInfill;
+    material.uniforms.uShowInfill.needsUpdate = true;
+  }, [material, showInfill]);
 
   const { camera } = useThree();
 
@@ -206,62 +244,6 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
       console.log('SDF @ entry:', entryDist);
     }
 
-    const mat = material;
-    if (!mat) return;
-    // Update texture
-    texData.fill(0);
-    for (let i = 0; i < count; i++) {
-
-      texData[i * 4 + 0] = seedsArray[i * 3 + 0];
-      texData[i * 4 + 1] = seedsArray[i * 3 + 1];
-      texData[i * 4 + 2] = seedsArray[i * 3 + 2];
-    }
-    seedTexture.needsUpdate = true;
-    
-    // Debug: are we bound to the right DataTexture?
-    //{
-    //  const bound = mat.uniforms.uSeedsTex?.value;
-    //  if (bound instanceof THREE.DataTexture && bound.image && bound.image.data) {
-    //    const texDataArray = bound.image.data as Float32Array;
-    //    console.log(
-    //      'BIND CHECK:',
-    //      bound === seedTexture,
-    //      texDataArray.slice(0, 6)
-    //    );
-    //  } else {
-    //    console.log('BIND CHECK: No valid seed texture bound:', bound);
-    //  }
-    //}
-
-    // Update uniforms
-    mat.uniforms.uNumSeeds.value = count;
-    mat.uniforms.uNumSeeds.needsUpdate = true;
-    mat.uniforms.uBoxMin.value = new THREE.Vector3(minX, minY, minZ);
-    mat.uniforms.uBoxMin.needsUpdate = true;
-    mat.uniforms.uBoxMax.value = new THREE.Vector3(maxX, maxY, maxZ);
-    mat.uniforms.uBoxMax.needsUpdate = true;
-    mat.uniforms.uThickness.value = thickness;
-    mat.uniforms.uThickness.needsUpdate = true;
-    mat.uniforms.uMaxSteps.value = maxSteps;
-    mat.uniforms.uMaxSteps.needsUpdate = true;
-    mat.uniforms.uEpsilon.value = epsilon;
-    mat.uniforms.uEpsilon.needsUpdate = true;
-    mat.uniforms.uShowSolid.value = showSolid;
-    mat.uniforms.uShowSolid.needsUpdate = true;
-    mat.uniforms.uShowInfill.value = showInfill;
-    mat.uniforms.uShowInfill.needsUpdate = true;
-
-    // Update sphere shape uniforms
-    mat.uniforms.uSphereCenter.value.copy(centerVec);
-    mat.uniforms.uSphereCenter.needsUpdate = true;
-    mat.uniforms.uSphereRadius.value = radiusVal;
-    mat.uniforms.uSphereRadius.needsUpdate = true;
-
-    //console.log('Uniforms:', {
-      //uNumSeeds: mat.uniforms.uNumSeeds.value,
-      //uBoxMin:   mat.uniforms.uBoxMin.value.toArray ? mat.uniforms.uBoxMin.value.toArray() : mat.uniforms.uBoxMin.value,
-      //uBoxMax:   mat.uniforms.uBoxMax.value.toArray ? mat.uniforms.uBoxMax.value.toArray() : mat.uniforms.uBoxMax.value
-    //});
   });
 
   return (
