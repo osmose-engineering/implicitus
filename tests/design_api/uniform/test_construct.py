@@ -3,6 +3,7 @@
 import numpy as np
 import pytest
 import logging
+import json
 
 from design_api.services.voronoi_gen.uniform.construct import compute_uniform_cells
 from design_api.services.voronoi_gen.uniform.regularizer import (
@@ -267,3 +268,41 @@ def test_pathological_medial_axis_triggers_warning(monkeypatch, caplog):
 
     warnings = [rec for rec in caplog.records if rec.levelno >= logging.WARNING]
     assert any("degenerate hexagon" in w.message for w in warnings)
+
+
+def test_uniform_cell_dump(tmp_path, monkeypatch):
+    seeds = np.array([[0.0, 0.0, 0.0]])
+    mesh = _sample_mesh()
+    plane_normal = np.array([0.0, 0.0, 1.0])
+
+    # Simplify medial axis and hexagon tracing
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.compute_medial_axis",
+        lambda _mesh: np.zeros((1, 3)),
+    )
+
+    def fake_trace_hexagon(seed, medial, normal, max_distance, report_method=False, neighbor_resampler=None):  # pragma: no cover - deterministic
+        pts = np.zeros((6, 3))
+        if report_method:
+            return pts, True
+        return pts
+
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.trace_hexagon",
+        fake_trace_hexagon,
+    )
+
+    dump_file = tmp_path / "dump.json"
+
+    compute_uniform_cells(
+        seeds,
+        mesh,
+        plane_normal,
+        max_distance=1.0,
+        debug_dump=True,
+        dump_path=str(dump_file),
+    )
+
+    assert dump_file.exists()
+    data = json.loads(dump_file.read_text())
+    assert data["cells"]["0"]["used_fallback"] is True

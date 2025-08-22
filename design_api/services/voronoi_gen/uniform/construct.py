@@ -1,13 +1,8 @@
 import numpy as np
 import logging
-import random
-import math
-from typing import Union, Any
-from typing import Tuple, List, Optional
-from typing import Dict, Callable
-import itertools
-
 from typing import Any, Dict, Optional
+import json
+from typing import Tuple, List, Optional
 from .sampler import compute_medial_axis, trace_hexagon
 from .regularizer import hexagon_metrics
 
@@ -16,7 +11,9 @@ def compute_uniform_cells(
     imds_mesh: Any,
     plane_normal: np.ndarray,
     max_distance: Optional[float] = None,
-    vertex_tolerance: float = 1e-5
+    vertex_tolerance: float = 1e-5,
+    debug_dump: bool = False,
+    dump_path: Optional[str] = None,
 ) -> Dict[int, np.ndarray]:
     """
     Compute near-uniform hexagonal Voronoi cells for each seed point.
@@ -28,14 +25,73 @@ def compute_uniform_cells(
         vertex_tolerance: tolerance used when reconciling shared vertices between
             adjacent cells. A warning is emitted if mismatches above this tolerance
             are detected.
+        debug_dump: if True, dump diagnostic data about the constructed cells.
+        dump_path: file path where diagnostic data should be written when
+            ``debug_dump`` is True.
     Returns:
         cells: dict mapping seed index to (6,3) array of hexagon vertices.
     """
     # Extract medial axis points
     medial_points = compute_medial_axis(imds_mesh)
+
+    # Derive an axis-aligned bounding box from the interface mesh to provide
+    # additional sampling locations if the medial axis alone is insufficient.
+    verts = getattr(imds_mesh, "vertices", None)
+    if verts is None:
+        raise ValueError("imds_mesh must have a 'vertices' attribute")
+    bbox_min = np.min(verts, axis=0)
+    bbox_max = np.max(verts, axis=0)
+    rng = np.random.default_rng(0)
+
+    dump_data: Optional[Dict[str, Any]] = None
+    if debug_dump and dump_path:
+        dump_data = {
+            "seeds": seeds.tolist(),
+            "plane_normal": plane_normal.tolist(),
+            "max_distance": max_distance,
+            "bbox_min": bbox_min.tolist(),
+            "bbox_max": bbox_max.tolist(),
+            "medial_points": medial_points.tolist(),
+            "cells": {},
+        }
+
+    def _resample() -> np.ndarray:
+        """Return extra candidate points within the mesh bounds."""
+        return rng.uniform(bbox_min, bbox_max, size=(30, 3))
+
     cells: Dict[int, np.ndarray] = {}
     for idx, seed in enumerate(seeds):
-        hex_pts = trace_hexagon(seed, medial_points, plane_normal, max_distance)
+        # Provide the resampler so that trace_hexagon has enough neighbor
+        # directions and avoids the axis-aligned bounding-box fallback that
+        # produces cubic cells. Older ``trace_hexagon`` implementations may not
+        # accept the ``neighbor_resampler`` or ``report_method`` arguments, so we
+        # fall back to calling it with fewer parameters when necessary.
+        try:
+            hex_pts, used_fallback = trace_hexagon(
+                seed,
+                medial_points,
+                plane_normal,
+                max_distance,
+                report_method=True,
+                neighbor_resampler=_resample,
+            )
+        except TypeError:  # pragma: no cover - legacy signature
+            try:
+                hex_pts, used_fallback = trace_hexagon(
+                    seed,
+                    medial_points,
+                    plane_normal,
+                    max_distance,
+                    report_method=True,
+                )
+            except TypeError:  # pragma: no cover - legacy signature
+                hex_pts = trace_hexagon(
+                    seed,
+                    medial_points,
+                    plane_normal,
+                    max_distance,
+                )
+                used_fallback = False
         # Optionally log metrics
         metrics = hexagon_metrics(hex_pts)
         logging.debug(
@@ -45,6 +101,12 @@ def compute_uniform_cells(
             f"{metrics['area']:.3f}"
         )
         cells[idx] = hex_pts
+        if dump_data is not None:
+            dump_data["cells"][str(idx)] = {
+                "seed": seed.tolist(),
+                "vertices": hex_pts.tolist(),
+                "used_fallback": bool(used_fallback),
+            }
 
     # --------------------
     # Reconcile shared vertices
@@ -112,5 +174,12 @@ def compute_uniform_cells(
                 )
         else:
             logging.info("Shared vertex adjustment: no coincident vertices found")
+
+    if dump_data is not None:
+        try:
+            with open(dump_path, "w", encoding="utf-8") as f:
+                json.dump(dump_data, f)
+        except Exception as exc:  # pragma: no cover - best effort
+            logging.warning("Failed to write uniform cell dump to %s: %s", dump_path, exc)
 
     return cells
