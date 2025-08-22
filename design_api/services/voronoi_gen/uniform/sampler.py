@@ -149,8 +149,37 @@ def trace_hexagon(
         """Attempt to construct hexagon from neighbor vectors."""
         if vecs.shape[0] < 6:
             return None
-        neighbor_2d_all = np.column_stack((vecs.dot(u), vecs.dot(v)))
-        angles = np.mod(np.arctan2(neighbor_2d_all[:, 1], neighbor_2d_all[:, 0]), 2 * np.pi)
+
+        # Project neighbor vectors onto the slicing plane
+        proj = np.column_stack((vecs.dot(u), vecs.dot(v)))
+        norms = np.linalg.norm(proj, axis=1)
+        valid = norms > 1e-12
+        proj = proj[valid]
+        norms = norms[valid]
+
+        if proj.shape[0] < 6:
+            return None
+
+        # Normalize for robust angle comparison and remove near-duplicates
+        normed = proj / norms[:, None]
+        angles = np.mod(np.arctan2(normed[:, 1], normed[:, 0]), 2 * np.pi)
+        order = np.argsort(angles)
+        angles = angles[order]
+        proj = proj[order]
+
+        uniq_proj: List[np.ndarray] = []
+        uniq_angles: List[float] = []
+        thresh = math.radians(1.0)
+        for p, ang in zip(proj, angles):
+            if not any(abs(np.angle(np.exp(1j * (ang - a)))) < thresh for a in uniq_angles):
+                uniq_proj.append(p)
+                uniq_angles.append(ang)
+
+        if len(uniq_proj) < 6:
+            return None
+
+        angles = np.array(uniq_angles)
+        proj = np.vstack(uniq_proj)
 
         # Preselect nearest neighbors in six angular bins but retain
         # additional candidates for potential fallback.
@@ -160,6 +189,10 @@ def trace_hexagon(
         for k in range(6):
             target = 2 * np.pi * k / 6
             diffs = np.abs(np.angle(np.exp(1j * (angles - target))))
+            diffs[used] = np.inf
+            idx = int(np.argmin(diffs))
+            used[idx] = True
+            sel_2d.append(proj[idx])
             order = np.argsort(diffs)
             idx = None
             for cand in order:
@@ -248,7 +281,17 @@ def trace_hexagon(
     vecs = vecs[dists > 1e-8]
     hex_pts_arr = _construct_from_vecs(vecs)
 
-    # Retry using adjacency-derived neighbors if necessary
+    # Request additional neighbors if filtering removed too many
+    if hex_pts_arr is None and neighbor_resampler is not None:
+        extra = neighbor_resampler()
+        if extra is not None and len(extra) > 0:
+            all_points = np.vstack([medial_points, extra])
+            vecs = all_points - seed_pt
+            dists = np.linalg.norm(vecs, axis=1)
+            vecs = vecs[dists > 1e-8]
+            hex_pts_arr = _construct_from_vecs(vecs)
+
+    # Retry using adjacency-derived neighbors if still unsuccessful
     if hex_pts_arr is None:
         try:  # pragma: no cover - import guarded for optional module
             from design_api.services.voronoi_gen.voronoi_gen import compute_voronoi_adjacency
@@ -266,16 +309,6 @@ def trace_hexagon(
                 hex_pts_arr = _construct_from_vecs(vecs_adj)
         except Exception:  # pragma: no cover - any failure just skips
             pass
-
-    # Allow caller to supply extra neighbors before falling back
-    if hex_pts_arr is None and neighbor_resampler is not None:
-        extra = neighbor_resampler()
-        if extra is not None and len(extra) > 0:
-            all_points = np.vstack([medial_points, extra])
-            vecs = all_points - seed_pt
-            dists = np.linalg.norm(vecs, axis=1)
-            vecs = vecs[dists > 1e-8]
-            hex_pts_arr = _construct_from_vecs(vecs)
 
     if hex_pts_arr is not None:
         hex_pts = hex_pts_arr
