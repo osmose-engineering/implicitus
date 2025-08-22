@@ -6,6 +6,9 @@ import { VoronoiMaterial } from './VoronoiMaterial';
 const DEBUG = false;
 
 const MAX_SEEDS = 512;
+const GRID_CELL_CAPACITY = 8;
+const GRID_TEX_HEIGHT = Math.ceil(GRID_CELL_CAPACITY / 4);
+const CELL_SIZE_FACTOR = 1.5; // Tunable factor balancing lookup vs iteration
 
 interface VoronoiMeshProps {
   seedPoints: [number, number, number][];
@@ -75,6 +78,7 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     return tex;
   }, [texData, texSize]);
 
+
   useEffect(() => {
     texData.fill(0);
     for (let i = 0; i < count; i++) {
@@ -84,6 +88,35 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     }
     seedTexture.needsUpdate = true;
   }, [seedPoints, texData, seedTexture, count, seedsArray]);
+
+  const { gridTexture, gridTexData, gridRes, cellSize, numCells } = useMemo(() => {
+    const volume = (maxX - minX) * (maxY - minY) * (maxZ - minZ);
+    const baseSize = Math.cbrt(volume / Math.max(1, count));
+    const cellSize = baseSize * CELL_SIZE_FACTOR;
+    const gridRes = [
+      Math.max(1, Math.ceil((maxX - minX) / cellSize)),
+      Math.max(1, Math.ceil((maxY - minY) / cellSize)),
+      Math.max(1, Math.ceil((maxZ - minZ) / cellSize))
+    ];
+    const numCells = gridRes[0] * gridRes[1] * gridRes[2];
+    const gridTexData = new Float32Array(numCells * GRID_TEX_HEIGHT * 4);
+    gridTexData.fill(-1);
+    const gridTexture = new THREE.DataTexture(
+      gridTexData,
+      numCells,
+      GRID_TEX_HEIGHT,
+      THREE.RGBAFormat,
+      THREE.FloatType
+    );
+    gridTexture.magFilter = THREE.NearestFilter;
+    gridTexture.minFilter = THREE.NearestFilter;
+    gridTexture.wrapS = THREE.ClampToEdgeWrapping;
+    gridTexture.wrapT = THREE.ClampToEdgeWrapping;
+    gridTexture.flipY = false;
+    gridTexture.needsUpdate = true;
+    return { gridTexture, gridTexData, gridRes, cellSize, numCells };
+  }, [minX, maxX, minY, maxY, minZ, maxZ, count]);
+
 
   // Nearest‐neighbor seed spacing diagnostics
   useEffect(() => {
@@ -104,6 +137,7 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     const avgD = dists.reduce((a, b) => a + b, 0) / dists.length;
     console.log('NN spacing (mm):', { minD, avgD, maxD });
   }, [seedPoints]);
+
 
   const material = useMemo(() => new VoronoiMaterial(), []);
 
@@ -155,6 +189,39 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     material.uniforms.uShowInfill.value = showInfill;
     material.uniforms.uShowInfill.needsUpdate = true;
   }, [material, showInfill]);
+
+  const material = useMemo(() => {
+    const m = new VoronoiMaterial();
+    // Bind the dynamic DataTexture of seeds
+    m.uniforms.uSeedsTex.value = seedTexture;
+    m.uniforms.uSeedsTex.needsUpdate = true;
+    // Bind grid texture and parameters
+    m.uniforms.uGridTex.value = gridTexture;
+    m.uniforms.uGridTex.needsUpdate = true;
+    m.uniforms.uGridRes.value = new THREE.Vector3(gridRes[0], gridRes[1], gridRes[2]);
+    m.uniforms.uGridRes.needsUpdate = true;
+    m.uniforms.uCellSize.value = cellSize;
+    m.uniforms.uCellSize.needsUpdate = true;
+    m.uniforms.uNumCells.value = numCells;
+    m.uniforms.uNumCells.needsUpdate = true;
+    // Initialize SDF offset thickness (from prop) and a thin edge thickness
+    m.uniforms.uThickness.value = thickness;
+    m.uniforms.uThickness.needsUpdate = true;
+    m.uniforms.uEdgeThickness.value = thickness;
+    m.uniforms.uEdgeThickness.needsUpdate = true;
+    // Wire up visibility toggles
+    m.uniforms.uShowSolid.value = showSolid;
+    m.uniforms.uShowSolid.needsUpdate = true;
+    m.uniforms.uShowInfill.value = showInfill;
+    m.uniforms.uShowInfill.needsUpdate = true;
+    // Bind sphere shape parameters
+    m.uniforms.uSphereCenter.value.copy(centerVec);
+    m.uniforms.uSphereCenter.needsUpdate = true;
+    m.uniforms.uSphereRadius.value = radiusVal;
+    m.uniforms.uSphereRadius.needsUpdate = true;
+    return m;
+  }, [seedTexture, gridTexture, gridRes, cellSize, numCells, thickness, showSolid, showInfill, centerVec, radiusVal]);
+
 
   const { camera } = useThree();
 
@@ -243,6 +310,97 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
       ) - thickness;
       console.log('SDF @ entry:', entryDist);
     }
+
+
+    const mat = material;
+    if (!mat) return;
+    // Update texture
+    texData.fill(0);
+    for (let i = 0; i < count; i++) {
+
+      texData[i * 4 + 0] = seedsArray[i * 3 + 0];
+      texData[i * 4 + 1] = seedsArray[i * 3 + 1];
+      texData[i * 4 + 2] = seedsArray[i * 3 + 2];
+    }
+    seedTexture.needsUpdate = true;
+
+    // Build spatial hash grid of seed indices
+    const buckets: number[][] = Array.from({ length: numCells }, () => []);
+    for (let i = 0; i < count; i++) {
+      const x = seedsArray[i * 3 + 0];
+      const y = seedsArray[i * 3 + 1];
+      const z = seedsArray[i * 3 + 2];
+      const cx = Math.min(gridRes[0] - 1, Math.max(0, Math.floor((x - minX) / cellSize)));
+      const cy = Math.min(gridRes[1] - 1, Math.max(0, Math.floor((y - minY) / cellSize)));
+      const cz = Math.min(gridRes[2] - 1, Math.max(0, Math.floor((z - minZ) / cellSize)));
+      const cellIdx = cx + cy * gridRes[0] + cz * gridRes[0] * gridRes[1];
+      const bucket = buckets[cellIdx];
+      if (bucket.length < GRID_CELL_CAPACITY) bucket.push(i);
+    }
+    gridTexData.fill(-1);
+    for (let c = 0; c < numCells; c++) {
+      const bucket = buckets[c];
+      for (let j = 0; j < GRID_CELL_CAPACITY; j++) {
+        const val = j < bucket.length ? bucket[j] : -1;
+        const texel = Math.floor(j / 4);
+        const comp = j % 4;
+        gridTexData[(c * GRID_TEX_HEIGHT + texel) * 4 + comp] = val;
+      }
+    }
+    gridTexture.needsUpdate = true;
+    
+    // Debug: are we bound to the right DataTexture?
+    //{
+    //  const bound = mat.uniforms.uSeedsTex?.value;
+    //  if (bound instanceof THREE.DataTexture && bound.image && bound.image.data) {
+    //    const texDataArray = bound.image.data as Float32Array;
+    //    console.log(
+    //      'BIND CHECK:',
+    //      bound === seedTexture,
+    //      texDataArray.slice(0, 6)
+    //    );
+    //  } else {
+    //    console.log('BIND CHECK: No valid seed texture bound:', bound);
+    //  }
+    //}
+
+    // Update uniforms
+    mat.uniforms.uNumSeeds.value = count;
+    mat.uniforms.uNumSeeds.needsUpdate = true;
+    mat.uniforms.uGridTex.value = gridTexture;
+    mat.uniforms.uGridTex.needsUpdate = true;
+    mat.uniforms.uGridRes.value = new THREE.Vector3(gridRes[0], gridRes[1], gridRes[2]);
+    mat.uniforms.uGridRes.needsUpdate = true;
+    mat.uniforms.uCellSize.value = cellSize;
+    mat.uniforms.uCellSize.needsUpdate = true;
+    mat.uniforms.uNumCells.value = numCells;
+    mat.uniforms.uNumCells.needsUpdate = true;
+    mat.uniforms.uBoxMin.value = new THREE.Vector3(minX, minY, minZ);
+    mat.uniforms.uBoxMin.needsUpdate = true;
+    mat.uniforms.uBoxMax.value = new THREE.Vector3(maxX, maxY, maxZ);
+    mat.uniforms.uBoxMax.needsUpdate = true;
+    mat.uniforms.uThickness.value = thickness;
+    mat.uniforms.uThickness.needsUpdate = true;
+    mat.uniforms.uMaxSteps.value = maxSteps;
+    mat.uniforms.uMaxSteps.needsUpdate = true;
+    mat.uniforms.uEpsilon.value = epsilon;
+    mat.uniforms.uEpsilon.needsUpdate = true;
+    mat.uniforms.uShowSolid.value = showSolid;
+    mat.uniforms.uShowSolid.needsUpdate = true;
+    mat.uniforms.uShowInfill.value = showInfill;
+    mat.uniforms.uShowInfill.needsUpdate = true;
+
+    // Update sphere shape uniforms
+    mat.uniforms.uSphereCenter.value.copy(centerVec);
+    mat.uniforms.uSphereCenter.needsUpdate = true;
+    mat.uniforms.uSphereRadius.value = radiusVal;
+    mat.uniforms.uSphereRadius.needsUpdate = true;
+
+    //console.log('Uniforms:', {
+      //uNumSeeds: mat.uniforms.uNumSeeds.value,
+      //uBoxMin:   mat.uniforms.uBoxMin.value.toArray ? mat.uniforms.uBoxMin.value.toArray() : mat.uniforms.uBoxMin.value,
+      //uBoxMax:   mat.uniforms.uBoxMax.value.toArray ? mat.uniforms.uBoxMax.value.toArray() : mat.uniforms.uBoxMax.value
+    //});
 
   });
 
