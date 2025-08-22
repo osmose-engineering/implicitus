@@ -350,10 +350,10 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
         gl={{ version: 2 }}
         camera={{ position: [15, 15, 15], fov: 60 }}
       >
-        {showSolid && (
-          showStruts ? (
+        {showStruts ? (
+          showSolid && (
             // Simple box for Strut view
-            <mesh 
+            <mesh
               position={[
                 (bbox[0] + bbox[3]) / 2,
                 (bbox[1] + bbox[4]) / 2,
@@ -371,7 +371,9 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
                 opacity={0.2}
               />
             </mesh>
-          ) : (
+          )
+        ) : (
+          (showSolid || showInfill) && (
             // Ray-marched solid for Ray-March view
             <VoronoiMesh
               seedPoints={validSeedPoints}
@@ -394,7 +396,7 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
             color={strutColor}
           />
         )}
-        {showInfill && !showStruts && validInfillEdges.length > 0 && (
+        {showSolid && showInfill && !showStruts && validInfillEdges.length > 0 && (
           <lineSegments>
             <bufferGeometry attach="geometry">
               <bufferAttribute
