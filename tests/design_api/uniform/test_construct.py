@@ -292,10 +292,17 @@ def test_uniform_cell_dump(tmp_path, monkeypatch):
         fake_trace_hexagon,
     )
 
-    dump_file = tmp_path / "dump.json"
-    monkeypatch.setenv("UNIFORM_CELL_DUMP", str(dump_file))
 
-    compute_uniform_cells(seeds, mesh, plane_normal, max_distance=1.0)
+    monkeypatch.chdir(tmp_path)
+
+    compute_uniform_cells(
+        seeds,
+        mesh,
+        plane_normal,
+        max_distance=1.0,
+    )
+
+    dump_file = tmp_path / "UNIFORM_CELL_DUMP.json"
 
     assert dump_file.exists()
     data = json.loads(dump_file.read_text())

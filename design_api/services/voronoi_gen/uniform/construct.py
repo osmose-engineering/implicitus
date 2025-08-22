@@ -1,15 +1,10 @@
 import numpy as np
 import logging
-import random
-import math
-from typing import Union, Any
-from typing import Tuple, List, Optional
-from typing import Dict, Callable
-import itertools
-import os
-import json
 
-from typing import Any, Dict, Optional
+from typing import Any, Dict, Tuple, List, Optional
+import json
+from pathlib import Path
+
 from .sampler import compute_medial_axis, trace_hexagon
 from .regularizer import hexagon_metrics
 
@@ -18,7 +13,7 @@ def compute_uniform_cells(
     imds_mesh: Any,
     plane_normal: np.ndarray,
     max_distance: Optional[float] = None,
-    vertex_tolerance: float = 1e-5
+    vertex_tolerance: float = 1e-5,
 ) -> Dict[int, np.ndarray]:
     """
     Compute near-uniform hexagonal Voronoi cells for each seed point.
@@ -46,18 +41,15 @@ def compute_uniform_cells(
     rng = np.random.default_rng(0)
 
 
-    dump_path = os.environ.get("UNIFORM_CELL_DUMP")
-    dump_data: Optional[Dict[str, Any]] = None
-    if dump_path:
-        dump_data = {
-            "seeds": seeds.tolist(),
-            "plane_normal": plane_normal.tolist(),
-            "max_distance": max_distance,
-            "bbox_min": bbox_min.tolist(),
-            "bbox_max": bbox_max.tolist(),
-            "medial_points": medial_points.tolist(),
-            "cells": {},
-        }
+    dump_data: Dict[str, Any] = {
+        "seeds": seeds.tolist(),
+        "plane_normal": plane_normal.tolist(),
+        "max_distance": max_distance,
+        "bbox_min": bbox_min.tolist(),
+        "bbox_max": bbox_max.tolist(),
+        "medial_points": medial_points.tolist(),
+        "cells": {},
+    }
 
 
     def _resample() -> np.ndarray:
@@ -110,12 +102,13 @@ def compute_uniform_cells(
             f"{metrics['area']:.3f}"
         )
         cells[idx] = hex_pts
-        if dump_data is not None:
-            dump_data["cells"][str(idx)] = {
-                "seed": seed.tolist(),
-                "vertices": hex_pts.tolist(),
-                "used_fallback": bool(used_fallback),
-            }
+
+        dump_data["cells"][str(idx)] = {
+            "seed": seed.tolist(),
+            "vertices": hex_pts.tolist(),
+            "used_fallback": bool(used_fallback),
+        }
+
 
     # --------------------
     # Reconcile shared vertices
@@ -184,11 +177,12 @@ def compute_uniform_cells(
         else:
             logging.info("Shared vertex adjustment: no coincident vertices found")
 
-    if dump_data is not None:
-        try:
-            with open(dump_path, "w", encoding="utf-8") as f:
-                json.dump(dump_data, f)
-        except Exception as exc:  # pragma: no cover - best effort
-            logging.warning("Failed to write uniform cell dump to %s: %s", dump_path, exc)
+    dump_path = Path("UNIFORM_CELL_DUMP.json")
+    try:
+        with dump_path.open("w", encoding="utf-8") as f:
+            json.dump(dump_data, f)
+    except Exception as exc:  # pragma: no cover - best effort
+        logging.warning("Failed to write uniform cell dump to %s: %s", dump_path, exc)
+
 
     return cells
