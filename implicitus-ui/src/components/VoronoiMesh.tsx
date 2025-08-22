@@ -9,11 +9,14 @@ const MAX_SEEDS = 512;
 
 interface VoronoiMeshProps {
   seedPoints: [number, number, number][];
-  thickness: number;
-  maxSteps: number;
-  epsilon: number;
-  showSolid: boolean;
-  showInfill: boolean;
+  /** Offset for the Voronoi SDF */
+  thickness?: number;
+  /** Upper bound on ray-march iterations. Larger values improve accuracy at the cost of speed. */
+  maxSteps?: number;
+  /** Minimum increment in the ray marcher */
+  epsilon?: number;
+  showSolid?: boolean;
+  showInfill?: boolean;
   sphereCenter?: [number, number, number];
   sphereRadius?: number;
 }
@@ -21,7 +24,7 @@ interface VoronoiMeshProps {
 const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
   seedPoints,
   thickness = 0.1,
-  maxSteps = 64,
+  maxSteps = 1024,
   epsilon = 0.001,
   showSolid = true,
   showInfill = true,
@@ -208,6 +211,62 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
 
     const mat = material;
     if (!mat) return;
+
+    // Estimate ray-march step count based on current camera position
+    const ro = camera.position;
+    const boxCenter = new THREE.Vector3(
+      (minX + maxX) / 2,
+      (minY + maxY) / 2,
+      (minZ + maxZ) / 2
+    );
+    const rd = boxCenter.clone().sub(ro).normalize();
+
+    // Box intersection
+    const inv = new THREE.Vector3(1 / rd.x, 1 / rd.y, 1 / rd.z);
+    const t0s = new THREE.Vector3(
+      (minX - ro.x) * inv.x,
+      (minY - ro.y) * inv.y,
+      (minZ - ro.z) * inv.z
+    );
+    const t1s = new THREE.Vector3(
+      (maxX - ro.x) * inv.x,
+      (maxY - ro.y) * inv.y,
+      (maxZ - ro.z) * inv.z
+    );
+    const tNear = Math.max(
+      Math.min(t0s.x, t1s.x),
+      Math.min(t0s.y, t1s.y),
+      Math.min(t0s.z, t1s.z)
+    );
+    const tFar = Math.min(
+      Math.max(t0s.x, t1s.x),
+      Math.max(t0s.y, t1s.y),
+      Math.max(t0s.z, t1s.z)
+    );
+
+    // Sphere intersection
+    let tSphereNear = Infinity;
+    let tSphereFar = -Infinity;
+    {
+      const oc = ro.clone().sub(centerVec);
+      const b = oc.dot(rd);
+      const c = oc.lengthSq() - radiusVal * radiusVal;
+      const disc = b * b - c;
+      if (disc >= 0) {
+        const sqrtD = Math.sqrt(disc);
+        tSphereNear = -b - sqrtD;
+        tSphereFar = -b + sqrtD;
+      }
+    }
+
+    const t0 = Math.max(Math.max(tNear, tSphereNear), 0);
+    const t1 = Math.min(tFar, tSphereFar);
+    const travelDist = Math.max(0, t1 - t0);
+
+    let computedSteps = Math.ceil(travelDist / epsilon);
+    if (!isFinite(computedSteps) || computedSteps < 1) computedSteps = 1;
+    const clampedSteps = Math.min(computedSteps, maxSteps);
+
     // Update texture
     texData.fill(0);
     for (let i = 0; i < count; i++) {
@@ -242,7 +301,7 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     mat.uniforms.uBoxMax.needsUpdate = true;
     mat.uniforms.uThickness.value = thickness;
     mat.uniforms.uThickness.needsUpdate = true;
-    mat.uniforms.uMaxSteps.value = maxSteps;
+    mat.uniforms.uMaxSteps.value = clampedSteps;
     mat.uniforms.uMaxSteps.needsUpdate = true;
     mat.uniforms.uEpsilon.value = epsilon;
     mat.uniforms.uEpsilon.needsUpdate = true;
