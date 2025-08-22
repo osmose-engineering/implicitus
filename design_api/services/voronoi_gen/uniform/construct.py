@@ -45,6 +45,7 @@ def compute_uniform_cells(
     bbox_max = np.max(verts, axis=0)
     rng = np.random.default_rng(0)
 
+
     dump_path = os.environ.get("UNIFORM_CELL_DUMP")
     dump_data: Optional[Dict[str, Any]] = None
     if dump_path:
@@ -58,6 +59,7 @@ def compute_uniform_cells(
             "cells": {},
         }
 
+
     def _resample() -> np.ndarray:
         """Return extra candidate points within the mesh bounds."""
         return rng.uniform(bbox_min, bbox_max, size=(30, 3))
@@ -67,14 +69,17 @@ def compute_uniform_cells(
         # Provide the resampler so that trace_hexagon has enough neighbor
         # directions and avoids the axis-aligned bounding-box fallback that
         # produces cubic cells. Older ``trace_hexagon`` implementations may not
+
         # accept the ``neighbor_resampler`` or ``report_method`` arguments, so we
         # fall back to calling it with fewer parameters when necessary.
         try:
             hex_pts, used_fallback = trace_hexagon(
+
                 seed,
                 medial_points,
                 plane_normal,
                 max_distance,
+
                 report_method=True,
                 neighbor_resampler=_resample,
             )
@@ -95,6 +100,7 @@ def compute_uniform_cells(
                     max_distance,
                 )
                 used_fallback = False
+
         # Optionally log metrics
         metrics = hexagon_metrics(hex_pts)
         logging.debug(
