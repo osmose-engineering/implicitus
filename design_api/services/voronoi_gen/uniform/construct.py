@@ -1,8 +1,10 @@
 import numpy as np
 import logging
+
 from typing import Any, Dict, Tuple, List, Optional
 import json
 from pathlib import Path
+
 from .sampler import compute_medial_axis, trace_hexagon
 from .regularizer import hexagon_metrics
 
@@ -38,6 +40,7 @@ def compute_uniform_cells(
     bbox_max = np.max(verts, axis=0)
     rng = np.random.default_rng(0)
 
+
     dump_data: Dict[str, Any] = {
         "seeds": seeds.tolist(),
         "plane_normal": plane_normal.tolist(),
@@ -48,6 +51,7 @@ def compute_uniform_cells(
         "cells": {},
     }
 
+
     def _resample() -> np.ndarray:
         """Return extra candidate points within the mesh bounds."""
         return rng.uniform(bbox_min, bbox_max, size=(30, 3))
@@ -57,14 +61,17 @@ def compute_uniform_cells(
         # Provide the resampler so that trace_hexagon has enough neighbor
         # directions and avoids the axis-aligned bounding-box fallback that
         # produces cubic cells. Older ``trace_hexagon`` implementations may not
+
         # accept the ``neighbor_resampler`` or ``report_method`` arguments, so we
         # fall back to calling it with fewer parameters when necessary.
         try:
             hex_pts, used_fallback = trace_hexagon(
+
                 seed,
                 medial_points,
                 plane_normal,
                 max_distance,
+
                 report_method=True,
                 neighbor_resampler=_resample,
             )
@@ -85,6 +92,7 @@ def compute_uniform_cells(
                     max_distance,
                 )
                 used_fallback = False
+
         # Optionally log metrics
         metrics = hexagon_metrics(hex_pts)
         logging.debug(
@@ -94,11 +102,13 @@ def compute_uniform_cells(
             f"{metrics['area']:.3f}"
         )
         cells[idx] = hex_pts
+
         dump_data["cells"][str(idx)] = {
             "seed": seed.tolist(),
             "vertices": hex_pts.tolist(),
             "used_fallback": bool(used_fallback),
         }
+
 
     # --------------------
     # Reconcile shared vertices
@@ -173,5 +183,6 @@ def compute_uniform_cells(
             json.dump(dump_data, f)
     except Exception as exc:  # pragma: no cover - best effort
         logging.warning("Failed to write uniform cell dump to %s: %s", dump_path, exc)
+
 
     return cells

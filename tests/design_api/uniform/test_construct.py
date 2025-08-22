@@ -292,6 +292,7 @@ def test_uniform_cell_dump(tmp_path, monkeypatch):
         fake_trace_hexagon,
     )
 
+
     monkeypatch.chdir(tmp_path)
 
     compute_uniform_cells(
@@ -302,6 +303,7 @@ def test_uniform_cell_dump(tmp_path, monkeypatch):
     )
 
     dump_file = tmp_path / "UNIFORM_CELL_DUMP.json"
+
     assert dump_file.exists()
     data = json.loads(dump_file.read_text())
     assert data["cells"]["0"]["used_fallback"] is True
