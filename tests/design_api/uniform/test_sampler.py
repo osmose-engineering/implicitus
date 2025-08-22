@@ -165,6 +165,39 @@ def test_trace_hexagon_origin_medial_cluster(monkeypatch):
     assert np.ptp(edges) > 0.3
 
 
+def test_trace_hexagon_medial_one_side_bbox(monkeypatch, caplog):
+    seed = np.array([0.0, 0.0, 0.0])
+    # All medial points lie in the positive X half-space
+    medial = np.array(
+        [
+            [2.0, 2.0, 0.0],
+            [2.0, -2.0, 0.0],
+            [2.0, 0.0, 0.0],
+        ]
+    )
+    plane_normal = np.array([0.0, 0.0, 1.0])
+
+    # Disable regularization to inspect raw fallback polygon
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.regularizer.regularize_hexagon",
+        lambda pts, normal: pts,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        hex_pts = trace_hexagon(seed, medial, plane_normal, max_distance=1.0)
+
+    assert "bounding-box fallback" in caplog.text.lower()
+
+    bbox_min = medial.min(axis=0)
+    on_x_face = np.isclose(hex_pts[:, 0], bbox_min[0])
+    # At least one edge should lie on the bounding-box face x = bbox_min[0]
+    assert np.any(on_x_face & np.roll(on_x_face, -1))
+
+    edges = np.linalg.norm(np.roll(hex_pts, -1, axis=0) - hex_pts, axis=1)
+    # Mixture of bbox and max_distance rays yields irregular edge lengths
+    assert np.ptp(edges) > 0.5
+
+
 def test_construct_from_vecs_handles_duplicates_and_collinear():
     sampler = pytest.importorskip("design_api.services.voronoi_gen.uniform.sampler")
     _construct_from_vecs = getattr(sampler, "_construct_from_vecs", None)
