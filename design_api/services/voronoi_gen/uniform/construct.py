@@ -108,12 +108,6 @@ def compute_uniform_cells(
             "used_fallback": bool(used_fallback),
         }
 
-        dump_data["cells"][str(idx)] = {
-            "seed": seed.tolist(),
-            "vertices": hex_pts.tolist(),
-            "used_fallback": bool(used_fallback),
-        }
-
 
     # --------------------
     # Reconcile shared vertices
@@ -183,7 +177,19 @@ def compute_uniform_cells(
             logging.info("Shared vertex adjustment: no coincident vertices found")
 
 
-    repo_root = Path(__file__).resolve().parents[4]
+    # Determine a suitable repository root for the log. When the package is
+    # installed, ``__file__`` may reside in ``site-packages`` where writing is
+    # disallowed. Walk up the path looking for a ``logs`` directory or a ``.git``
+    # folder; if neither is found, fall back to the current working directory.
+    root_candidate = Path(__file__).resolve()
+    repo_root = None
+    for parent in root_candidate.parents:
+        if (parent / "logs").exists() or (parent / ".git").exists():
+            repo_root = parent
+            break
+    if repo_root is None:
+        repo_root = Path.cwd()
+
     dump_path = repo_root / "logs" / "UNIFORM_CELL_DUMP.json"
     try:
         dump_path.parent.mkdir(parents=True, exist_ok=True)
