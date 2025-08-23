@@ -243,6 +243,7 @@ def _build_modifier_dict(raw_spec: dict) -> dict:
     # Mark Voronoi infill specially
     if pattern == 'voronoi':
         infill_data['_is_voronoi'] = True
+        infill_data.setdefault('uniform', True)
     if pattern == 'honeycomb':
         # Treat honeycomb as a voronoi lattice with uniform sampling
         infill_data['_is_voronoi'] = True
@@ -433,12 +434,12 @@ def interpret_llm_request(llm_output):
                 infill.setdefault('bbox_min', list(bbox_min))
                 infill.setdefault('bbox_max', list(bbox_max))
                 # surface uniform‐sampling toggle in spec
-                infill.setdefault('uniform', False)
+                infill.setdefault('uniform', True)
                 # Auto-generate seed points inside the primitive if missing
                 shape, params = next(iter(node['primitive'].items()))
                 if 'seed_points' not in infill:
                     # include uniform/resolution flags in update branch
-                    uniform = _parse_bool(infill.get('uniform', False))
+                    uniform = _parse_bool(infill.get('uniform', True))
                     resolution = tuple(infill.get('resolution', [32, 32, 32]))
                     logging.debug(f"interpret_llm_request update-branch: uniform sampling={uniform}, resolution={resolution}")
                     seeds = _auto_generate_seed_points(
@@ -512,12 +513,12 @@ def interpret_llm_request(llm_output):
             infill.setdefault('bbox_min', list(bbox_min))
             infill.setdefault('bbox_max', list(bbox_max))
             # surface uniform‐sampling toggle in spec
-            infill.setdefault('uniform', False)
+            infill.setdefault('uniform', True)
             # Also support uniform/resolution for auto seed generation if seed_points missing
             if 'seed_points' not in infill:
                 shape, params = next(iter(node['primitive'].items()))
                 # include uniform/resolution flags in update branch
-                uniform = _parse_bool(infill.get('uniform', False))
+                uniform = _parse_bool(infill.get('uniform', True))
                 resolution = tuple(infill.get('resolution', [32, 32, 32]))
                 logging.debug(f"interpret_llm_request update-branch: uniform sampling={uniform}, resolution={resolution}")
                 seeds = _auto_generate_seed_points(
@@ -663,6 +664,7 @@ def review_request(request_data):
                 infill.setdefault('wall_thickness', size[2] / 50.0)
                 infill.setdefault('bbox_min', list(bbox_min))
                 infill.setdefault('bbox_max', list(bbox_max))
+                infill.setdefault('uniform', True)
         summary = generate_summary(nodes)
         return nodes, summary
 
@@ -744,6 +746,7 @@ def update_request(sid: str, spec: list, raw: str):
             infill.setdefault('wall_thickness', size[2] / 50.0)
             infill.setdefault('bbox_min', list(bbox_min))
             infill.setdefault('bbox_max', list(bbox_max))
+            infill.setdefault('uniform', True)
             infill.setdefault('adaptive', True)
             infill.setdefault('max_depth', 3)
             infill.setdefault('threshold', 0.1)
@@ -751,7 +754,7 @@ def update_request(sid: str, spec: list, raw: str):
             infill.setdefault('shell_offset', 0.0)
             infill.setdefault('auto_cap', False)
             # always regenerate seed points, and expose num_points parameter
-            uniform = _parse_bool(infill.get('uniform', False))
+            uniform = _parse_bool(infill.get('uniform', True))
             resolution = tuple(infill.get('resolution', [32, 32, 32]))
             seeds = _auto_generate_seed_points(
                 shape, params, bbox_min, bbox_max,

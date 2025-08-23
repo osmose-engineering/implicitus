@@ -267,6 +267,7 @@ def test_review_request_with_voronoi_infill():
     assert 'infill' in action['modifiers']
     infill = action['modifiers']['infill']
     assert infill['pattern'] == 'voronoi'
+    assert infill['uniform'] is True
     # Default lattice params should be present
     assert 'min_dist' in infill and isinstance(infill['min_dist'], float)
     assert 'bbox_min' in infill and 'bbox_max' in infill
@@ -302,6 +303,7 @@ def test_update_request_seed_generation_count(monkeypatch):
     action = spec[0]
     assert 'modifiers' in action and 'infill' in action['modifiers']
     infill = action['modifiers']['infill']
+    assert infill['uniform'] is True
     num_points = infill.get('num_points')
     assert isinstance(num_points, int)
     assert num_points <= MAX_SEED_POINTS
