@@ -140,10 +140,17 @@ def compute_uniform_cells(
                 parent[rb] = ra
 
         merge_tol = vertex_tolerance * 10.0
-        for i in range(n):
-            for j in range(i + 1, n):
-                if np.linalg.norm(verts[i] - verts[j]) <= merge_tol:
-                    union(i, j)
+        try:
+            from scipy.spatial import cKDTree  # type: ignore
+
+            tree = cKDTree(verts)
+            for i, j in tree.query_pairs(r=merge_tol):
+                union(i, j)
+        except Exception:  # pragma: no cover - fallback when scipy missing
+            for i in range(n):
+                for j in range(i + 1, n):
+                    if np.linalg.norm(verts[i] - verts[j]) <= merge_tol:
+                        union(i, j)
 
         groups: Dict[int, List[int]] = {}
         for idx in range(n):
