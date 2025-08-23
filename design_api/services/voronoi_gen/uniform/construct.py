@@ -1,7 +1,7 @@
 import numpy as np
 import logging
 
-from typing import Any, Dict, Tuple, List, Optional
+from typing import Any, Dict, Tuple, List, Optional, Union
 import json
 from pathlib import Path
 
@@ -16,9 +16,16 @@ def compute_uniform_cells(
     plane_normal: np.ndarray,
     max_distance: Optional[float] = None,
     vertex_tolerance: float = 1e-5,
+
+    mean_edge_limit: Optional[float] = None,
+    area_limit: Optional[float] = None,
+    return_status: bool = False,
+) -> Union[Dict[int, np.ndarray], Tuple[Dict[int, np.ndarray], int]]:
+
     resample_points: int = 60,
     resample_min_distance: float = 0.0,
 ) -> Dict[int, np.ndarray]:
+
     """
     Compute near-uniform hexagonal Voronoi cells for each seed point.
     Args:
@@ -29,14 +36,25 @@ def compute_uniform_cells(
         vertex_tolerance: tolerance used when reconciling shared vertices between
             adjacent cells. A warning is emitted if mismatches above this tolerance
             are detected.
+        mean_edge_limit: optional threshold for the mean edge length of a cell.
+            If exceeded, a warning is logged and the overall status set to ``1``.
+        area_limit: optional threshold for the area of a cell. If exceeded, a
+            warning is logged and the overall status set to ``1``.
+        return_status: when ``True`` the function returns a tuple
+            ``(cells, status)`` where ``status`` is ``0`` for success and ``1`` if
+            any threshold was exceeded. When ``False`` only ``cells`` are
+            returned.
         resample_points: number of random points to draw when ``trace_hexagon``
             requests additional neighbors.  These help avoid the
             axis-aligned bounding-box fallback that produces cubic cells.
         resample_min_distance: minimum allowed distance from the current seed when
             resampling.  Points closer than this are rejected, providing a more
             even angular distribution around the seed.
+
     Returns:
-        cells: dict mapping seed index to (6,3) array of hexagon vertices.
+        cells: dict mapping seed index to (6,3) array of hexagon vertices. If
+            ``return_status`` is ``True`` then a tuple ``(cells, status)`` is
+            returned instead.
     """
     # Extract medial axis points
     medial_points = compute_medial_axis(imds_mesh)
@@ -63,7 +81,11 @@ def compute_uniform_cells(
 
 
     cells: Dict[int, np.ndarray] = {}
+
+    status = 0
+
     fallback_indices: List[int] = []
+
     for idx, seed in enumerate(seeds):
         def _resample() -> np.ndarray:
             """Return extra candidate points within the mesh bounds.
@@ -121,6 +143,31 @@ def compute_uniform_cells(
                 )
                 used_fallback = False
 
+
+        raw_hex = hex_pts.copy()
+        metrics = hexagon_metrics(raw_hex)
+
+        # Threshold checks
+        exceeded = False
+        if mean_edge_limit is not None and metrics["mean_edge_length"] > mean_edge_limit:
+            logger.warning(
+                "Cell %d mean edge length %.3f exceeds limit %.3f",
+                idx,
+                metrics["mean_edge_length"],
+                mean_edge_limit,
+            )
+            exceeded = True
+        if area_limit is not None and metrics["area"] > area_limit:
+            logger.warning(
+                "Cell %d area %.3f exceeds limit %.3f",
+                idx,
+                metrics["area"],
+                area_limit,
+            )
+            exceeded = True
+        if exceeded:
+            status = 1
+
         if used_fallback:
             fallback_indices.append(idx)
             logger.warning("Seed %d used trace_hexagon fallback", idx)
@@ -147,9 +194,9 @@ def compute_uniform_cells(
                 )
                 used_fallback = False
 
+
         # Optionally log metrics (throttled to avoid flooding output)
         if logger.isEnabledFor(logging.DEBUG) and (idx < 10 or idx % 1000 == 0):
-            metrics = hexagon_metrics(hex_pts)
             logger.debug(
                 "Uniform cell %d: mean_edge=%.3f, std_edge=%.3f, area=%.3f",
                 idx,
@@ -157,10 +204,18 @@ def compute_uniform_cells(
                 metrics['std_edge_length'],
                 metrics['area'],
             )
+
         cells[idx] = hex_pts
         dump_data["cells"][str(idx)] = {
             "seed": seed.tolist(),
             "vertices": hex_pts.tolist(),
+            "raw_vertices": raw_hex.tolist(),
+            "metrics": {
+                "edge_lengths": metrics["edge_lengths"].tolist(),
+                "mean_edge_length": float(metrics["mean_edge_length"]),
+                "std_edge_length": float(metrics["std_edge_length"]),
+                "area": float(metrics["area"]),
+            },
             "used_fallback": bool(used_fallback),
         }
     if fallback_indices:
@@ -273,4 +328,6 @@ def compute_uniform_cells(
         logging.warning("Failed to write uniform cell dump to %s: %s", dump_path, exc)
 
 
+    if return_status:
+        return cells, status
     return cells
