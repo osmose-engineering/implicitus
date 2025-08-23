@@ -76,3 +76,19 @@ curl "http://localhost:3000/models/test_sphere/slices?layer=0.0&nx=5&ny=5"
 # Or run the Python test script
 cd ../
 python3 test_slice.py
+
+## Logging
+
+The Design API configures Python logging before any Voronoi utilities are
+imported. The log level can be adjusted using the `IMPLICITUS_LOG_LEVEL`
+environment variable, which defaults to `DEBUG` for development. Debug-level
+logging is required to capture the `REPO ROOT` and `UNIFORM_CELL_DUMP.json`
+entries emitted by `design_api/services/voronoi_gen/uniform/construct.py`.
+
+```bash
+# override the default log level
+export IMPLICITUS_LOG_LEVEL=INFO
+```
+
+Run with `IMPLICITUS_LOG_LEVEL=DEBUG` to diagnose Voronoi cell generation and
+record the uniform cell dump for inspection.
