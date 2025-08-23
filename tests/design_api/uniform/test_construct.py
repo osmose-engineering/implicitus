@@ -338,3 +338,49 @@ def test_uniform_cell_dump(monkeypatch):
     assert data["cells"]["0"]["used_fallback"] is True
     dump_file.unlink()
 
+
+def test_metric_threshold_warning_and_status(monkeypatch, caplog):
+    """Pathological hexagons should trigger metric threshold warnings."""
+
+    seeds = np.array([[0.0, 0.0, 0.0]])
+    mesh = DummyMesh([[0.0, 0.0, 0.0]])
+
+    base_hex = np.array(
+        [
+            [1.0, 0.0, 0.0],
+            [0.5, np.sqrt(3) / 2, 0.0],
+            [-0.5, np.sqrt(3) / 2, 0.0],
+            [-1.0, 0.0, 0.0],
+            [-0.5, -np.sqrt(3) / 2, 0.0],
+            [0.5, -np.sqrt(3) / 2, 0.0],
+        ]
+    )
+
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.compute_medial_axis",
+        lambda _mesh: np.zeros((1, 3)),
+    )
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.trace_hexagon",
+        lambda seed, medial, normal, max_distance: base_hex,
+    )
+
+    plane_normal = np.array([0.0, 0.0, 1.0])
+
+    with caplog.at_level(logging.WARNING):
+        cells, status = compute_uniform_cells(
+            seeds,
+            mesh,
+            plane_normal,
+            max_distance=1.0,
+            mean_edge_limit=0.5,
+            area_limit=1.0,
+            return_status=True,
+        )
+
+    assert status == 1
+    warnings = [rec for rec in caplog.records if rec.levelno >= logging.WARNING]
+    assert any("mean edge length" in w.message or "area" in w.message for w in warnings)
+    assert set(cells.keys()) == {0}
+    assert cells[0].shape == (6, 3)
+
