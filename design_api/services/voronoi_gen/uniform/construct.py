@@ -8,6 +8,8 @@ from pathlib import Path
 from .sampler import compute_medial_axis, trace_hexagon
 from .regularizer import hexagon_metrics
 
+logger = logging.getLogger(__name__)
+
 def compute_uniform_cells(
     seeds: np.ndarray,
     imds_mesh: Any,
@@ -93,14 +95,16 @@ def compute_uniform_cells(
                 )
                 used_fallback = False
 
-        # Optionally log metrics
-        metrics = hexagon_metrics(hex_pts)
-        logging.debug(
-            f"Uniform cell {idx}: mean_edge="
-            f"{metrics['mean_edge_length']:.3f}, std_edge="
-            f"{metrics['std_edge_length']:.3f}, area="
-            f"{metrics['area']:.3f}"
-        )
+        # Optionally log metrics (throttled to avoid flooding output)
+        if logger.isEnabledFor(logging.DEBUG) and (idx < 10 or idx % 1000 == 0):
+            metrics = hexagon_metrics(hex_pts)
+            logger.debug(
+                "Uniform cell %d: mean_edge=%.3f, std_edge=%.3f, area=%.3f",
+                idx,
+                metrics['mean_edge_length'],
+                metrics['std_edge_length'],
+                metrics['area'],
+            )
         cells[idx] = hex_pts
         dump_data["cells"][str(idx)] = {
             "seed": seed.tolist(),
