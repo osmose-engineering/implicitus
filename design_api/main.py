@@ -21,6 +21,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Any
 from dataclasses import dataclass
+from types import SimpleNamespace
 from design_api.services.json_cleaner import clean_llm_output
 from design_api.services.llm_service import generate_design_spec
 from design_api.services.mapping import map_primitive as map_to_proto_dict
@@ -142,9 +143,25 @@ async def review(req: dict, sid: Optional[str] = None):
                     )
 
                     mode = inf.get("mode") or req.get("mode")
+                    if mode is None:
+                        # Fallback to legacy boolean flag
+                        uniform_flag = inf.get("uniform") or req.get("uniform")
+                        if isinstance(uniform_flag, str):
+                            uniform_flag = uniform_flag.lower() == "true"
+                        if uniform_flag:
+                            mode = "uniform"
                     if mode == "uniform":
                         primitive = node.get("primitive", {})
                         imds_mesh = inf.get("imds_mesh") or req.get("imds_mesh")
+                        if isinstance(imds_mesh, dict):
+                            verts = imds_mesh.get("vertices")
+                            if verts is not None:
+                                imds_mesh = SimpleNamespace(vertices=np.asarray(verts))
+                        if getattr(imds_mesh, "vertices", None) is None:
+                            raise HTTPException(
+                                status_code=400,
+                                detail="uniform mode requires imds_mesh with vertices",
+                            )
                         plane_normal = inf.get("plane_normal") or req.get("plane_normal")
                         max_distance = inf.get("max_distance") or req.get("max_distance")
                         if plane_normal is not None:
@@ -262,9 +279,25 @@ async def update(req: UpdateRequest):
                 )
 
                 mode = inf.get("mode")
+                if mode is None:
+                    # Fallback to legacy boolean flag
+                    uniform_flag = inf.get("uniform")
+                    if isinstance(uniform_flag, str):
+                        uniform_flag = uniform_flag.lower() == "true"
+                    if uniform_flag:
+                        mode = "uniform"
                 if mode == "uniform":
                     primitive = node.get("primitive", {})
                     imds_mesh = inf.get("imds_mesh") or req.imds_mesh
+                    if isinstance(imds_mesh, dict):
+                        verts = imds_mesh.get("vertices")
+                        if verts is not None:
+                            imds_mesh = SimpleNamespace(vertices=np.asarray(verts))
+                    if getattr(imds_mesh, "vertices", None) is None:
+                        raise HTTPException(
+                            status_code=400,
+                            detail="uniform mode requires imds_mesh with vertices",
+                        )
                     plane_normal = inf.get("plane_normal") or req.plane_normal
                     max_distance = inf.get("max_distance") or req.max_distance
                     if plane_normal is not None:
