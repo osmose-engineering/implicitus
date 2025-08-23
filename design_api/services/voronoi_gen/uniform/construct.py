@@ -189,7 +189,9 @@ def compute_uniform_cells(
             break
     if repo_root is None:
         repo_root = Path.cwd()
-
+    
+    logging.debug("REPO ROOT: ", repo_root)
+    
     dump_path = repo_root / "logs" / "UNIFORM_CELL_DUMP.json"
     try:
         dump_path.parent.mkdir(parents=True, exist_ok=True)
