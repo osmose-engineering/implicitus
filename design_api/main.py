@@ -1,12 +1,15 @@
+import os
 import logging
-from pydantic import Field
-import time
 
+LOG_LEVEL_NAME = os.getenv("IMPLICITUS_LOG_LEVEL", "DEBUG").upper()
+LOG_LEVEL = getattr(logging, LOG_LEVEL_NAME, logging.DEBUG)
 logging.basicConfig(
-    level=logging.DEBUG,
+    level=LOG_LEVEL,
     format="%(asctime)s %(levelname)s %(name)s %(message)s"
 )
 
+from pydantic import Field
+import time
 import json
 import copy
 import traceback
