@@ -159,17 +159,21 @@ async def review(req: dict, sid: Optional[str] = None):
                             if verts is not None:
                                 imds_mesh = SimpleNamespace(vertices=np.asarray(verts))
                         if getattr(imds_mesh, "vertices", None) is None:
+
                             imds_mesh = primitive_to_imds_mesh(primitive)
                         if getattr(imds_mesh, "vertices", None) is None:
+
                             raise HTTPException(
                                 status_code=400,
                                 detail="uniform mode requires imds_mesh with vertices",
                             )
+
                         plane_normal = (
                             inf.get("plane_normal")
                             or req.get("plane_normal")
                             or [0.0, 0.0, 1.0]
                         )
+
                         max_distance = inf.get("max_distance") or req.get("max_distance")
                         plane_normal = np.asarray(plane_normal)
 
@@ -303,17 +307,21 @@ async def update(req: UpdateRequest):
                         if verts is not None:
                             imds_mesh = SimpleNamespace(vertices=np.asarray(verts))
                     if getattr(imds_mesh, "vertices", None) is None:
+
                         imds_mesh = primitive_to_imds_mesh(primitive)
                     if getattr(imds_mesh, "vertices", None) is None:
+
                         raise HTTPException(
                             status_code=400,
                             detail="uniform mode requires imds_mesh with vertices",
                         )
+
                     plane_normal = (
                         inf.get("plane_normal")
                         or req.plane_normal
                         or [0.0, 0.0, 1.0]
                     )
+
                     max_distance = inf.get("max_distance") or req.max_distance
                     plane_normal = np.asarray(plane_normal)
 
