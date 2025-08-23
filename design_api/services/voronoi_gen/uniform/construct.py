@@ -115,7 +115,7 @@ def compute_uniform_cells(
         # accept the ``neighbor_resampler`` or ``report_method`` arguments, so we
         # fall back to calling it with fewer parameters when necessary.
         try:
-            hex_pts, used_fallback = trace_hexagon(
+            hex_pts, used_fallback, raw_hex = trace_hexagon(
 
                 seed,
                 medial_points,
@@ -124,27 +124,39 @@ def compute_uniform_cells(
 
                 report_method=True,
                 neighbor_resampler=_resample,
+                return_raw=True,
             )
         except TypeError:  # pragma: no cover - legacy signature
             try:
-                hex_pts, used_fallback = trace_hexagon(
+                hex_pts, used_fallback, raw_hex = trace_hexagon(
                     seed,
                     medial_points,
                     plane_normal,
                     max_distance,
                     report_method=True,
+                    return_raw=True,
                 )
             except TypeError:  # pragma: no cover - legacy signature
-                hex_pts = trace_hexagon(
-                    seed,
-                    medial_points,
-                    plane_normal,
-                    max_distance,
-                )
-                used_fallback = False
+                try:
+                    hex_pts, used_fallback = trace_hexagon(
+                        seed,
+                        medial_points,
+                        plane_normal,
+                        max_distance,
+                        report_method=True,
+                    )
+                    raw_hex = hex_pts.copy()
+                except TypeError:  # pragma: no cover - legacy signature
+                    hex_pts = trace_hexagon(
+                        seed,
+                        medial_points,
+                        plane_normal,
+                        max_distance,
+                    )
+                    used_fallback = False
+                    raw_hex = hex_pts.copy()
 
 
-        raw_hex = hex_pts.copy()
         metrics = hexagon_metrics(raw_hex)
 
         # Threshold checks
@@ -173,14 +185,16 @@ def compute_uniform_cells(
             logger.warning("Seed %d used trace_hexagon fallback", idx)
             try:
                 extra_pts = _resample()
-                hex_pts, used_fallback = trace_hexagon(
+                hex_pts, used_fallback, raw_hex = trace_hexagon(
                     seed,
                     np.vstack([medial_points, extra_pts]),
                     plane_normal,
                     max_distance,
                     report_method=True,
                     neighbor_resampler=_resample,
+                    return_raw=True,
                 )
+                metrics = hexagon_metrics(raw_hex)
                 if used_fallback:
                     logger.error(
                         "Fallback used after resampling for seed %d", idx
@@ -193,6 +207,8 @@ def compute_uniform_cells(
                     max_distance,
                 )
                 used_fallback = False
+                raw_hex = hex_pts.copy()
+                metrics = hexagon_metrics(raw_hex)
 
 
         # Optionally log metrics (throttled to avoid flooding output)

@@ -32,7 +32,15 @@ def test_uniform_grid_vertex_sharing(monkeypatch):
     # Capture whether the fallback path was used for any cell
     fallback_flags = []
 
-    def regular_hex(seed, medial, normal, max_distance):  # pragma: no cover - deterministic
+    def regular_hex(
+        seed,
+        medial,
+        normal,
+        max_distance,
+        report_method=False,
+        neighbor_resampler=None,
+        return_raw=False,
+    ):  # pragma: no cover - deterministic
         radius = 1.0 / math.sqrt(3.0)
         arbitrary = np.array([1.0, 0.0, 0.0])
         if np.allclose(np.dot(arbitrary, normal), 1.0):
@@ -46,7 +54,14 @@ def test_uniform_grid_vertex_sharing(monkeypatch):
             dir_vec = math.cos(ang) * u + math.sin(ang) * v
             pts.append(seed + radius * dir_vec)
         fallback_flags.append(False)
-        return np.array(pts)
+        pts_arr = np.array(pts)
+        if report_method and return_raw:
+            return pts_arr, False, pts_arr.copy()
+        if report_method:
+            return pts_arr, False
+        if return_raw:
+            return pts_arr, pts_arr.copy()
+        return pts_arr
 
     monkeypatch.setattr(construct_module, "trace_hexagon", regular_hex)
 

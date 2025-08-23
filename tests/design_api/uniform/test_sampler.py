@@ -3,6 +3,7 @@ import pytest
 import logging
 
 from design_api.services.voronoi_gen.uniform.sampler import compute_medial_axis, trace_hexagon
+from design_api.services.voronoi_gen.uniform.regularizer import hexagon_metrics
 from hypothesis import given, strategies as st, settings, event, assume
 
 
@@ -203,9 +204,9 @@ def test_trace_hexagon_origin_medial_cluster(monkeypatch):
     )
     assert used_fallback is True
 
-    edges = np.linalg.norm(np.roll(hex_pts, -1, axis=0) - hex_pts, axis=1)
+    metrics = hexagon_metrics(hex_pts)
     # Fallback rays yield a highly irregular hexagon
-    assert np.ptp(edges) > 0.3
+    assert metrics["std_edge_length"] > 0.1
 
 
 def test_trace_hexagon_medial_one_side_bbox(monkeypatch, caplog):
