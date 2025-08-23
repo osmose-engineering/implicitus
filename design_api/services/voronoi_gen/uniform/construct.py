@@ -16,6 +16,8 @@ def compute_uniform_cells(
     plane_normal: np.ndarray,
     max_distance: Optional[float] = None,
     vertex_tolerance: float = 1e-5,
+    resample_points: int = 60,
+    resample_min_distance: float = 0.0,
 ) -> Dict[int, np.ndarray]:
     """
     Compute near-uniform hexagonal Voronoi cells for each seed point.
@@ -27,6 +29,12 @@ def compute_uniform_cells(
         vertex_tolerance: tolerance used when reconciling shared vertices between
             adjacent cells. A warning is emitted if mismatches above this tolerance
             are detected.
+        resample_points: number of random points to draw when ``trace_hexagon``
+            requests additional neighbors.  These help avoid the
+            axis-aligned bounding-box fallback that produces cubic cells.
+        resample_min_distance: minimum allowed distance from the current seed when
+            resampling.  Points closer than this are rejected, providing a more
+            even angular distribution around the seed.
     Returns:
         cells: dict mapping seed index to (6,3) array of hexagon vertices.
     """
@@ -54,13 +62,30 @@ def compute_uniform_cells(
     }
 
 
-    def _resample() -> np.ndarray:
-        """Return extra candidate points within the mesh bounds."""
-        return rng.uniform(bbox_min, bbox_max, size=(30, 3))
-
     cells: Dict[int, np.ndarray] = {}
     fallback_indices: List[int] = []
     for idx, seed in enumerate(seeds):
+        def _resample() -> np.ndarray:
+            """Return extra candidate points within the mesh bounds.
+
+            Implements simple rejection sampling so that candidate points keep a
+            minimum distance from the ``seed``.  Sampling continues until
+            ``resample_points`` valid points are gathered or a maximum number of
+            attempts is reached.
+            """
+
+            pts = np.empty((0, 3), dtype=float)
+            attempts = 0
+            # Avoid infinite loops if ``resample_min_distance`` is too large
+            while pts.shape[0] < resample_points and attempts < 10:
+                batch = rng.uniform(bbox_min, bbox_max, size=(resample_points, 3))
+                if resample_min_distance > 0.0:
+                    mask = np.linalg.norm(batch - seed, axis=1) >= resample_min_distance
+                    batch = batch[mask]
+                pts = np.vstack([pts, batch])
+                attempts += 1
+            return pts[:resample_points]
+
         # Provide the resampler so that trace_hexagon has enough neighbor
         # directions and avoids the axis-aligned bounding-box fallback that
         # produces cubic cells. Older ``trace_hexagon`` implementations may not
