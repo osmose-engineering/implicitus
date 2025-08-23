@@ -228,6 +228,9 @@ async def review(req: dict, sid: Optional[str] = None):
 
         log_turn(sid, "review", req.get("raw", ""), spec, summary=summary)
         return {"sid": sid, "spec": spec, "summary": summary}
+    except HTTPException:
+        # propagate intentional HTTP errors without remapping to 500s
+        raise
     except Exception as e:
         logging.exception("Error in review endpoint")
         raise HTTPException(status_code=500, detail=str(e))
