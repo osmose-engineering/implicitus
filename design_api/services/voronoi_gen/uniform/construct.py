@@ -22,7 +22,10 @@ def compute_uniform_cells(
     return_status: bool = False,
     resample_points: int = 60,
     resample_min_distance: float = 0.0,
-) -> Union[Dict[int, np.ndarray], Tuple[Dict[int, np.ndarray], int]]:
+) -> Union[
+    Dict[int, np.ndarray],
+    Tuple[Dict[int, np.ndarray], int, List[int]],
+]:
 
     
 
@@ -37,13 +40,16 @@ def compute_uniform_cells(
             adjacent cells. A warning is emitted if mismatches above this tolerance
             are detected.
         mean_edge_limit: optional threshold for the mean edge length of a cell.
-            If exceeded, a warning is logged and the overall status set to ``1``.
-        area_limit: optional threshold for the area of a cell. If exceeded, a
-            warning is logged and the overall status set to ``1``.
+            Cells exceeding this limit are resampled once. If the retry still
+            fails the cell is omitted and the overall status set to ``1``.
+        area_limit: optional threshold for the area of a cell. Cells exceeding
+            this limit are resampled once. If the retry still fails the cell is
+            omitted and the overall status set to ``1``.
         return_status: when ``True`` the function returns a tuple
-            ``(cells, status)`` where ``status`` is ``0`` for success and ``1`` if
-            any threshold was exceeded. When ``False`` only ``cells`` are
-            returned.
+            ``(cells, status, failed_indices)`` where ``status`` is ``0`` for
+            success and ``1`` if any cell exceeded limits after resampling.
+            ``failed_indices`` lists the seed indices that were dropped. When
+            ``False`` only ``cells`` are returned.
         resample_points: number of random points to draw when ``trace_hexagon``
             requests additional neighbors.  These help avoid the
             axis-aligned bounding-box fallback that produces cubic cells.
@@ -53,8 +59,8 @@ def compute_uniform_cells(
 
     Returns:
         cells: dict mapping seed index to (6,3) array of hexagon vertices. If
-            ``return_status`` is ``True`` then a tuple ``(cells, status)`` is
-            returned instead.
+            ``return_status`` is ``True`` then a tuple ``(cells, status,
+            failed_indices)`` is returned instead.
     """
     # Extract medial axis points
     medial_points = compute_medial_axis(imds_mesh)
@@ -85,6 +91,7 @@ def compute_uniform_cells(
     status = 0
 
     fallback_indices: List[int] = []
+    failed_indices: List[int] = []
 
     for idx, seed in enumerate(seeds):
         def _resample() -> np.ndarray:
@@ -114,6 +121,28 @@ def compute_uniform_cells(
 
         # accept the ``neighbor_resampler`` or ``report_method`` arguments, so we
         # fall back to calling it with fewer parameters when necessary.
+
+        def _check_limits(metrics: Dict[str, float], level: int = logging.WARNING) -> bool:
+            exceeded_local = False
+            if mean_edge_limit is not None and metrics["mean_edge_length"] > mean_edge_limit:
+                logger.log(
+                    level,
+                    "Cell %d mean edge length %.3f exceeds limit %.3f",
+                    idx,
+                    metrics["mean_edge_length"],
+                    mean_edge_limit,
+                )
+                exceeded_local = True
+            if area_limit is not None and metrics["area"] > area_limit:
+                logger.log(
+                    level,
+                    "Cell %d area %.3f exceeds limit %.3f",
+                    idx,
+                    metrics["area"],
+                    area_limit,
+                )
+                exceeded_local = True
+            return exceeded_local
         try:
             hex_pts, used_fallback, raw_hex = trace_hexagon(
 
@@ -159,26 +188,43 @@ def compute_uniform_cells(
 
         metrics = hexagon_metrics(raw_hex)
 
-        # Threshold checks
-        exceeded = False
-        if mean_edge_limit is not None and metrics["mean_edge_length"] > mean_edge_limit:
-            logger.warning(
-                "Cell %d mean edge length %.3f exceeds limit %.3f",
-                idx,
-                metrics["mean_edge_length"],
-                mean_edge_limit,
-            )
-            exceeded = True
-        if area_limit is not None and metrics["area"] > area_limit:
-            logger.warning(
-                "Cell %d area %.3f exceeds limit %.3f",
-                idx,
-                metrics["area"],
-                area_limit,
-            )
-            exceeded = True
-        if exceeded:
-            status = 1
+        if _check_limits(metrics):
+            try:
+                extra_pts = _resample()
+                hex_pts, used_fallback, raw_hex = trace_hexagon(
+                    seed,
+                    np.vstack([medial_points, extra_pts]),
+                    plane_normal,
+                    max_distance,
+                    report_method=True,
+                    neighbor_resampler=_resample,
+                    return_raw=True,
+                )
+            except TypeError:  # pragma: no cover - legacy signature
+                try:
+                    hex_pts, used_fallback, raw_hex = trace_hexagon(
+                        seed,
+                        np.vstack([medial_points, _resample()]),
+                        plane_normal,
+                        max_distance,
+                        report_method=True,
+                        return_raw=True,
+                    )
+                except TypeError:  # pragma: no cover - legacy signature
+                    hex_pts = trace_hexagon(
+                        seed,
+                        np.vstack([medial_points, _resample()]),
+                        plane_normal,
+                        max_distance,
+                    )
+                    used_fallback = False
+                    raw_hex = hex_pts.copy()
+            metrics = hexagon_metrics(raw_hex)
+            if _check_limits(metrics, level=logging.ERROR):
+                failed_indices.append(idx)
+                status = 1
+                logger.error("Skipping cell %d due to metric limits", idx)
+                continue
 
         if used_fallback:
             fallback_indices.append(idx)
@@ -210,6 +256,12 @@ def compute_uniform_cells(
                 raw_hex = hex_pts.copy()
                 metrics = hexagon_metrics(raw_hex)
 
+            if _check_limits(metrics, level=logging.ERROR):
+                failed_indices.append(idx)
+                status = 1
+                logger.error("Skipping cell %d due to metric limits", idx)
+                continue
+
 
         # Optionally log metrics (throttled to avoid flooding output)
         if logger.isEnabledFor(logging.DEBUG) and (idx < 10 or idx % 1000 == 0):
@@ -239,6 +291,7 @@ def compute_uniform_cells(
             "trace_hexagon fallback used for %d seeds", len(fallback_indices)
         )
     dump_data["fallback_indices"] = fallback_indices
+    dump_data["failed_indices"] = failed_indices
 
     # --------------------
     # Reconcile shared vertices
@@ -345,5 +398,5 @@ def compute_uniform_cells(
 
 
     if return_status:
-        return cells, status
+        return cells, status, failed_indices
     return cells

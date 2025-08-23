@@ -429,7 +429,7 @@ def test_metric_threshold_warning_and_status(monkeypatch, caplog):
     plane_normal = np.array([0.0, 0.0, 1.0])
 
     with caplog.at_level(logging.WARNING):
-        cells, status = compute_uniform_cells(
+        cells, status, failed = compute_uniform_cells(
             seeds,
             mesh,
             plane_normal,
@@ -440,8 +440,10 @@ def test_metric_threshold_warning_and_status(monkeypatch, caplog):
         )
 
     assert status == 1
+    assert failed == [0]
     warnings = [rec for rec in caplog.records if rec.levelno >= logging.WARNING]
-    assert any("mean edge length" in w.message or "area" in w.message for w in warnings)
-    assert set(cells.keys()) == {0}
-    assert cells[0].shape == (6, 3)
+    assert any(
+        "mean edge length" in w.message or "area" in w.message for w in warnings
+    )
+    assert cells == {}
 
