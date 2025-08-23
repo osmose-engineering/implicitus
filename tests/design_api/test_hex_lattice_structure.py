@@ -14,6 +14,7 @@ def test_hex_lattice_patch_structure():
         spacing,
         primitive={},
         use_voronoi_edges=True,
+        mode="organic",
     )
 
     assert verts and edges
