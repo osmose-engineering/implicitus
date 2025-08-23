@@ -57,6 +57,28 @@ def test_compute_uniform_cells_basic():
         assert np.all(np.isfinite(pts))
 
 
+def test_no_fallback_for_sample_mesh():
+    """Trace hexagons using the real sampler without resorting to the fallback."""
+
+    seeds = np.array(
+        [
+            [0.2, 0.2, 0.2],
+            [0.8, 0.8, 0.8],
+        ]
+    )
+    mesh = _sample_mesh()
+    plane_normal = np.array([0.0, 0.0, 1.0])
+
+    dump_file = Path(__file__).resolve().parents[3] / "logs" / "UNIFORM_CELL_DUMP.json"
+    if dump_file.exists():
+        dump_file.unlink()
+
+    compute_uniform_cells(seeds, mesh, plane_normal, max_distance=2.0)
+    data = json.loads(dump_file.read_text())
+    assert all(not cell["used_fallback"] for cell in data["cells"].values())
+    dump_file.unlink()
+
+
 def test_cell_planes_align_with_normal():
     """Seeds offset from the slicing plane should still yield coplanar cells."""
 
