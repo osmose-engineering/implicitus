@@ -1,6 +1,7 @@
 import numpy as np
 import random
 from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
+from types import SimpleNamespace
 
 import math
 def derive_bbox_from_primitive(primitive: Dict[str, Any]) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
@@ -23,6 +24,54 @@ def derive_bbox_from_primitive(primitive: Dict[str, Any]) -> Tuple[Tuple[float, 
             return tuple(bmin), tuple(bmax)
     # Fallback to zero-sized box
     return (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)
+
+
+def primitive_to_imds_mesh(primitive: Dict[str, Any]) -> Optional[Any]:
+    """Generate a simple mesh approximation for a primitive.
+
+    Returns a ``SimpleNamespace`` with a ``vertices`` attribute or ``None`` if the
+    primitive type is unsupported or insufficiently specified.
+    """
+
+    if not primitive:
+        return None
+
+    if "sphere" in primitive:
+        r = float(primitive["sphere"].get("radius", 0))
+        if r <= 0:
+            return None
+        # Sample a coarse latitude/longitude grid on the sphere
+        phi = np.linspace(0.0, np.pi, 6)
+        theta = np.linspace(0.0, 2 * np.pi, 12, endpoint=False)
+        verts = []
+        for p in phi:
+            for t in theta:
+                verts.append(
+                    (
+                        r * np.sin(p) * np.cos(t),
+                        r * np.sin(p) * np.sin(t),
+                        r * np.cos(p),
+                    )
+                )
+        return SimpleNamespace(vertices=np.asarray(verts))
+
+    if "box" in primitive:
+        bmin, bmax = derive_bbox_from_primitive(primitive)
+        x0, y0, z0 = bmin
+        x1, y1, z1 = bmax
+        verts = [
+            (x0, y0, z0),
+            (x1, y0, z0),
+            (x0, y1, z0),
+            (x1, y1, z0),
+            (x0, y0, z1),
+            (x1, y0, z1),
+            (x0, y1, z1),
+            (x1, y1, z1),
+        ]
+        return SimpleNamespace(vertices=np.asarray(verts))
+
+    return None
 
 def build_spatial_index(
     seeds: List[Tuple[float, float, float]],
