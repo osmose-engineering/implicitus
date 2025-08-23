@@ -59,6 +59,7 @@ def compute_uniform_cells(
         return rng.uniform(bbox_min, bbox_max, size=(30, 3))
 
     cells: Dict[int, np.ndarray] = {}
+    fallback_indices: List[int] = []
     for idx, seed in enumerate(seeds):
         # Provide the resampler so that trace_hexagon has enough neighbor
         # directions and avoids the axis-aligned bounding-box fallback that
@@ -95,6 +96,32 @@ def compute_uniform_cells(
                 )
                 used_fallback = False
 
+        if used_fallback:
+            fallback_indices.append(idx)
+            logger.warning("Seed %d used trace_hexagon fallback", idx)
+            try:
+                extra_pts = _resample()
+                hex_pts, used_fallback = trace_hexagon(
+                    seed,
+                    np.vstack([medial_points, extra_pts]),
+                    plane_normal,
+                    max_distance,
+                    report_method=True,
+                    neighbor_resampler=_resample,
+                )
+                if used_fallback:
+                    logger.error(
+                        "Fallback used after resampling for seed %d", idx
+                    )
+            except TypeError:  # pragma: no cover - legacy signature
+                hex_pts = trace_hexagon(
+                    seed,
+                    np.vstack([medial_points, _resample()]),
+                    plane_normal,
+                    max_distance,
+                )
+                used_fallback = False
+
         # Optionally log metrics (throttled to avoid flooding output)
         if logger.isEnabledFor(logging.DEBUG) and (idx < 10 or idx % 1000 == 0):
             metrics = hexagon_metrics(hex_pts)
@@ -111,7 +138,11 @@ def compute_uniform_cells(
             "vertices": hex_pts.tolist(),
             "used_fallback": bool(used_fallback),
         }
-
+    if fallback_indices:
+        logger.info(
+            "trace_hexagon fallback used for %d seeds", len(fallback_indices)
+        )
+    dump_data["fallback_indices"] = fallback_indices
 
     # --------------------
     # Reconcile shared vertices
