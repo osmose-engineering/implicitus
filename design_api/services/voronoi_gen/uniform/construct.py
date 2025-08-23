@@ -189,8 +189,12 @@ def compute_uniform_cells(
             break
     if repo_root is None:
         repo_root = Path.cwd()
-    
-    logging.debug("REPO ROOT: ", repo_root)
+
+    # Explicitly log the resolved repository root for troubleshooting. The
+    # previous call used a comma which resulted in a formatting error when the
+    # logger was configured for DEBUG. Using "%s" ensures the path is rendered
+    # correctly without raising a logging exception.
+    logging.debug("REPO ROOT: %s", repo_root)
     
     dump_path = repo_root / "logs" / "UNIFORM_CELL_DUMP.json"
     try:
