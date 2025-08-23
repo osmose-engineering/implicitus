@@ -19,7 +19,7 @@ from json.decoder import JSONDecodeError
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional
+from typing import Optional, Any
 from dataclasses import dataclass
 from design_api.services.json_cleaner import clean_llm_output
 from design_api.services.llm_service import generate_design_spec
@@ -28,6 +28,7 @@ from design_api.services.validator import validate_model_spec as validate_proto
 from ai_adapter.csg_adapter import review_request, generate_summary, update_request
 from design_api.services.voronoi_gen.voronoi_gen import (
     compute_voronoi_adjacency,
+    build_hex_lattice,
 )
 
 @dataclass
@@ -139,27 +140,52 @@ async def review(req: dict, sid: Optional[str] = None):
                         or inf.get("min_dist")
                         or 2.0
                     )
-                    # compute adjacency of seed points using spatial pruning
-                    # compute_voronoi_adjacency expects half the target spacing so that
-                    # prune_adjacency_via_grid caps edge length at one spacing
-                    adjacency = compute_voronoi_adjacency(pts, spacing=spacing * 0.5)
 
-                    # convert adjacency (edge list or neighbor map) -> unique edge list
-                    edge_list = []
-                    if isinstance(adjacency, dict):
-                        for i, nbrs in adjacency.items():
-                            for j in nbrs:
-                                if j > i:
-                                    edge_list.append([i, j])
+                    mode = inf.get("mode") or req.get("mode")
+                    if mode == "uniform":
+                        primitive = node.get("primitive", {})
+                        imds_mesh = inf.get("imds_mesh") or req.get("imds_mesh")
+                        plane_normal = inf.get("plane_normal") or req.get("plane_normal")
+                        max_distance = inf.get("max_distance") or req.get("max_distance")
+                        if plane_normal is not None:
+                            plane_normal = np.asarray(plane_normal)
+
+                        verts, edge_list, cells = build_hex_lattice(
+                            bbox_min,
+                            bbox_max,
+                            spacing,
+                            primitive,
+                            return_cells=True,
+                            mode="uniform",
+                            imds_mesh=imds_mesh,
+                            plane_normal=plane_normal,
+                            max_distance=max_distance,
+                        )
+                        inf["seed_points"] = verts
+                        inf["edges"] = [list(e) for e in edge_list]
+                        inf["cells"] = cells
                     else:
-                        for i, j in adjacency:
-                            edge_list.append([i, j])
+                        # compute adjacency of seed points using spatial pruning
+                        # compute_voronoi_adjacency expects half the target spacing so that
+                        # prune_adjacency_via_grid caps edge length at one spacing
+                        adjacency = compute_voronoi_adjacency(pts, spacing=spacing * 0.5)
 
-                    inf["edges"] = edge_list
+                        # convert adjacency (edge list or neighbor map) -> unique edge list
+                        edge_list = []
+                        if isinstance(adjacency, dict):
+                            for i, nbrs in adjacency.items():
+                                for j in nbrs:
+                                    if j > i:
+                                        edge_list.append([i, j])
+                        else:
+                            for i, j in adjacency:
+                                edge_list.append([i, j])
 
-                    logging.debug(
-                        f"[DEBUG review] spacing={spacing} produced {len(edge_list)} edges; sample: {edge_list[:10]}"
-                    )
+                        inf["edges"] = edge_list
+
+                        logging.debug(
+                            f"[DEBUG review] spacing={spacing} produced {len(edge_list)} edges; sample: {edge_list[:10]}"
+                        )
 
 
         # sanitize spec to convert numpy arrays into lists for JSON serialization
@@ -196,6 +222,9 @@ class UpdateRequest(BaseModel):
     sid: str
     raw: str
     spec: list
+    imds_mesh: Optional[Any] = None
+    plane_normal: Optional[Any] = None
+    max_distance: Optional[float] = None
 
 @app.post("/design/update", response_model=dict)
 async def update(req: UpdateRequest):
@@ -231,25 +260,50 @@ async def update(req: UpdateRequest):
                     or inf.get("min_dist")
                     or 2.0
                 )
-                # compute_voronoi_adjacency expects half the target spacing so that
-                # prune_adjacency_via_grid caps edge length at one spacing
-                adjacency = compute_voronoi_adjacency(pts, spacing=spacing * 0.5)
 
-                edge_list = []
-                if isinstance(adjacency, dict):
-                    for i, nbrs in adjacency.items():
-                        for j in nbrs:
-                            if j > i:
-                                edge_list.append([i, j])
+                mode = inf.get("mode")
+                if mode == "uniform":
+                    primitive = node.get("primitive", {})
+                    imds_mesh = inf.get("imds_mesh") or req.imds_mesh
+                    plane_normal = inf.get("plane_normal") or req.plane_normal
+                    max_distance = inf.get("max_distance") or req.max_distance
+                    if plane_normal is not None:
+                        plane_normal = np.asarray(plane_normal)
+
+                    verts, edge_list, cells = build_hex_lattice(
+                        bbox_min,
+                        bbox_max,
+                        spacing,
+                        primitive,
+                        return_cells=True,
+                        mode="uniform",
+                        imds_mesh=imds_mesh,
+                        plane_normal=plane_normal,
+                        max_distance=max_distance,
+                    )
+                    inf["seed_points"] = verts
+                    inf["edges"] = [list(e) for e in edge_list]
+                    inf["cells"] = cells
                 else:
-                    for i, j in adjacency:
-                        edge_list.append([i, j])
+                    # compute_voronoi_adjacency expects half the target spacing so that
+                    # prune_adjacency_via_grid caps edge length at one spacing
+                    adjacency = compute_voronoi_adjacency(pts, spacing=spacing * 0.5)
 
-                inf["edges"] = edge_list
+                    edge_list = []
+                    if isinstance(adjacency, dict):
+                        for i, nbrs in adjacency.items():
+                            for j in nbrs:
+                                if j > i:
+                                    edge_list.append([i, j])
+                    else:
+                        for i, j in adjacency:
+                            edge_list.append([i, j])
 
-                logging.debug(
-                    f"[DEBUG update] spacing={spacing} produced {len(edge_list)} edges; sample: {edge_list[:10]}"
-                )
+                    inf["edges"] = edge_list
+
+                    logging.debug(
+                        f"[DEBUG update] spacing={spacing} produced {len(edge_list)} edges; sample: {edge_list[:10]}"
+                    )
 
 
     # sanitize new_spec to convert numpy arrays into lists for JSON serialization
