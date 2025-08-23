@@ -127,13 +127,28 @@ def test_shared_vertex_alignment(monkeypatch, caplog):
         ]
     )
 
-    def fake_trace_hexagon(seed, medial, normal, max_distance):  # pragma: no cover
+    def fake_trace_hexagon(
+        seed,
+        medial,
+        normal,
+        max_distance,
+        report_method=False,
+        neighbor_resampler=None,
+        return_raw=False,
+    ):  # pragma: no cover
         if np.allclose(seed, seeds[0]):
-            return base_hex.copy()
-        perturbed = base_hex.copy()
-        perturbed[0] += [8e-4, 0.0, 0.0]
-        perturbed[1] += [-8e-4, 0.0, 0.0]
-        return perturbed
+            pts = base_hex.copy()
+        else:
+            pts = base_hex.copy()
+            pts[0] += [8e-4, 0.0, 0.0]
+            pts[1] += [-8e-4, 0.0, 0.0]
+        if report_method and return_raw:
+            return pts, False, pts.copy()
+        if report_method:
+            return pts, False
+        if return_raw:
+            return pts, pts.copy()
+        return pts
 
     monkeypatch.setattr(
         "design_api.services.voronoi_gen.uniform.construct.compute_medial_axis", fake_medial_axis
@@ -213,7 +228,15 @@ def test_regularization_reduces_edge_variance(monkeypatch):
         ]
     )
 
-    def fake_trace_hexagon(seed, medial, normal, max_distance):  # pragma: no cover
+    def fake_trace_hexagon(
+        seed,
+        medial,
+        normal,
+        max_distance,
+        report_method=False,
+        neighbor_resampler=None,
+        return_raw=False,
+    ):  # pragma: no cover
         perturbed = base_hex.copy()
         if np.allclose(seed, seeds[0]):
             perturbed[0] += [0.1, 0.0, 0.0]
@@ -221,6 +244,12 @@ def test_regularization_reduces_edge_variance(monkeypatch):
         else:
             perturbed[1] += [0.05, 0.0, 0.0]
             perturbed[4] -= [0.05, 0.0, 0.0]
+        if report_method and return_raw:
+            return perturbed, False, perturbed.copy()
+        if report_method:
+            return perturbed, False
+        if return_raw:
+            return perturbed, perturbed.copy()
         return perturbed
 
     monkeypatch.setattr(
@@ -239,9 +268,8 @@ def test_regularization_reduces_edge_variance(monkeypatch):
         reg_pts = regularize_hexagon(pts, plane_normal)
         metrics_after = hexagon_metrics(reg_pts)
 
-        var_before = np.var(metrics_before["edge_lengths"])
-        var_after = np.var(metrics_after["edge_lengths"])
-        assert var_after < var_before
+        assert metrics_before["std_edge_length"] > metrics_after["std_edge_length"]
+        assert metrics_before["std_edge_length"] > 0
 
         # Ensure regularized cell remains coplanar with the slicing plane
         edge1 = reg_pts[1] - reg_pts[0]
@@ -263,7 +291,15 @@ def test_pathological_medial_axis_triggers_warning(monkeypatch, caplog):
     def central_medial_axis(_mesh):  # pragma: no cover - deterministic cluster
         return np.zeros((8, 3))
 
-    def degenerate_trace(seed, medial, normal, max_distance):  # pragma: no cover
+    def degenerate_trace(
+        seed,
+        medial,
+        normal,
+        max_distance,
+        report_method=False,
+        neighbor_resampler=None,
+        return_raw=False,
+    ):  # pragma: no cover
         pts = np.tile(seed, (6, 1))
 
         # Verify the hexagon before any vertex averaging
@@ -276,6 +312,12 @@ def test_pathological_medial_axis_triggers_warning(monkeypatch, caplog):
             area += 0.5 * np.linalg.norm(np.cross(a, b))
         if unique.shape[0] != 6 or area == 0.0:
             logging.warning("degenerate hexagon detected")
+        if report_method and return_raw:
+            return pts, False, pts.copy()
+        if report_method:
+            return pts, False
+        if return_raw:
+            return pts, pts.copy()
         return pts
 
     monkeypatch.setattr(
@@ -308,10 +350,22 @@ def test_uniform_cell_dump(monkeypatch):
         lambda _mesh: np.zeros((1, 3)),
     )
 
-    def fake_trace_hexagon(seed, medial, normal, max_distance, report_method=False, neighbor_resampler=None):  # pragma: no cover - deterministic
+    def fake_trace_hexagon(
+        seed,
+        medial,
+        normal,
+        max_distance,
+        report_method=False,
+        neighbor_resampler=None,
+        return_raw=False,
+    ):  # pragma: no cover - deterministic
         pts = np.zeros((6, 3))
+        if report_method and return_raw:
+            return pts, True, pts.copy()
         if report_method:
             return pts, True
+        if return_raw:
+            return pts, pts.copy()
         return pts
 
     monkeypatch.setattr(
@@ -362,7 +416,14 @@ def test_metric_threshold_warning_and_status(monkeypatch, caplog):
     )
     monkeypatch.setattr(
         "design_api.services.voronoi_gen.uniform.construct.trace_hexagon",
-        lambda seed, medial, normal, max_distance: base_hex,
+        lambda seed, medial, normal, max_distance, report_method=False, neighbor_resampler=None, return_raw=False:
+            (base_hex, False, base_hex.copy())
+            if report_method and return_raw
+            else (base_hex, False)
+            if report_method
+            else (base_hex, base_hex.copy())
+            if return_raw
+            else base_hex,
     )
 
     plane_normal = np.array([0.0, 0.0, 1.0])

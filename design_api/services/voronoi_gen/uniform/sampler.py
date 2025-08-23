@@ -192,7 +192,13 @@ def trace_hexagon(
     max_distance: Optional[float] = None,
     report_method: bool = False,
     neighbor_resampler: Optional[Callable[[], np.ndarray]] = None,
-) -> Union[np.ndarray, Tuple[np.ndarray, bool]]:
+    return_raw: bool = False,
+) -> Union[
+    np.ndarray,
+    Tuple[np.ndarray, bool],
+    Tuple[np.ndarray, np.ndarray],
+    Tuple[np.ndarray, bool, np.ndarray],
+]:
     """
     Trace approximate hexagonal cell vertices around ``seed_pt`` using
     perpendicular bisectors to its nearest neighbors in the slicing plane.
@@ -207,11 +213,12 @@ def trace_hexagon(
             resorting to the bounding-box ray fallback.
 
     Returns:
-        If ``report_method`` is ``False`` (default), returns an ``(6,3)`` array
-        of hexagon vertex positions.
-        If ``report_method`` is ``True``, returns a tuple ``(hex_pts, used_fallback)``
-        where ``used_fallback`` is ``True`` when the ray casting fallback was
-        used instead of the bisector method.
+        If neither ``report_method`` nor ``return_raw`` is ``True``, returns an
+        ``(6,3)`` array of regularized vertex positions.
+        If ``report_method`` is ``True``, a boolean indicating whether the
+        bounding-box fallback was used is included in the return tuple.
+        If ``return_raw`` is ``True``, the unregularized vertices are also
+        returned.
     """
     # Create orthonormal basis (u, v) spanning the plane
     arbitrary = np.array([1.0, 0.0, 0.0])
@@ -303,6 +310,8 @@ def trace_hexagon(
 
     used_fallback = not hex_success
 
+    raw_hex = hex_pts.copy()
+
     # Attempt to regularize edge lengths if available
     try:
         from design_api.services.voronoi_gen.uniform.regularizer import regularize_hexagon
@@ -310,6 +319,10 @@ def trace_hexagon(
     except ImportError:
         pass
 
+    if report_method and return_raw:
+        return hex_pts, used_fallback, raw_hex
     if report_method:
         return hex_pts, used_fallback
+    if return_raw:
+        return hex_pts, raw_hex
     return hex_pts
