@@ -13,6 +13,7 @@ def test_build_hex_lattice_returns_cells():
         primitive,
         return_cells=True,
         use_voronoi_edges=True,
+        mode="organic",
         resolution=(8, 8, 8),
     )
 
@@ -34,6 +35,7 @@ def test_build_hex_lattice_midpoints():
         spacing,
         primitive,
         use_voronoi_edges=False,
+        mode="organic",
     )
 
     # Expect midpoints only with no explicit edge list

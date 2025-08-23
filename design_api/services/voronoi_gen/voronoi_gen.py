@@ -1,11 +1,8 @@
 import numpy as np
 import random
-from typing import Union, Any, Dict
-from typing import Tuple, List, Optional, Dict
-from typing import Callable
+from typing import Any, Callable, Dict, List, Literal, Optional, Tuple, Union
 
 import math
-from .organic.construct import construct_voronoi_cells
 def derive_bbox_from_primitive(primitive: Dict[str, Any]) -> Tuple[Tuple[float, float, float], Tuple[float, float, float]]:
     """
     Compute axis-aligned bounding box (min and max) for the given primitive spec.
@@ -269,10 +266,11 @@ def build_hex_lattice(
     *,
     return_cells: bool = False,
     use_voronoi_edges: bool = False,
+    mode: Literal["organic", "uniform"] = "organic",
     **cell_kwargs: Any,
 ) -> Union[
     Tuple[List[Tuple[float, float, float]], List[Tuple[int, int]]],
-    Tuple[List[Tuple[float, float, float]], List[Tuple[int, int]], List[Dict[str, Any]]],
+    Tuple[List[Tuple[float, float, float]], List[Tuple[int, int]], Any],
 ]:
     """
     Generate a 3D hexagonally-packed lattice of points within the given AABB,
@@ -282,10 +280,12 @@ def build_hex_lattice(
     ``prune_adjacency_via_grid``/``compute_voronoi_adjacency`` and represented
     by the midpoints of adjacent seed pairs.
 
-    If ``return_cells`` is True, the function also constructs full Voronoi cell
-    geometry for each seed using :func:`construct_voronoi_cells` and returns the
-    resulting cell dictionaries as a third element.  Additional keyword
-    arguments are forwarded to ``construct_voronoi_cells`` (e.g. ``resolution``).
+    If ``return_cells`` is True, the function also constructs Voronoi cell
+    geometry for each seed. Set ``mode`` to ``"organic"`` (default) to call
+    :func:`organic.construct_voronoi_cells`, or ``"uniform"`` to invoke
+    :func:`uniform.compute_uniform_cells`. Additional keyword arguments are
+    forwarded to the selected function. When ``mode`` is ``"uniform"``, the
+    returned cells are a mapping from seed indices to vertex arrays.
     """
     # Unpack bounds
     x0, y0, z0 = bbox_min
@@ -380,11 +380,16 @@ def build_hex_lattice(
         edge_list = []
 
     if return_cells:
-        from .organic.construct import construct_voronoi_cells
+        if mode == "uniform":
+            from .uniform.construct import compute_uniform_cells
 
-        cells = construct_voronoi_cells(
-            pts, bbox_min, bbox_max, **cell_kwargs
-        )
+            cells = compute_uniform_cells(np.asarray(pts), **cell_kwargs)
+        else:
+            from .organic.construct import construct_voronoi_cells
+
+            cells = construct_voronoi_cells(
+                pts, bbox_min, bbox_max, **cell_kwargs
+            )
         return verts, edge_list, cells
 
     # Ensure edges are bidirectional
