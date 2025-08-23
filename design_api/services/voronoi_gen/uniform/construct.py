@@ -20,11 +20,11 @@ def compute_uniform_cells(
     mean_edge_limit: Optional[float] = None,
     area_limit: Optional[float] = None,
     return_status: bool = False,
-) -> Union[Dict[int, np.ndarray], Tuple[Dict[int, np.ndarray], int]]:
-
     resample_points: int = 60,
     resample_min_distance: float = 0.0,
-) -> Dict[int, np.ndarray]:
+) -> Union[Dict[int, np.ndarray], Tuple[Dict[int, np.ndarray], int]]:
+
+    
 
     """
     Compute near-uniform hexagonal Voronoi cells for each seed point.
