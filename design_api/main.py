@@ -142,6 +142,13 @@ async def review(req: dict, sid: Optional[str] = None):
                     )
 
                     mode = inf.get("mode") or req.get("mode")
+                    if mode is None:
+                        # Fallback to legacy boolean flag
+                        uniform_flag = inf.get("uniform") or req.get("uniform")
+                        if isinstance(uniform_flag, str):
+                            uniform_flag = uniform_flag.lower() == "true"
+                        if uniform_flag:
+                            mode = "uniform"
                     if mode == "uniform":
                         primitive = node.get("primitive", {})
                         imds_mesh = inf.get("imds_mesh") or req.get("imds_mesh")
@@ -262,6 +269,13 @@ async def update(req: UpdateRequest):
                 )
 
                 mode = inf.get("mode")
+                if mode is None:
+                    # Fallback to legacy boolean flag
+                    uniform_flag = inf.get("uniform")
+                    if isinstance(uniform_flag, str):
+                        uniform_flag = uniform_flag.lower() == "true"
+                    if uniform_flag:
+                        mode = "uniform"
                 if mode == "uniform":
                     primitive = node.get("primitive", {})
                     imds_mesh = inf.get("imds_mesh") or req.imds_mesh
