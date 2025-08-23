@@ -16,10 +16,16 @@ def compute_uniform_cells(
     plane_normal: np.ndarray,
     max_distance: Optional[float] = None,
     vertex_tolerance: float = 1e-5,
+
     mean_edge_limit: Optional[float] = None,
     area_limit: Optional[float] = None,
     return_status: bool = False,
 ) -> Union[Dict[int, np.ndarray], Tuple[Dict[int, np.ndarray], int]]:
+
+    resample_points: int = 60,
+    resample_min_distance: float = 0.0,
+) -> Dict[int, np.ndarray]:
+
     """
     Compute near-uniform hexagonal Voronoi cells for each seed point.
     Args:
@@ -38,6 +44,13 @@ def compute_uniform_cells(
             ``(cells, status)`` where ``status`` is ``0`` for success and ``1`` if
             any threshold was exceeded. When ``False`` only ``cells`` are
             returned.
+        resample_points: number of random points to draw when ``trace_hexagon``
+            requests additional neighbors.  These help avoid the
+            axis-aligned bounding-box fallback that produces cubic cells.
+        resample_min_distance: minimum allowed distance from the current seed when
+            resampling.  Points closer than this are rejected, providing a more
+            even angular distribution around the seed.
+
     Returns:
         cells: dict mapping seed index to (6,3) array of hexagon vertices. If
             ``return_status`` is ``True`` then a tuple ``(cells, status)`` is
@@ -67,13 +80,34 @@ def compute_uniform_cells(
     }
 
 
-    def _resample() -> np.ndarray:
-        """Return extra candidate points within the mesh bounds."""
-        return rng.uniform(bbox_min, bbox_max, size=(30, 3))
-
     cells: Dict[int, np.ndarray] = {}
+
     status = 0
+
+    fallback_indices: List[int] = []
+
     for idx, seed in enumerate(seeds):
+        def _resample() -> np.ndarray:
+            """Return extra candidate points within the mesh bounds.
+
+            Implements simple rejection sampling so that candidate points keep a
+            minimum distance from the ``seed``.  Sampling continues until
+            ``resample_points`` valid points are gathered or a maximum number of
+            attempts is reached.
+            """
+
+            pts = np.empty((0, 3), dtype=float)
+            attempts = 0
+            # Avoid infinite loops if ``resample_min_distance`` is too large
+            while pts.shape[0] < resample_points and attempts < 10:
+                batch = rng.uniform(bbox_min, bbox_max, size=(resample_points, 3))
+                if resample_min_distance > 0.0:
+                    mask = np.linalg.norm(batch - seed, axis=1) >= resample_min_distance
+                    batch = batch[mask]
+                pts = np.vstack([pts, batch])
+                attempts += 1
+            return pts[:resample_points]
+
         # Provide the resampler so that trace_hexagon has enough neighbor
         # directions and avoids the axis-aligned bounding-box fallback that
         # produces cubic cells. Older ``trace_hexagon`` implementations may not
@@ -109,6 +143,7 @@ def compute_uniform_cells(
                 )
                 used_fallback = False
 
+
         raw_hex = hex_pts.copy()
         metrics = hexagon_metrics(raw_hex)
 
@@ -133,6 +168,33 @@ def compute_uniform_cells(
         if exceeded:
             status = 1
 
+        if used_fallback:
+            fallback_indices.append(idx)
+            logger.warning("Seed %d used trace_hexagon fallback", idx)
+            try:
+                extra_pts = _resample()
+                hex_pts, used_fallback = trace_hexagon(
+                    seed,
+                    np.vstack([medial_points, extra_pts]),
+                    plane_normal,
+                    max_distance,
+                    report_method=True,
+                    neighbor_resampler=_resample,
+                )
+                if used_fallback:
+                    logger.error(
+                        "Fallback used after resampling for seed %d", idx
+                    )
+            except TypeError:  # pragma: no cover - legacy signature
+                hex_pts = trace_hexagon(
+                    seed,
+                    np.vstack([medial_points, _resample()]),
+                    plane_normal,
+                    max_distance,
+                )
+                used_fallback = False
+
+
         # Optionally log metrics (throttled to avoid flooding output)
         if logger.isEnabledFor(logging.DEBUG) and (idx < 10 or idx % 1000 == 0):
             logger.debug(
@@ -156,7 +218,11 @@ def compute_uniform_cells(
             },
             "used_fallback": bool(used_fallback),
         }
-
+    if fallback_indices:
+        logger.info(
+            "trace_hexagon fallback used for %d seeds", len(fallback_indices)
+        )
+    dump_data["fallback_indices"] = fallback_indices
 
     # --------------------
     # Reconcile shared vertices
