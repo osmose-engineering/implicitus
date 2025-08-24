@@ -1,5 +1,9 @@
+// @vitest-environment jsdom
+import React from 'react';
 import { describe, it, expect } from 'vitest';
+import { render, screen } from '@testing-library/react';
 import { generateHexTest3D, computeFilteredEdges } from './VoronoiCanvas';
+import VoronoiCanvas from './VoronoiCanvas';
 import { Graph, alg } from 'graphlib';
 
 describe('VoronoiCanvas filteredEdges', () => {
@@ -28,5 +32,14 @@ describe('VoronoiCanvas filteredEdges', () => {
     filtered.forEach(([i, j]) => g.setEdge(String(i), String(j)));
     const components = alg.components(g);
     expect(components.length).toBe(1);
+  });
+});
+
+describe('VoronoiCanvas warning', () => {
+  it('renders a warning banner when no edges are provided', () => {
+    render(
+      <VoronoiCanvas seedPoints={[]} edges={[]} bbox={[0, 0, 0, 1, 1, 1]} />
+    );
+    expect(screen.getByTestId('no-edges-warning')).toBeTruthy();
   });
 });

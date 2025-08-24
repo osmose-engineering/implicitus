@@ -164,6 +164,10 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
   cells = [],
   edgeLengthThreshold = 1.5,
 }) => {
+  const noEdges = edges.length === 0;
+  if (noEdges) {
+    console.warn('VoronoiCanvas: no edges provided');
+  }
   // In debug mode, hide the ray-march solid box
   if (DEBUG_HEX_TEST) showSolid = false;
   DEBUG_CANVAS && console.log('VoronoiCanvas debug props:', { seedPoints, edges, bbox });
@@ -335,25 +339,36 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
   }, [validCells, validSeedPoints]);
 
   return (
-    <div style={{
-      width: '100%',
-      height: '400px',
-      maxHeight: '400px',
-      minHeight: 0,
-      overflow: 'hidden',
-      position: 'relative',
-      flexShrink: 0
-    }}>
-      <Canvas
-        style={{ width: '100%', height: '100%', display: 'block' }}
-        resize={{ scroll: false }}
-        gl={{ version: 2 }}
-        camera={{ position: [15, 15, 15], fov: 60 }}
-      >
-        {showStruts ? (
-          showSolid && (
-            // Simple box for Strut view
-            <mesh
+    <div
+      style={{
+        width: '100%',
+        height: '400px',
+        maxHeight: '400px',
+        minHeight: 0,
+        overflow: 'hidden',
+        position: 'relative',
+        flexShrink: 0
+      }}
+    >
+      {noEdges ? (
+        <div
+          className="warning-banner"
+          role="alert"
+          data-testid="no-edges-warning"
+        >
+          No edges were returned; unable to render Voronoi mesh.
+        </div>
+      ) : (
+        <Canvas
+          style={{ width: '100%', height: '100%', display: 'block' }}
+          resize={{ scroll: false }}
+          gl={{ version: 2 }}
+          camera={{ position: [15, 15, 15], fov: 60 }}
+        >
+          {showStruts ? (
+            showSolid && (
+              // Simple box for Strut view
+              <mesh
               position={[
                 (bbox[0] + bbox[3]) / 2,
                 (bbox[1] + bbox[4]) / 2,
@@ -458,8 +473,9 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
         )}
         */}
         <OrbitControls />
-        
-      </Canvas>
+
+        </Canvas>
+      )}
     </div>
   );
 };
