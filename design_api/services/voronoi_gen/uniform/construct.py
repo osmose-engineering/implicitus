@@ -22,6 +22,8 @@ def compute_uniform_cells(
     return_status: bool = False,
     resample_points: int = 60,
     resample_min_distance: float = 0.0,
+    mean_edge_factor: Optional[float] = 2.0,
+    std_edge_factor: Optional[float] = 2.0,
 ) -> Union[
     Dict[int, np.ndarray],
     Tuple[Dict[int, np.ndarray], int, List[int]],
@@ -31,6 +33,14 @@ def compute_uniform_cells(
 
     """
     Compute near-uniform hexagonal Voronoi cells for each seed point.
+
+    After each cell is traced its raw edge metrics are compared against
+    thresholds derived from the running global averages. Cells with mean or
+    standard deviation of edge lengths exceeding ``mean_edge_factor`` or
+    ``std_edge_factor`` times their respective global means are resampled once
+    via ``_resample``.  Persistent outliers are logged and omitted from the
+    results.
+
     Args:
         seeds: (N,3) array of seed point locations.
         imds_mesh: mesh object with `.vertices` attribute for medial axis extraction.
@@ -56,6 +66,13 @@ def compute_uniform_cells(
         resample_min_distance: minimum allowed distance from the current seed when
             resampling.  Points closer than this are rejected, providing a more
             even angular distribution around the seed.
+        mean_edge_factor: multiplier applied to the running global mean of
+            ``mean_edge_length``. If the metric for a cell exceeds this factor
+            times the global mean the cell is resampled once. Remaining
+            outliers are dropped and logged as errors.
+        std_edge_factor: multiplier applied to the running global mean of
+            ``std_edge_length``. Cells exceeding this threshold are resampled
+            once and omitted if still outliers.
 
     Returns:
         cells: dict mapping seed index to (6,3) array of hexagon vertices. If
@@ -92,6 +109,43 @@ def compute_uniform_cells(
 
     fallback_indices: List[int] = []
     failed_indices: List[int] = []
+
+    global_mean_edge = 0.0
+    global_std_edge = 0.0
+    sample_count = 0
+
+    def _check_outlier(metrics: Dict[str, float], idx: int, level: int = logging.WARNING) -> bool:
+        exceeded_local = False
+        if sample_count > 0:
+            if (
+                mean_edge_factor is not None
+                and global_mean_edge > 0.0
+                and metrics["mean_edge_length"] > mean_edge_factor * global_mean_edge
+            ):
+                logger.log(
+                    level,
+                    "Cell %d mean edge length %.3f exceeds %gx global mean %.3f",
+                    idx,
+                    metrics["mean_edge_length"],
+                    mean_edge_factor,
+                    global_mean_edge,
+                )
+                exceeded_local = True
+            if (
+                std_edge_factor is not None
+                and global_std_edge > 1e-9
+                and metrics["std_edge_length"] > std_edge_factor * global_std_edge
+            ):
+                logger.log(
+                    level,
+                    "Cell %d std edge length %.3f exceeds %gx global mean %.3f",
+                    idx,
+                    metrics["std_edge_length"],
+                    std_edge_factor,
+                    global_std_edge,
+                )
+                exceeded_local = True
+        return exceeded_local
 
     for idx, seed in enumerate(seeds):
         def _resample() -> np.ndarray:
@@ -187,6 +241,43 @@ def compute_uniform_cells(
 
 
         metrics = hexagon_metrics(raw_hex)
+        if _check_outlier(metrics, idx):
+            try:
+                extra_pts = _resample()
+                hex_pts, used_fallback, raw_hex = trace_hexagon(
+                    seed,
+                    np.vstack([medial_points, extra_pts]),
+                    plane_normal,
+                    max_distance,
+                    report_method=True,
+                    neighbor_resampler=_resample,
+                    return_raw=True,
+                )
+            except TypeError:  # pragma: no cover - legacy signature
+                try:
+                    hex_pts, used_fallback, raw_hex = trace_hexagon(
+                        seed,
+                        np.vstack([medial_points, _resample()]),
+                        plane_normal,
+                        max_distance,
+                        report_method=True,
+                        return_raw=True,
+                    )
+                except TypeError:  # pragma: no cover - legacy signature
+                    hex_pts = trace_hexagon(
+                        seed,
+                        np.vstack([medial_points, _resample()]),
+                        plane_normal,
+                        max_distance,
+                    )
+                    used_fallback = False
+                    raw_hex = hex_pts.copy()
+            metrics = hexagon_metrics(raw_hex)
+            if _check_outlier(metrics, idx, level=logging.ERROR):
+                failed_indices.append(idx)
+                status = 1
+                logger.error("Skipping cell %d due to edge metric outlier", idx)
+                continue
 
         if _check_limits(metrics):
             try:
@@ -220,6 +311,11 @@ def compute_uniform_cells(
                     used_fallback = False
                     raw_hex = hex_pts.copy()
             metrics = hexagon_metrics(raw_hex)
+            if _check_outlier(metrics, idx, level=logging.ERROR):
+                failed_indices.append(idx)
+                status = 1
+                logger.error("Skipping cell %d due to edge metric outlier", idx)
+                continue
             if _check_limits(metrics, level=logging.ERROR):
                 failed_indices.append(idx)
                 status = 1
@@ -255,7 +351,11 @@ def compute_uniform_cells(
                 used_fallback = False
                 raw_hex = hex_pts.copy()
                 metrics = hexagon_metrics(raw_hex)
-
+            if _check_outlier(metrics, idx, level=logging.ERROR):
+                failed_indices.append(idx)
+                status = 1
+                logger.error("Skipping cell %d due to edge metric outlier", idx)
+                continue
             if _check_limits(metrics, level=logging.ERROR):
                 failed_indices.append(idx)
                 status = 1
@@ -286,6 +386,9 @@ def compute_uniform_cells(
             },
             "used_fallback": bool(used_fallback),
         }
+        global_mean_edge = (global_mean_edge * sample_count + metrics["mean_edge_length"]) / (sample_count + 1)
+        global_std_edge = (global_std_edge * sample_count + metrics["std_edge_length"]) / (sample_count + 1)
+        sample_count += 1
     if fallback_indices:
         logger.info(
             "trace_hexagon fallback used for %d seeds", len(fallback_indices)
