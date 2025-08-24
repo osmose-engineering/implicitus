@@ -573,3 +573,75 @@ def test_raw_std_edge_limit_resamples(monkeypatch, caplog):
     warnings = [rec for rec in caplog.records if rec.levelno >= logging.WARNING]
     assert any("std edge length" in w.message for w in warnings)
 
+
+def test_neighbor_variance_limit_triggers_medial_generation(monkeypatch):
+    """High variance in neighbor distances recomputes medial points."""
+
+    seeds = np.array([[0.0, 0.0, 0.0]])
+    mesh = DummyMesh([[0.0, 0.0, 0.0]])
+    plane_normal = np.array([0.0, 0.0, 1.0])
+
+    base_hex = np.array(
+        [
+            [1.0, 0.0, 0.0],
+            [0.5, np.sqrt(3) / 2, 0.0],
+            [-0.5, np.sqrt(3) / 2, 0.0],
+            [-1.0, 0.0, 0.0],
+            [-0.5, -np.sqrt(3) / 2, 0.0],
+            [0.5, -np.sqrt(3) / 2, 0.0],
+        ]
+    )
+
+    calls = {"count": 0}
+
+    def fake_medial_axis(_mesh):  # pragma: no cover - deterministic stub
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return np.array([[0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [20.0, 0.0, 0.0]])
+        return np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [10.0, 0.0, 0.0],
+                [20.0, 0.0, 0.0],
+                [30.0, 0.0, 0.0],
+            ]
+        )
+
+    def fake_trace_hexagon(
+        seed,
+        medial,
+        normal,
+        max_distance,
+        report_method=False,
+        neighbor_resampler=None,
+        return_raw=False,
+    ):  # pragma: no cover - deterministic
+        if neighbor_resampler is not None:
+            neighbor_resampler()
+        if report_method and return_raw:
+            return base_hex, False, base_hex.copy()
+        if report_method:
+            return base_hex, False
+        if return_raw:
+            return base_hex, base_hex.copy()
+        return base_hex
+
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.compute_medial_axis",
+        fake_medial_axis,
+    )
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.trace_hexagon",
+        fake_trace_hexagon,
+    )
+
+    compute_uniform_cells(
+        seeds,
+        mesh,
+        plane_normal,
+        max_distance=1.0,
+        neighbor_variance_limit=50.0,
+    )
+
+    assert calls["count"] == 2
+

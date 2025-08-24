@@ -9,6 +9,9 @@ pathological cells:
 - `raw_std_edge_limit` – caps the standard deviation of edge lengths. If the
   initial polygon exceeds this value the function resamples once before
   dropping the seed.
+- `neighbor_variance_limit` – when the variance of distances from a seed to its
+  medial neighbors exceeds this threshold the algorithm generates an additional
+  set of medial points before resampling.
 
 Any cell exceeding these thresholds after the retry is omitted and reported as
 failed.

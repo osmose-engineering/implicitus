@@ -23,6 +23,7 @@ def compute_uniform_cells(
     return_status: bool = False,
     resample_points: int = 60,
     resample_min_distance: float = 0.0,
+    neighbor_variance_limit: Optional[float] = None,
     mean_edge_factor: Optional[float] = 2.0,
     std_edge_factor: Optional[float] = 2.0,
 ) -> Union[
@@ -75,6 +76,11 @@ def compute_uniform_cells(
         resample_min_distance: minimum allowed distance from the current seed when
             resampling.  Points closer than this are rejected, providing a more
             even angular distribution around the seed.
+        neighbor_variance_limit: optional threshold for the variance of
+            distances from the seed to existing medial points.  If the variance
+            exceeds this limit, ``_resample`` computes an additional medial axis
+            for the mesh and includes these points before drawing random
+            samples.
         mean_edge_factor: multiplier applied to the running global mean of
             ``mean_edge_length``. If the metric for a cell exceeds this factor
             times the global mean the cell is resampled once. Remaining
@@ -181,8 +187,23 @@ def compute_uniform_cells(
             Implements simple rejection sampling so that candidate points keep a
             minimum distance from the ``seed``.  Sampling continues until
             ``resample_points`` valid points are gathered or a maximum number of
-            attempts is reached.
+            attempts is reached.  If the variance of distances to the existing
+            medial points exceeds ``neighbor_variance_limit`` a fresh medial-axis
+            computation is performed and appended to the returned candidates.
             """
+            # Assess current neighbor distribution
+            neighbor_distances = np.linalg.norm(medial_points - seed, axis=1)
+            variance = float(np.var(neighbor_distances)) if neighbor_distances.size else 0.0
+
+            extra_medial = np.empty((0, 3), dtype=float)
+            if (
+                neighbor_variance_limit is not None
+                and variance > neighbor_variance_limit
+            ):
+                try:
+                    extra_medial = compute_medial_axis(imds_mesh)
+                except Exception:  # pragma: no cover - best effort
+                    logger.debug("medial-axis recomputation failed", exc_info=True)
 
             pts = np.empty((0, 3), dtype=float)
             attempts = 0
@@ -194,7 +215,10 @@ def compute_uniform_cells(
                     batch = batch[mask]
                 pts = np.vstack([pts, batch])
                 attempts += 1
-            return pts[:resample_points]
+            pts = pts[:resample_points]
+            if extra_medial.size:
+                return np.vstack([extra_medial, pts])
+            return pts
 
         # Provide the resampler so that trace_hexagon has enough neighbor
         # directions and avoids the axis-aligned bounding-box fallback that
