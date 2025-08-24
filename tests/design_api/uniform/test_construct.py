@@ -449,6 +449,8 @@ def test_metric_threshold_warning_and_status(monkeypatch, caplog):
     assert info["seed"] == [0.0, 0.0, 0.0]
     assert info["neighbor_count"] >= 1
     assert info["used_fallback"] is False
+    assert len(info["neighbor_distances"]) == info["neighbor_count"]
+    assert len(info["neighbor_angles"]) == info["neighbor_count"]
 
     data = json.loads(dump_file.read_text())
     dump_info = data["failed_indices"][0]
@@ -456,6 +458,8 @@ def test_metric_threshold_warning_and_status(monkeypatch, caplog):
     assert dump_info["seed"] == [0.0, 0.0, 0.0]
     assert dump_info["neighbor_count"] >= 1
     assert dump_info["used_fallback"] is False
+    assert len(dump_info["neighbor_distances"]) == dump_info["neighbor_count"]
+    assert len(dump_info["neighbor_angles"]) == dump_info["neighbor_count"]
     dump_file.unlink()
     warnings = [rec for rec in caplog.records if rec.levelno >= logging.WARNING]
     assert any(
