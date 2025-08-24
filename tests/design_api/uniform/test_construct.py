@@ -393,6 +393,33 @@ def test_uniform_cell_dump(monkeypatch):
     dump_file.unlink()
 
 
+def test_fallback_indices_recorded(monkeypatch):
+    seeds = np.array([[0.0, 0.0, 0.0]])
+    mesh = DummyMesh([[0.0, 0.0, 0.0]])
+    plane_normal = np.array([0.0, 0.0, 1.0])
+
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.compute_medial_axis",
+        lambda _mesh: np.zeros((1, 3)),
+    )
+
+    dump_file = Path(__file__).resolve().parents[3] / "logs" / "UNIFORM_CELL_DUMP.json"
+    if dump_file.exists():
+        dump_file.unlink()
+
+    compute_uniform_cells(
+        seeds,
+        mesh,
+        plane_normal,
+        max_distance=1.0,
+        resample_points=0,
+    )
+
+    data = json.loads(dump_file.read_text())
+    assert data["fallback_indices"] == [0]
+    assert data["cells"]["0"]["used_fallback"] is True
+    dump_file.unlink()
+
 def test_metric_threshold_warning_and_status(monkeypatch, caplog):
     """Pathological hexagons should trigger metric threshold warnings."""
 
