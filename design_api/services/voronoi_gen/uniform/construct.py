@@ -21,6 +21,7 @@ def compute_uniform_cells(
     area_limit: Optional[float] = None,
     raw_std_edge_limit: Optional[float] = None,
     return_status: bool = False,
+    return_edges: bool = False,
     resample_points: int = 60,
     resample_min_distance: float = 0.0,
     neighbor_variance_limit: Optional[float] = None,
@@ -28,7 +29,9 @@ def compute_uniform_cells(
     std_edge_factor: Optional[float] = 2.0,
 ) -> Union[
     Dict[int, np.ndarray],
+    Tuple[Dict[int, np.ndarray], List[Tuple[int, int]]],
     Tuple[Dict[int, np.ndarray], int, List[Dict[str, Any]]],
+    Tuple[Dict[int, np.ndarray], List[Tuple[int, int]], int, List[Dict[str, Any]]],
 ]:
 
     
@@ -69,7 +72,9 @@ def compute_uniform_cells(
             ``failed_indices`` is a list of diagnostic dictionaries for each
             dropped seed containing ``index``, ``seed`` coordinates,
             ``neighbor_count``, ``used_fallback``, ``neighbor_distances`` and
-            ``neighbor_angles``. When ``False`` only ``cells`` are returned.
+            ``neighbor_angles``.
+        return_edges: when ``True`` a list of undirected edges referencing the
+            reconciled vertex indices is returned alongside ``cells``.
         resample_points: number of random points to draw when ``trace_hexagon``
             requests additional neighbors.  These help avoid the
             axis-aligned bounding-box fallback that produces cubic cells.
@@ -91,8 +96,10 @@ def compute_uniform_cells(
 
     Returns:
         cells: dict mapping seed index to (6,3) array of hexagon vertices. If
-            ``return_status`` is ``True`` then a tuple ``(cells, status,
-            failed_indices)`` is returned instead.
+            ``return_edges`` is ``True`` an accompanying list of vertex index
+            pairs is also returned. When ``return_status`` is ``True`` the
+            status code and failure diagnostics follow ``cells`` and any
+            ``edges`` in the returned tuple.
     """
     # Extract medial axis points
     medial_points = compute_medial_axis(imds_mesh)
@@ -127,6 +134,8 @@ def compute_uniform_cells(
 
 
     cells: Dict[int, np.ndarray] = {}
+    # Edges will be populated after vertex reconciliation
+    edges: List[Tuple[int, int]] = []
 
     status = 0
 
@@ -604,6 +613,30 @@ def compute_uniform_cells(
         else:
             logging.info("Shared vertex adjustment: no coincident vertices found")
 
+    # Build edge list from reconciled vertex indices
+    for sl in cell_slices.values():
+        inds = list(range(sl.start, sl.stop))
+        for i in range(len(inds)):
+            edges.append((inds[i], inds[(i + 1) % len(inds)]))
+
+    unique_edges: List[Tuple[int, int]] = []
+    seen: set = set()
+    for a, b in edges:
+        key = (min(a, b), max(a, b))
+        if key not in seen:
+            seen.add(key)
+            unique_edges.append((a, b))
+    edges = unique_edges
+
+    dump_data["edges"] = edges
+
+    if not edges:
+        if cells:
+            logger.error(
+                "Edge serialization produced no edges for %d cells", len(cells)
+            )
+        else:
+            logger.info("No edges generated; all cells were skipped")
 
     # Determine a suitable repository root for the log. When the package is
     # installed, ``__file__`` may reside in ``site-packages`` where writing is
@@ -632,8 +665,10 @@ def compute_uniform_cells(
             json.dump(dump_data, f)
     except Exception as exc:  # pragma: no cover - best effort
         logging.warning("Failed to write uniform cell dump to %s: %s", dump_path, exc)
-
-
+    if return_status and return_edges:
+        return cells, edges, status, failed_indices
     if return_status:
         return cells, status, failed_indices
+    if return_edges:
+        return cells, edges
     return cells
