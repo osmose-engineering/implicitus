@@ -227,6 +227,9 @@ def compute_uniform_cells(
         # accept the ``neighbor_resampler`` or ``report_method`` arguments, so we
         # fall back to calling it with fewer parameters when necessary.
 
+        neighbors = medial_points
+        neighbor_count = neighbors.shape[0]
+
         def _check_limits(metrics: Dict[str, float], level: int = logging.WARNING) -> bool:
             exceeded_local = False
             if mean_edge_limit is not None and metrics["mean_edge_length"] > mean_edge_limit:
@@ -261,7 +264,7 @@ def compute_uniform_cells(
             hex_pts, used_fallback, raw_hex = trace_hexagon(
 
                 seed,
-                medial_points,
+                neighbors,
                 plane_normal,
                 max_distance,
 
@@ -273,7 +276,7 @@ def compute_uniform_cells(
             try:
                 hex_pts, used_fallback, raw_hex = trace_hexagon(
                     seed,
-                    medial_points,
+                    neighbors,
                     plane_normal,
                     max_distance,
                     report_method=True,
@@ -283,7 +286,7 @@ def compute_uniform_cells(
                 try:
                     hex_pts, used_fallback = trace_hexagon(
                         seed,
-                        medial_points,
+                        neighbors,
                         plane_normal,
                         max_distance,
                         report_method=True,
@@ -292,7 +295,7 @@ def compute_uniform_cells(
                 except TypeError:  # pragma: no cover - legacy signature
                     hex_pts = trace_hexagon(
                         seed,
-                        medial_points,
+                        neighbors,
                         plane_normal,
                         max_distance,
                     )
@@ -468,6 +471,21 @@ def compute_uniform_cells(
                 logger.error("Skipping cell %d due to metric limits", idx)
                 continue
 
+
+        # Final safeguard before acceptance
+        if _check_outlier(metrics, idx, level=logging.ERROR) or _check_limits(metrics, level=logging.ERROR):
+            failed_indices.append(
+                {
+                    "index": idx,
+                    "seed": seed.tolist(),
+                    "neighbor_count": int(neighbor_count),
+                    "used_fallback": bool(used_fallback),
+                    **_neighbor_diagnostics(neighbors),
+                }
+            )
+            status = 1
+            logger.error("Skipping cell %d due to metric limits", idx)
+            continue
 
         # Optionally log metrics (throttled to avoid flooding output)
         if logger.isEnabledFor(logging.DEBUG) and (idx < 10 or idx % 1000 == 0):
