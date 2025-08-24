@@ -574,6 +574,16 @@ def test_raw_std_edge_limit_resamples(monkeypatch, caplog):
     assert any("std edge length" in w.message for w in warnings)
 
 
+
+def test_neighbor_variance_limit_triggers_medial_generation(monkeypatch):
+    """High variance in neighbor distances recomputes medial points."""
+
+    seeds = np.array([[0.0, 0.0, 0.0]])
+    mesh = DummyMesh([[0.0, 0.0, 0.0]])
+    plane_normal = np.array([0.0, 0.0, 1.0])
+
+    base_hex = np.array(
+
 def test_global_outlier_resample_then_skip(monkeypatch, caplog):
     """A seed far outside global edge metrics should be dropped after retry."""
 
@@ -585,6 +595,7 @@ def test_global_outlier_resample_then_skip(monkeypatch, caplog):
         return np.zeros((1, 3))
 
     regular_hex = np.array(
+
         [
             [1.0, 0.0, 0.0],
             [0.5, np.sqrt(3) / 2, 0.0],
@@ -594,9 +605,27 @@ def test_global_outlier_resample_then_skip(monkeypatch, caplog):
             [0.5, -np.sqrt(3) / 2, 0.0],
         ]
     )
+
+
+    calls = {"count": 0}
+
+    def fake_medial_axis(_mesh):  # pragma: no cover - deterministic stub
+        calls["count"] += 1
+        if calls["count"] == 1:
+            return np.array([[0.0, 0.0, 0.0], [10.0, 0.0, 0.0], [20.0, 0.0, 0.0]])
+        return np.array(
+            [
+                [0.0, 0.0, 0.0],
+                [10.0, 0.0, 0.0],
+                [20.0, 0.0, 0.0],
+                [30.0, 0.0, 0.0],
+            ]
+        )
+
     high_var_hex = regular_hex * 5.0
 
     call_counts = {0: 0, 1: 0}
+
 
     def fake_trace_hexagon(
         seed,
@@ -607,6 +636,17 @@ def test_global_outlier_resample_then_skip(monkeypatch, caplog):
         neighbor_resampler=None,
         return_raw=False,
     ):  # pragma: no cover - deterministic
+
+        if neighbor_resampler is not None:
+            neighbor_resampler()
+        if report_method and return_raw:
+            return base_hex, False, base_hex.copy()
+        if report_method:
+            return base_hex, False
+        if return_raw:
+            return base_hex, base_hex.copy()
+        return base_hex
+
         idx = 0 if seed[0] == 0.0 else 1
         call_counts[idx] += 1
         pts = regular_hex if idx == 0 else high_var_hex
@@ -618,6 +658,7 @@ def test_global_outlier_resample_then_skip(monkeypatch, caplog):
             return pts, pts.copy()
         return pts
 
+
     monkeypatch.setattr(
         "design_api.services.voronoi_gen.uniform.construct.compute_medial_axis",
         fake_medial_axis,
@@ -626,6 +667,17 @@ def test_global_outlier_resample_then_skip(monkeypatch, caplog):
         "design_api.services.voronoi_gen.uniform.construct.trace_hexagon",
         fake_trace_hexagon,
     )
+
+
+    compute_uniform_cells(
+        seeds,
+        mesh,
+        plane_normal,
+        max_distance=1.0,
+        neighbor_variance_limit=50.0,
+    )
+
+    assert calls["count"] == 2
 
     with caplog.at_level(logging.ERROR):
         cells, status, failed = compute_uniform_cells(
@@ -642,4 +694,5 @@ def test_global_outlier_resample_then_skip(monkeypatch, caplog):
     assert status == 1
     assert [f["index"] for f in failed] == [1]
     assert any("edge metric outlier" in rec.message for rec in caplog.records)
+
 
