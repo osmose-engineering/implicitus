@@ -573,3 +573,73 @@ def test_raw_std_edge_limit_resamples(monkeypatch, caplog):
     warnings = [rec for rec in caplog.records if rec.levelno >= logging.WARNING]
     assert any("std edge length" in w.message for w in warnings)
 
+
+def test_global_outlier_resample_then_skip(monkeypatch, caplog):
+    """A seed far outside global edge metrics should be dropped after retry."""
+
+    seeds = np.array([[0.0, 0.0, 0.0], [1.0, 0.0, 0.0]])
+    mesh = DummyMesh([[0.0, 0.0, 0.0]])
+    plane_normal = np.array([0.0, 0.0, 1.0])
+
+    def fake_medial_axis(_mesh):  # pragma: no cover - simple stub
+        return np.zeros((1, 3))
+
+    regular_hex = np.array(
+        [
+            [1.0, 0.0, 0.0],
+            [0.5, np.sqrt(3) / 2, 0.0],
+            [-0.5, np.sqrt(3) / 2, 0.0],
+            [-1.0, 0.0, 0.0],
+            [-0.5, -np.sqrt(3) / 2, 0.0],
+            [0.5, -np.sqrt(3) / 2, 0.0],
+        ]
+    )
+    high_var_hex = regular_hex * 5.0
+
+    call_counts = {0: 0, 1: 0}
+
+    def fake_trace_hexagon(
+        seed,
+        medial,
+        normal,
+        max_distance,
+        report_method=False,
+        neighbor_resampler=None,
+        return_raw=False,
+    ):  # pragma: no cover - deterministic
+        idx = 0 if seed[0] == 0.0 else 1
+        call_counts[idx] += 1
+        pts = regular_hex if idx == 0 else high_var_hex
+        if report_method and return_raw:
+            return pts, False, pts.copy()
+        if report_method:
+            return pts, False
+        if return_raw:
+            return pts, pts.copy()
+        return pts
+
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.compute_medial_axis",
+        fake_medial_axis,
+    )
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.trace_hexagon",
+        fake_trace_hexagon,
+    )
+
+    with caplog.at_level(logging.ERROR):
+        cells, status, failed = compute_uniform_cells(
+            seeds,
+            mesh,
+            plane_normal,
+            max_distance=1.0,
+            mean_edge_factor=1.5,
+            return_status=True,
+        )
+
+    assert call_counts[1] == 2  # second seed resampled once
+    assert 0 in cells and 1 not in cells
+    assert status == 1
+    assert [f["index"] for f in failed] == [1]
+    assert any("edge metric outlier" in rec.message for rec in caplog.records)
+
