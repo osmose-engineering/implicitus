@@ -428,6 +428,10 @@ def test_metric_threshold_warning_and_status(monkeypatch, caplog):
 
     plane_normal = np.array([0.0, 0.0, 1.0])
 
+    dump_file = Path(__file__).resolve().parents[3] / "logs" / "UNIFORM_CELL_DUMP.json"
+    if dump_file.exists():
+        dump_file.unlink()
+
     with caplog.at_level(logging.WARNING):
         cells, status, failed = compute_uniform_cells(
             seeds,
@@ -440,7 +444,19 @@ def test_metric_threshold_warning_and_status(monkeypatch, caplog):
         )
 
     assert status == 1
-    assert failed == [0]
+    assert [f["index"] for f in failed] == [0]
+    info = failed[0]
+    assert info["seed"] == [0.0, 0.0, 0.0]
+    assert info["neighbor_count"] >= 1
+    assert info["used_fallback"] is False
+
+    data = json.loads(dump_file.read_text())
+    dump_info = data["failed_indices"][0]
+    assert dump_info["index"] == 0
+    assert dump_info["seed"] == [0.0, 0.0, 0.0]
+    assert dump_info["neighbor_count"] >= 1
+    assert dump_info["used_fallback"] is False
+    dump_file.unlink()
     warnings = [rec for rec in caplog.records if rec.levelno >= logging.WARNING]
     assert any(
         "mean edge length" in w.message or "area" in w.message for w in warnings
