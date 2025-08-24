@@ -26,7 +26,7 @@ def compute_uniform_cells(
     std_edge_factor: Optional[float] = 2.0,
 ) -> Union[
     Dict[int, np.ndarray],
-    Tuple[Dict[int, np.ndarray], int, List[int]],
+    Tuple[Dict[int, np.ndarray], int, List[Dict[str, Any]]],
 ]:
 
     
@@ -58,8 +58,10 @@ def compute_uniform_cells(
         return_status: when ``True`` the function returns a tuple
             ``(cells, status, failed_indices)`` where ``status`` is ``0`` for
             success and ``1`` if any cell exceeded limits after resampling.
-            ``failed_indices`` lists the seed indices that were dropped. When
-            ``False`` only ``cells`` are returned.
+            ``failed_indices`` is a list of diagnostic dictionaries for each
+            dropped seed containing ``index``, ``seed`` coordinates,
+            ``neighbor_count`` and ``used_fallback``. When ``False`` only
+            ``cells`` are returned.
         resample_points: number of random points to draw when ``trace_hexagon``
             requests additional neighbors.  These help avoid the
             axis-aligned bounding-box fallback that produces cubic cells.
@@ -108,7 +110,7 @@ def compute_uniform_cells(
     status = 0
 
     fallback_indices: List[int] = []
-    failed_indices: List[int] = []
+    failed_indices: List[Dict[str, Any]] = []
 
     global_mean_edge = 0.0
     global_std_edge = 0.0
@@ -242,11 +244,13 @@ def compute_uniform_cells(
 
         metrics = hexagon_metrics(raw_hex)
         if _check_outlier(metrics, idx):
+            extra_pts = _resample()
+            neighbors = np.vstack([medial_points, extra_pts])
+            neighbor_count = neighbors.shape[0]
             try:
-                extra_pts = _resample()
                 hex_pts, used_fallback, raw_hex = trace_hexagon(
                     seed,
-                    np.vstack([medial_points, extra_pts]),
+                    neighbors,
                     plane_normal,
                     max_distance,
                     report_method=True,
@@ -257,7 +261,7 @@ def compute_uniform_cells(
                 try:
                     hex_pts, used_fallback, raw_hex = trace_hexagon(
                         seed,
-                        np.vstack([medial_points, _resample()]),
+                        neighbors,
                         plane_normal,
                         max_distance,
                         report_method=True,
@@ -266,7 +270,7 @@ def compute_uniform_cells(
                 except TypeError:  # pragma: no cover - legacy signature
                     hex_pts = trace_hexagon(
                         seed,
-                        np.vstack([medial_points, _resample()]),
+                        neighbors,
                         plane_normal,
                         max_distance,
                     )
@@ -274,17 +278,26 @@ def compute_uniform_cells(
                     raw_hex = hex_pts.copy()
             metrics = hexagon_metrics(raw_hex)
             if _check_outlier(metrics, idx, level=logging.ERROR):
-                failed_indices.append(idx)
+                failed_indices.append(
+                    {
+                        "index": idx,
+                        "seed": seed.tolist(),
+                        "neighbor_count": int(neighbor_count),
+                        "used_fallback": bool(used_fallback),
+                    }
+                )
                 status = 1
                 logger.error("Skipping cell %d due to edge metric outlier", idx)
                 continue
 
         if _check_limits(metrics):
+            extra_pts = _resample()
+            neighbors = np.vstack([medial_points, extra_pts])
+            neighbor_count = neighbors.shape[0]
             try:
-                extra_pts = _resample()
                 hex_pts, used_fallback, raw_hex = trace_hexagon(
                     seed,
-                    np.vstack([medial_points, extra_pts]),
+                    neighbors,
                     plane_normal,
                     max_distance,
                     report_method=True,
@@ -295,7 +308,7 @@ def compute_uniform_cells(
                 try:
                     hex_pts, used_fallback, raw_hex = trace_hexagon(
                         seed,
-                        np.vstack([medial_points, _resample()]),
+                        neighbors,
                         plane_normal,
                         max_distance,
                         report_method=True,
@@ -304,7 +317,7 @@ def compute_uniform_cells(
                 except TypeError:  # pragma: no cover - legacy signature
                     hex_pts = trace_hexagon(
                         seed,
-                        np.vstack([medial_points, _resample()]),
+                        neighbors,
                         plane_normal,
                         max_distance,
                     )
@@ -312,12 +325,26 @@ def compute_uniform_cells(
                     raw_hex = hex_pts.copy()
             metrics = hexagon_metrics(raw_hex)
             if _check_outlier(metrics, idx, level=logging.ERROR):
-                failed_indices.append(idx)
+                failed_indices.append(
+                    {
+                        "index": idx,
+                        "seed": seed.tolist(),
+                        "neighbor_count": int(neighbor_count),
+                        "used_fallback": bool(used_fallback),
+                    }
+                )
                 status = 1
                 logger.error("Skipping cell %d due to edge metric outlier", idx)
                 continue
             if _check_limits(metrics, level=logging.ERROR):
-                failed_indices.append(idx)
+                failed_indices.append(
+                    {
+                        "index": idx,
+                        "seed": seed.tolist(),
+                        "neighbor_count": int(neighbor_count),
+                        "used_fallback": bool(used_fallback),
+                    }
+                )
                 status = 1
                 logger.error("Skipping cell %d due to metric limits", idx)
                 continue
@@ -325,11 +352,13 @@ def compute_uniform_cells(
         if used_fallback:
             fallback_indices.append(idx)
             logger.warning("Seed %d used trace_hexagon fallback", idx)
+            extra_pts = _resample()
+            neighbors = np.vstack([medial_points, extra_pts])
+            neighbor_count = neighbors.shape[0]
             try:
-                extra_pts = _resample()
                 hex_pts, used_fallback, raw_hex = trace_hexagon(
                     seed,
-                    np.vstack([medial_points, extra_pts]),
+                    neighbors,
                     plane_normal,
                     max_distance,
                     report_method=True,
@@ -344,7 +373,7 @@ def compute_uniform_cells(
             except TypeError:  # pragma: no cover - legacy signature
                 hex_pts = trace_hexagon(
                     seed,
-                    np.vstack([medial_points, _resample()]),
+                    neighbors,
                     plane_normal,
                     max_distance,
                 )
@@ -352,12 +381,26 @@ def compute_uniform_cells(
                 raw_hex = hex_pts.copy()
                 metrics = hexagon_metrics(raw_hex)
             if _check_outlier(metrics, idx, level=logging.ERROR):
-                failed_indices.append(idx)
+                failed_indices.append(
+                    {
+                        "index": idx,
+                        "seed": seed.tolist(),
+                        "neighbor_count": int(neighbor_count),
+                        "used_fallback": bool(used_fallback),
+                    }
+                )
                 status = 1
                 logger.error("Skipping cell %d due to edge metric outlier", idx)
                 continue
             if _check_limits(metrics, level=logging.ERROR):
-                failed_indices.append(idx)
+                failed_indices.append(
+                    {
+                        "index": idx,
+                        "seed": seed.tolist(),
+                        "neighbor_count": int(neighbor_count),
+                        "used_fallback": bool(used_fallback),
+                    }
+                )
                 status = 1
                 logger.error("Skipping cell %d due to metric limits", idx)
                 continue
