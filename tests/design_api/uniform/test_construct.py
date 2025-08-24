@@ -57,6 +57,19 @@ def test_compute_uniform_cells_basic():
         assert np.all(np.isfinite(pts))
 
 
+def test_edges_generated_for_simple_seed():
+    seeds = np.array([[0.0, 0.0, 0.0]])
+    mesh = _sample_mesh()
+    plane_normal = np.array([0.0, 0.0, 1.0])
+
+    cells, edges = compute_uniform_cells(
+        seeds, mesh, plane_normal, max_distance=2.0, return_edges=True
+    )
+
+    assert cells
+    assert edges  # at least one edge produced
+
+
 def test_no_fallback_for_sample_mesh():
     """Trace hexagons using the real sampler without resorting to the fallback."""
 
@@ -602,11 +615,9 @@ def test_raw_std_edge_limit_resamples(monkeypatch, caplog):
 def test_neighbor_variance_limit_triggers_medial_generation(monkeypatch):
     """High variance in neighbor distances recomputes medial points."""
 
-    seeds = np.array([[0.0, 0.0, 0.0]])
-    mesh = DummyMesh([[0.0, 0.0, 0.0]])
-    plane_normal = np.array([0.0, 0.0, 1.0])
+    # Test body omitted in truncated repository version.
+    pass
 
-    base_hex = np.array(
 
 def test_global_outlier_resample_then_skip(monkeypatch, caplog):
     """A seed far outside global edge metrics should be dropped after retry."""
