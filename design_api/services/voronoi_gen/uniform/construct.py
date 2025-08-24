@@ -60,8 +60,8 @@ def compute_uniform_cells(
             success and ``1`` if any cell exceeded limits after resampling.
             ``failed_indices`` is a list of diagnostic dictionaries for each
             dropped seed containing ``index``, ``seed`` coordinates,
-            ``neighbor_count`` and ``used_fallback``. When ``False`` only
-            ``cells`` are returned.
+            ``neighbor_count``, ``used_fallback``, ``neighbor_distances`` and
+            ``neighbor_angles``. When ``False`` only ``cells`` are returned.
         resample_points: number of random points to draw when ``trace_hexagon``
             requests additional neighbors.  These help avoid the
             axis-aligned bounding-box fallback that produces cubic cells.
@@ -93,6 +93,14 @@ def compute_uniform_cells(
     bbox_max = np.max(verts, axis=0)
     rng = np.random.default_rng(0)
 
+    # Precompute a basis for projecting neighbor vectors onto the slicing plane.
+    arbitrary = np.array([1.0, 0.0, 0.0])
+    if np.allclose(np.cross(arbitrary, plane_normal), 0):
+        arbitrary = np.array([0.0, 1.0, 0.0])
+    proj_u = np.cross(plane_normal, arbitrary)
+    proj_u /= np.linalg.norm(proj_u)
+    proj_v = np.cross(plane_normal, proj_u)
+    proj_v /= np.linalg.norm(proj_v)
 
     dump_data: Dict[str, Any] = {
         "seeds": seeds.tolist(),
@@ -150,6 +158,16 @@ def compute_uniform_cells(
         return exceeded_local
 
     for idx, seed in enumerate(seeds):
+        def _neighbor_diagnostics(neighbors: np.ndarray) -> Dict[str, Any]:
+            vecs = neighbors - seed
+            distances = np.linalg.norm(vecs, axis=1).tolist()
+            proj = np.column_stack((vecs.dot(proj_u), vecs.dot(proj_v)))
+            angles = np.mod(np.arctan2(proj[:, 1], proj[:, 0]), 2 * np.pi).tolist()
+            return {
+                "neighbor_distances": distances,
+                "neighbor_angles": angles,
+            }
+
         def _resample() -> np.ndarray:
             """Return extra candidate points within the mesh bounds.
 
@@ -284,6 +302,7 @@ def compute_uniform_cells(
                         "seed": seed.tolist(),
                         "neighbor_count": int(neighbor_count),
                         "used_fallback": bool(used_fallback),
+                        **_neighbor_diagnostics(neighbors),
                     }
                 )
                 status = 1
@@ -331,6 +350,7 @@ def compute_uniform_cells(
                         "seed": seed.tolist(),
                         "neighbor_count": int(neighbor_count),
                         "used_fallback": bool(used_fallback),
+                        **_neighbor_diagnostics(neighbors),
                     }
                 )
                 status = 1
@@ -343,6 +363,7 @@ def compute_uniform_cells(
                         "seed": seed.tolist(),
                         "neighbor_count": int(neighbor_count),
                         "used_fallback": bool(used_fallback),
+                        **_neighbor_diagnostics(neighbors),
                     }
                 )
                 status = 1
@@ -387,6 +408,7 @@ def compute_uniform_cells(
                         "seed": seed.tolist(),
                         "neighbor_count": int(neighbor_count),
                         "used_fallback": bool(used_fallback),
+                        **_neighbor_diagnostics(neighbors),
                     }
                 )
                 status = 1
@@ -399,6 +421,7 @@ def compute_uniform_cells(
                         "seed": seed.tolist(),
                         "neighbor_count": int(neighbor_count),
                         "used_fallback": bool(used_fallback),
+                        **_neighbor_diagnostics(neighbors),
                     }
                 )
                 status = 1
