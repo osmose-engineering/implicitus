@@ -233,6 +233,12 @@ def compute_uniform_cells(
                 )
                 exceeded_local = True
             return exceeded_local
+
+        def _log_fallback(flag: bool) -> None:
+            if flag:
+                logger.warning(
+                    "Seed %d at %s used trace_hexagon fallback", idx, seed.tolist()
+                )
         try:
             hex_pts, used_fallback, raw_hex = trace_hexagon(
 
@@ -275,6 +281,8 @@ def compute_uniform_cells(
                     used_fallback = False
                     raw_hex = hex_pts.copy()
 
+        _log_fallback(used_fallback)
+
 
         metrics = hexagon_metrics(raw_hex)
         if _check_outlier(metrics, idx):
@@ -310,6 +318,7 @@ def compute_uniform_cells(
                     )
                     used_fallback = False
                     raw_hex = hex_pts.copy()
+            _log_fallback(used_fallback)
             metrics = hexagon_metrics(raw_hex)
             if _check_outlier(metrics, idx, level=logging.ERROR):
                 failed_indices.append(
@@ -358,6 +367,7 @@ def compute_uniform_cells(
                     )
                     used_fallback = False
                     raw_hex = hex_pts.copy()
+            _log_fallback(used_fallback)
             metrics = hexagon_metrics(raw_hex)
             if _check_outlier(metrics, idx, level=logging.ERROR):
                 failed_indices.append(
@@ -388,7 +398,6 @@ def compute_uniform_cells(
 
         if used_fallback:
             fallback_indices.append(idx)
-            logger.warning("Seed %d at %s used trace_hexagon fallback", idx, seed.tolist())
             extra_pts = _resample()
             neighbors = np.vstack([medial_points, extra_pts])
             neighbor_count = neighbors.shape[0]
@@ -402,6 +411,7 @@ def compute_uniform_cells(
                     neighbor_resampler=_resample,
                     return_raw=True,
                 )
+                _log_fallback(used_fallback)
                 metrics = hexagon_metrics(raw_hex)
                 if used_fallback:
                     logger.error(
