@@ -432,7 +432,16 @@ def build_hex_lattice(
         if mode == "uniform":
             from .uniform.construct import compute_uniform_cells
 
-            cells = compute_uniform_cells(np.asarray(pts), **cell_kwargs)
+            cells, edge_list = compute_uniform_cells(
+                np.asarray(pts), return_edges=True, **cell_kwargs
+            )
+            # Reconstruct the reconciled vertex list in the same order used
+            # when computing ``edge_list`` so edge indices remain valid.
+            verts = [
+                tuple(map(float, xyz))
+                for idx in sorted(cells.keys())
+                for xyz in cells[idx]
+            ]
         else:
             from .organic.construct import construct_voronoi_cells
 
