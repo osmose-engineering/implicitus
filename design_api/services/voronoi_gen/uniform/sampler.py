@@ -294,7 +294,10 @@ def trace_hexagon(
         hex_pts = hex_pts_arr
         hex_success = True
     else:
-        logging.warning("trace_hexagon: using bounding-box fallback; consider resampling or expanding search radius")
+        logging.warning(
+            "trace_hexagon: using bounding-box fallback at seed %s",
+            seed_pt.tolist(),
+        )
         angles = np.linspace(0, 2 * np.pi, 6, endpoint=False)
         for theta in angles:
             dir_vec = np.cos(theta) * u + np.sin(theta) * v

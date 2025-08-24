@@ -388,7 +388,7 @@ def compute_uniform_cells(
 
         if used_fallback:
             fallback_indices.append(idx)
-            logger.warning("Seed %d used trace_hexagon fallback", idx)
+            logger.warning("Seed %d at %s used trace_hexagon fallback", idx, seed.tolist())
             extra_pts = _resample()
             neighbors = np.vstack([medial_points, extra_pts])
             neighbor_count = neighbors.shape[0]
@@ -405,7 +405,7 @@ def compute_uniform_cells(
                 metrics = hexagon_metrics(raw_hex)
                 if used_fallback:
                     logger.error(
-                        "Fallback used after resampling for seed %d", idx
+                        "Fallback used after resampling for seed %d at %s", idx, seed.tolist()
                     )
             except TypeError:  # pragma: no cover - legacy signature
                 hex_pts = trace_hexagon(
