@@ -79,6 +79,30 @@ def test_no_fallback_for_sample_mesh():
     dump_file.unlink()
 
 
+def test_logs_warning_when_fallback_used(monkeypatch, caplog):
+    seeds = np.array([[0.0, 0.0, 0.0]])
+    mesh = DummyMesh([[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]])
+
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.compute_medial_axis",
+        lambda _mesh: np.zeros((1, 3)),
+    )
+
+    plane_normal = np.array([0.0, 0.0, 1.0])
+    with caplog.at_level(logging.WARNING):
+        compute_uniform_cells(
+            seeds,
+            mesh,
+            plane_normal,
+            max_distance=1.0,
+            resample_points=0,
+        )
+
+    assert any(
+        "used trace_hexagon fallback" in rec.message for rec in caplog.records
+    )
+
+
 def test_cell_planes_align_with_normal():
     """Seeds offset from the slicing plane should still yield coplanar cells."""
 
