@@ -48,6 +48,24 @@ def dump_uniform_cell_map(dump_data: Dict[str, Any]) -> None:
     except Exception as exc:  # pragma: no cover - best effort
         logging.warning("Failed to write uniform cell dump to %s: %s", dump_path, exc)
 
+
+def _build_edge_list(cell_slices: Dict[int, slice]) -> List[Tuple[int, int]]:
+    """Construct a list of unique undirected edges from cell vertex slices."""
+    edges: List[Tuple[int, int]] = []
+    for sl in cell_slices.values():
+        inds = list(range(sl.start, sl.stop))
+        for i in range(len(inds)):
+            edges.append((inds[i], inds[(i + 1) % len(inds)]))
+
+    unique_edges: List[Tuple[int, int]] = []
+    seen: set = set()
+    for a, b in edges:
+        key = (min(a, b), max(a, b))
+        if key not in seen:
+            seen.add(key)
+            unique_edges.append((a, b))
+    return unique_edges
+
 def compute_uniform_cells(
     seeds: np.ndarray,
     imds_mesh: Any,
@@ -172,8 +190,7 @@ def compute_uniform_cells(
 
 
     cells: Dict[int, np.ndarray] = {}
-    # Edges will be populated after vertex reconciliation
-    edges: List[Tuple[int, int]] = []
+    # Edges will be constructed after vertex reconciliation
 
     status = 0
 
@@ -652,27 +669,20 @@ def compute_uniform_cells(
             logging.info("Shared vertex adjustment: no coincident vertices found")
 
     # Build edge list from reconciled vertex indices
-    for sl in cell_slices.values():
-        inds = list(range(sl.start, sl.stop))
-        for i in range(len(inds)):
-            edges.append((inds[i], inds[(i + 1) % len(inds)]))
-
-    unique_edges: List[Tuple[int, int]] = []
-    seen: set = set()
-    for a, b in edges:
-        key = (min(a, b), max(a, b))
-        if key not in seen:
-            seen.add(key)
-            unique_edges.append((a, b))
-    edges = unique_edges
+    edges = _build_edge_list(cell_slices)
 
     dump_data["edges"] = edges
 
     if not edges:
         if cells:
-            logger.error(
+            logger.warning(
                 "Edge serialization produced no edges for %d cells", len(cells)
             )
+            failed_indices.append({
+                "index": None,
+                "reason": "edge_serialization_failed",
+                "cell_count": len(cells),
+            })
         else:
             logger.info("No edges generated; all cells were skipped")
 

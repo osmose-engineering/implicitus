@@ -6,6 +6,7 @@ import logging
 import json
 
 from pathlib import Path
+from typing import Dict, Any
 
 
 from design_api.services.voronoi_gen.uniform.construct import compute_uniform_cells
@@ -68,6 +69,48 @@ def test_edges_generated_for_simple_seed():
 
     assert cells
     assert edges  # at least one edge produced
+
+
+def test_warning_when_edge_serialization_fails(monkeypatch, caplog):
+    seeds = np.array([[0.0, 0.0, 0.0]])
+    mesh = _sample_mesh()
+    plane_normal = np.array([0.0, 0.0, 1.0])
+
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct._build_edge_list",
+        lambda _slices: [],
+    )
+
+    captured: Dict[str, Any] = {}
+
+    def fake_dump(data: Dict[str, Any]) -> None:
+        captured["data"] = data
+
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.dump_uniform_cell_map",
+        fake_dump,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        cells, edges, status, failed_indices = compute_uniform_cells(
+            seeds,
+            mesh,
+            plane_normal,
+            max_distance=2.0,
+            return_edges=True,
+            return_status=True,
+        )
+
+    assert cells  # cells were produced
+    assert edges == []
+    assert any(
+        "Edge serialization produced no edges" in rec.message for rec in caplog.records
+    )
+    assert failed_indices and failed_indices[-1]["reason"] == "edge_serialization_failed"
+    assert (
+        "data" in captured
+        and captured["data"]["failed_indices"][-1]["reason"] == "edge_serialization_failed"
+    )
 
 
 def test_uniform_dump_file_created():

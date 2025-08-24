@@ -73,9 +73,11 @@ def test_review_returns_edges(monkeypatch):
     assert resp.status_code == 200
     data = resp.json()
     edges = data["spec"][0]["modifiers"]["infill"]["edges"]
+
     points = data["spec"][0]["modifiers"]["infill"]["seed_points"]
     assert isinstance(edges, list)
     assert len(edges) > 0
     # ensure all edge indices reference valid points
     max_idx = max(max(e) for e in edges)
     assert max_idx < len(points)
+
