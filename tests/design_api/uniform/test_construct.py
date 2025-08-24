@@ -463,3 +463,82 @@ def test_metric_threshold_warning_and_status(monkeypatch, caplog):
     )
     assert cells == {}
 
+
+def test_raw_std_edge_limit_resamples(monkeypatch, caplog):
+    """A high-variance cell should trigger resampling before acceptance."""
+
+    seeds = np.array([[0.0, 0.0, 0.0]])
+    mesh = DummyMesh([[0.0, 0.0, 0.0]])
+    plane_normal = np.array([0.0, 0.0, 1.0])
+
+    def fake_medial_axis(_mesh):  # pragma: no cover - deterministic stub
+        return np.zeros((1, 3))
+
+    high_var_hex = np.array(
+        [
+            [0.0, 0.0, 0.0],
+            [2.0, 0.0, 0.0],
+            [2.0, 0.1, 0.0],
+            [-2.0, 0.0, 0.0],
+            [-2.0, -0.1, 0.0],
+            [0.0, -0.1, 0.0],
+        ]
+    )
+    regular_hex = np.array(
+        [
+            [1.0, 0.0, 0.0],
+            [0.5, np.sqrt(3) / 2, 0.0],
+            [-0.5, np.sqrt(3) / 2, 0.0],
+            [-1.0, 0.0, 0.0],
+            [-0.5, -np.sqrt(3) / 2, 0.0],
+            [0.5, -np.sqrt(3) / 2, 0.0],
+        ]
+    )
+
+    call_count = {"count": 0}
+
+    def fake_trace_hexagon(
+        seed,
+        medial,
+        normal,
+        max_distance,
+        report_method=False,
+        neighbor_resampler=None,
+        return_raw=False,
+    ):  # pragma: no cover - deterministic
+        call_count["count"] += 1
+        pts = high_var_hex if call_count["count"] == 1 else regular_hex
+        if report_method and return_raw:
+            return pts, False, pts.copy()
+        if report_method:
+            return pts, False
+        if return_raw:
+            return pts, pts.copy()
+        return pts
+
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.compute_medial_axis",
+        fake_medial_axis,
+    )
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.uniform.construct.trace_hexagon",
+        fake_trace_hexagon,
+    )
+
+    with caplog.at_level(logging.WARNING):
+        cells = compute_uniform_cells(
+            seeds,
+            mesh,
+            plane_normal,
+            max_distance=1.0,
+            raw_std_edge_limit=0.3,
+        )
+
+    assert call_count["count"] == 2
+    assert 0 in cells
+    metrics = hexagon_metrics(cells[0])
+    assert metrics["std_edge_length"] < 0.3
+
+    warnings = [rec for rec in caplog.records if rec.levelno >= logging.WARNING]
+    assert any("std edge length" in w.message for w in warnings)
+

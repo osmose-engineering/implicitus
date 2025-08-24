@@ -19,6 +19,7 @@ def compute_uniform_cells(
 
     mean_edge_limit: Optional[float] = None,
     area_limit: Optional[float] = None,
+    raw_std_edge_limit: Optional[float] = None,
     return_status: bool = False,
     resample_points: int = 60,
     resample_min_distance: float = 0.0,
@@ -38,8 +39,10 @@ def compute_uniform_cells(
     thresholds derived from the running global averages. Cells with mean or
     standard deviation of edge lengths exceeding ``mean_edge_factor`` or
     ``std_edge_factor`` times their respective global means are resampled once
-    via ``_resample``.  Persistent outliers are logged and omitted from the
-    results.
+    via ``_resample``. Persistent outliers are logged and omitted from the
+    results. Explicit limits on the mean, standard deviation, or area of a cell
+    (``mean_edge_limit``, ``raw_std_edge_limit``, ``area_limit``) trigger the
+    same resampling before a seed is marked as failed.
 
     Args:
         seeds: (N,3) array of seed point locations.
@@ -55,6 +58,10 @@ def compute_uniform_cells(
         area_limit: optional threshold for the area of a cell. Cells exceeding
             this limit are resampled once. If the retry still fails the cell is
             omitted and the overall status set to ``1``.
+        raw_std_edge_limit: optional threshold for the raw standard deviation of
+            edge lengths in a cell. Cells exceeding this limit are resampled
+            once. If the retry still fails the cell is omitted and the overall
+            status set to ``1``.
         return_status: when ``True`` the function returns a tuple
             ``(cells, status, failed_indices)`` where ``status`` is ``0`` for
             success and ``1`` if any cell exceeded limits after resampling.
@@ -187,6 +194,15 @@ def compute_uniform_cells(
                     idx,
                     metrics["mean_edge_length"],
                     mean_edge_limit,
+                )
+                exceeded_local = True
+            if raw_std_edge_limit is not None and metrics["std_edge_length"] > raw_std_edge_limit:
+                logger.log(
+                    level,
+                    "Cell %d std edge length %.3f exceeds limit %.3f",
+                    idx,
+                    metrics["std_edge_length"],
+                    raw_std_edge_limit,
                 )
                 exceeded_local = True
             if area_limit is not None and metrics["area"] > area_limit:
