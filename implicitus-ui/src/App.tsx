@@ -68,8 +68,9 @@ function App() {
   const [isDirty, setIsDirty] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [spec, setSpec] = useState<any[]>([]);
-  // Derive seed points for the Voronoi viewer from the spec (assumes first node has infill.seed_points)
+  // Derive points for the Voronoi viewer, preferring cell_vertices when available
   const seedPoints: [number, number, number][] =
+    spec[0]?.modifiers?.infill?.cell_vertices ??
     spec[0]?.modifiers?.infill?.seed_points ?? [];
   const [edges, setEdges] = useState<number[][]>([]);
   const [infillPoints, setInfillPoints] = useState<[number, number, number][]>([]);
@@ -205,7 +206,10 @@ function App() {
         setSpec(data.spec);
 
         setEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
-        setInfillPoints(data.spec[0]?.modifiers?.infill?.seed_points ?? []);
+        setInfillPoints(
+          data.spec[0]?.modifiers?.infill?.cell_vertices ??
+          data.spec[0]?.modifiers?.infill?.seed_points ?? []
+        );
         setInfillEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
 
         setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
@@ -331,8 +335,11 @@ function App() {
       if (data.spec && Array.isArray(data.spec)) {
         setSpec(data.spec);
         setEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
-        // also refresh infill seed points and edges so the viewer reflects updates
-        setInfillPoints(data.spec[0]?.modifiers?.infill?.seed_points ?? []);
+        // also refresh infill points and edges so the viewer reflects updates
+        setInfillPoints(
+          data.spec[0]?.modifiers?.infill?.cell_vertices ??
+          data.spec[0]?.modifiers?.infill?.seed_points ?? []
+        );
         setInfillEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
         setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
         setIsDirty(false);

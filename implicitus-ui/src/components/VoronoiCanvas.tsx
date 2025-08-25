@@ -111,17 +111,24 @@ export function computeFilteredEdges(
   thresholdFactor: number = 1.5
 ) {
   if (!Array.isArray(edges) || edges.length === 0) return [];
-  const lengths = edges.map(([i, j]) => {
-    const [xi, yi, zi] = seedPoints[i];
-    const [xj, yj, zj] = seedPoints[j];
+  const valid: [number, number][] = [];
+  const lengths: number[] = [];
+  for (const [i, j] of edges) {
+    const pi = seedPoints[i];
+    const pj = seedPoints[j];
+    if (!Array.isArray(pi) || !Array.isArray(pj)) continue;
+    const [xi, yi, zi] = pi;
+    const [xj, yj, zj] = pj;
     const dx = xi - xj,
       dy = yi - yj,
       dz = zi - zj;
-    return Math.sqrt(dx * dx + dy * dy + dz * dz);
-  });
+    lengths.push(Math.sqrt(dx * dx + dy * dy + dz * dz));
+    valid.push([i, j]);
+  }
+  if (lengths.length === 0) return [];
   const avg = lengths.reduce((sum, d) => sum + d, 0) / lengths.length;
   const threshold = avg * thresholdFactor;
-  return edges.filter((_, idx) => lengths[idx] <= threshold);
+  return valid.filter((_, idx) => lengths[idx] <= threshold);
 }
 
 interface VoronoiCanvasProps {
