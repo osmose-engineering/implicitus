@@ -6,7 +6,7 @@ def test_build_hex_lattice_returns_cells():
     spacing = 0.5
     primitive = {"sphere": {"radius": 1.0}}
 
-    pts, edges, cells = build_hex_lattice(
+    seed_pts, cell_vertices, edges, cells = build_hex_lattice(
         bbox_min,
         bbox_max,
         spacing,
@@ -18,7 +18,8 @@ def test_build_hex_lattice_returns_cells():
     )
 
     # Expect some Voronoi vertices and connecting edges
-    assert pts and edges
+    assert cell_vertices and edges
+    assert seed_pts
     # Returned cells should contain SDF grids describing each seed cell
     assert cells and all("sdf" in cell for cell in cells)
 

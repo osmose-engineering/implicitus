@@ -11,7 +11,7 @@ def test_uniform_lattice_autogenerates_mesh():
     primitive = {"sphere": {"radius": 1.0}}
 
     imds_mesh = primitive_to_imds_mesh(primitive)
-    pts, edges, cells = build_hex_lattice(
+    seed_pts, cell_vertices, edges, cells = build_hex_lattice(
         bbox_min,
         bbox_max,
         spacing,
@@ -23,7 +23,7 @@ def test_uniform_lattice_autogenerates_mesh():
         imds_mesh=imds_mesh,
     )
 
-    assert pts and cells
+    assert seed_pts and cell_vertices and cells
     first = next(iter(cells.values()))
     assert isinstance(first, np.ndarray)
     assert first.shape == (6, 3)
