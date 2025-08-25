@@ -319,7 +319,12 @@ def build_hex_lattice(
     **cell_kwargs: Any,
 ) -> Union[
     Tuple[List[Tuple[float, float, float]], List[Tuple[int, int]]],
-    Tuple[List[Tuple[float, float, float]], List[Tuple[int, int]], Any],
+    Tuple[
+        List[Tuple[float, float, float]],
+        List[Tuple[float, float, float]],
+        List[Tuple[int, int]],
+        Any,
+    ],
 ]:
     """
     Generate a 3D hexagonally-packed lattice of points within the given AABB,
@@ -334,7 +339,10 @@ def build_hex_lattice(
     :func:`organic.construct_voronoi_cells`, or ``"uniform"`` to invoke
     :func:`uniform.compute_uniform_cells`. Additional keyword arguments are
     forwarded to the selected function. When ``mode`` is ``"uniform"``, the
-    returned cells are a mapping from seed indices to vertex arrays.
+    returned cells are a mapping from seed indices to vertex arrays.  The
+    return signature is ``(pts, cell_vertices, edges, cells)`` where ``pts`` are
+    the seed coordinates and ``cell_vertices`` is the vertex list referenced by
+    ``edges``.
     """
     # Unpack bounds
     x0, y0, z0 = bbox_min
@@ -438,7 +446,7 @@ def build_hex_lattice(
 
             # Reconstruct the reconciled vertex list in the same order used
             # when computing ``edge_list`` so edge indices remain valid.
-            verts = [
+            cell_vertices = [
                 tuple(map(float, xyz))
                 for idx in sorted(cells.keys())
                 for xyz in cells[idx]
@@ -450,7 +458,8 @@ def build_hex_lattice(
             cells = construct_voronoi_cells(
                 pts, bbox_min, bbox_max, **cell_kwargs
             )
-        return verts, edge_list, cells
+            cell_vertices = verts
+        return pts, cell_vertices, edge_list, cells
 
     # Ensure edges are bidirectional
     edge_list = edge_list + [(j, i) for i, j in edge_list]

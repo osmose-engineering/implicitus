@@ -49,13 +49,14 @@ def log_turn(session_id: str, turn_type: str, raw: str, spec: list, summary: Opt
         "raw": raw,
         "spec": spec,
     }
-    # remove seed_points from infill modifiers to keep logs small
+    # remove large fields from infill modifiers to keep logs small
     scrubbed_spec = []
     for node in entry["spec"]:
         node_copy = copy.deepcopy(node)
         mods = node_copy.get("modifiers")
         if mods and isinstance(mods.get("infill"), dict):
             mods["infill"].pop("seed_points", None)
+            mods["infill"].pop("cell_vertices", None)
         scrubbed_spec.append(node_copy)
     entry["spec"] = scrubbed_spec
     if summary is not None:
@@ -177,7 +178,7 @@ async def review(req: dict, sid: Optional[str] = None):
                         max_distance = inf.get("max_distance") or req.get("max_distance")
                         plane_normal = np.asarray(plane_normal)
 
-                        verts, edge_list, cells = build_hex_lattice(
+                        pts, cell_vertices, edge_list, cells = build_hex_lattice(
                             bbox_min,
                             bbox_max,
                             spacing,
@@ -188,7 +189,8 @@ async def review(req: dict, sid: Optional[str] = None):
                             plane_normal=plane_normal,
                             max_distance=max_distance,
                         )
-                        inf["seed_points"] = verts
+                        inf["seed_points"] = pts
+                        inf["cell_vertices"] = cell_vertices
                         inf["edges"] = [list(e) for e in edge_list]
                         inf["cells"] = cells
                     else:
@@ -325,7 +327,7 @@ async def update(req: UpdateRequest):
                     max_distance = inf.get("max_distance") or req.max_distance
                     plane_normal = np.asarray(plane_normal)
 
-                    verts, edge_list, cells = build_hex_lattice(
+                    pts, cell_vertices, edge_list, cells = build_hex_lattice(
                         bbox_min,
                         bbox_max,
                         spacing,
@@ -336,7 +338,8 @@ async def update(req: UpdateRequest):
                         plane_normal=plane_normal,
                         max_distance=max_distance,
                     )
-                    inf["seed_points"] = verts
+                    inf["seed_points"] = pts
+                    inf["cell_vertices"] = cell_vertices
                     inf["edges"] = [list(e) for e in edge_list]
                     inf["cells"] = cells
                 else:
