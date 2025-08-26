@@ -1,8 +1,8 @@
 import numpy as np
-from design_api.services.voronoi_gen.voronoi_gen import (
-    build_hex_lattice,
-    primitive_to_imds_mesh,
-)
+
+from design_api.services.infill_service import generate_hex_lattice
+from design_api.services.voronoi_gen.voronoi_gen import primitive_to_imds_mesh
+
 
 def test_uniform_lattice_autogenerates_mesh():
     bbox_min = (-1.0, -1.0, -1.0)
@@ -10,20 +10,22 @@ def test_uniform_lattice_autogenerates_mesh():
     spacing = 1.0
     primitive = {"sphere": {"radius": 1.0}}
 
-    imds_mesh = primitive_to_imds_mesh(primitive)
-    seed_pts, cell_vertices, edges, cells = build_hex_lattice(
-        bbox_min,
-        bbox_max,
-        spacing,
-        primitive,
-        return_cells=True,
-        mode="uniform",
-        plane_normal=np.array([0.0, 0.0, 1.0]),
-        max_distance=2.0,
-        imds_mesh=imds_mesh,
-    )
+    spec = {
+        "pattern": "voronoi",
+        "mode": "uniform",
+        "spacing": spacing,
+        "bbox_min": bbox_min,
+        "bbox_max": bbox_max,
+        "primitive": primitive,
+        "plane_normal": [0.0, 0.0, 1.0],
+        "max_distance": 2.0,
+        "imds_mesh": primitive_to_imds_mesh(primitive),
+    }
 
-    assert seed_pts and cell_vertices and cells
+    result = generate_hex_lattice(spec)
+    seed_pts = result["seed_points"]
+    cells = result["cells"]
+    assert seed_pts and cells
     first = next(iter(cells.values()))
     assert isinstance(first, np.ndarray)
     assert first.shape == (6, 3)
