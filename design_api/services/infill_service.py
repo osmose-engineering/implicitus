@@ -5,6 +5,7 @@ from types import SimpleNamespace
 import numpy as np
 import inspect
 
+
 from .voronoi_gen.voronoi_gen import (
     compute_voronoi_adjacency,
     build_hex_lattice,
@@ -62,12 +63,14 @@ def generate_hex_lattice(spec: Dict[str, Any]) -> Dict[str, Any]:
     spacing = spec.get("spacing") or spec.get("min_dist") or 2.0
     primitive = spec.get("primitive", {})
     mode = spec.get("mode", "uniform")
+
     if "mode" not in spec:
         uniform_flag = spec.get("uniform")
         if isinstance(uniform_flag, str):
             uniform_flag = uniform_flag.lower() == "true"
         if uniform_flag is not None:
             mode = "uniform" if uniform_flag else "organic"
+
     use_voronoi_edges = spec.get("use_voronoi_edges", False)
 
     reserved_keys = {
@@ -107,6 +110,7 @@ def generate_hex_lattice(spec: Dict[str, Any]) -> Dict[str, Any]:
             allowed = set(inspect.signature(construct_voronoi_cells).parameters)
             allowed -= {"points", "bbox_min", "bbox_max"}
         extra_kwargs = {k: v for k, v in extra_kwargs.items() if k in allowed}
+
 
     imds_mesh = spec.get("imds_mesh")
     if isinstance(imds_mesh, dict):

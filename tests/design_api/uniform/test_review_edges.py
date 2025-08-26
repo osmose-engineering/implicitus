@@ -13,6 +13,7 @@ def test_generate_hex_lattice_edges():
         "_is_voronoi": True,
         "uniform": True,
         "wall_thickness": 0.1,
+
     }
     result = generate_hex_lattice(spec)
     edges = result["edges"]
@@ -22,3 +23,4 @@ def test_generate_hex_lattice_edges():
     max_idx = max(max(e) for e in edges)
     assert max_idx < len(points)
     assert "wall_thickness" not in result
+
