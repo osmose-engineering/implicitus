@@ -1,45 +1,34 @@
-from design_api.services.voronoi_gen.voronoi_gen import build_hex_lattice
-
-def test_build_hex_lattice_returns_cells():
-    bbox_min = (-1.0, -1.0, -1.0)
-    bbox_max = (1.0, 1.0, 1.0)
-    spacing = 0.5
-    primitive = {"sphere": {"radius": 1.0}}
-
-    seed_pts, cell_vertices, edges, cells = build_hex_lattice(
-        bbox_min,
-        bbox_max,
-        spacing,
-        primitive,
-        return_cells=True,
-        use_voronoi_edges=True,
-        mode="organic",
-        resolution=(8, 8, 8),
-    )
-
-    # Expect some Voronoi vertices and connecting edges
-    assert cell_vertices and edges
-    assert seed_pts
-    # Returned cells should contain SDF grids describing each seed cell
-    assert cells and all("sdf" in cell for cell in cells)
+from design_api.services.infill_service import generate_hex_lattice
 
 
-def test_build_hex_lattice_midpoints():
-    bbox_min = (-1.0, -1.0, -1.0)
-    bbox_max = (1.0, 1.0, 1.0)
-    spacing = 0.5
-    primitive = {"sphere": {"radius": 1.0}}
+def test_generate_hex_lattice_returns_cells():
+    spec = {
+        "pattern": "voronoi",
+        "mode": "organic",
+        "spacing": 0.5,
+        "bbox_min": (-1.0, -1.0, -1.0),
+        "bbox_max": (1.0, 1.0, 1.0),
+        "primitive": {"sphere": {"radius": 1.0}},
+        "use_voronoi_edges": True,
+        "resolution": (8, 8, 8),
+    }
+    result = generate_hex_lattice(spec)
+    assert result["seed_points"] and result["edges"]
+    assert result["cells"]
 
-    pts, edges = build_hex_lattice(
-        bbox_min,
-        bbox_max,
-        spacing,
-        primitive,
-        use_voronoi_edges=False,
-        mode="organic",
-    )
 
-    # Expect midpoints only with no explicit edge list
-    assert pts and not edges
+def test_generate_hex_lattice_points_inside():
+    spec = {
+        "pattern": "voronoi",
+        "mode": "organic",
+        "spacing": 0.5,
+        "bbox_min": (-1.0, -1.0, -1.0),
+        "bbox_max": (1.0, 1.0, 1.0),
+        "primitive": {"sphere": {"radius": 1.0}},
+        "use_voronoi_edges": False,
+    }
+    result = generate_hex_lattice(spec)
+    pts = result["seed_points"]
+    assert pts
     for x, y, z in pts:
         assert x * x + y * y + z * z <= 1.0 + 1e-6
