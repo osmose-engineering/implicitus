@@ -11,6 +11,8 @@ def test_generate_hex_lattice_edges():
         "bbox_max": [1.0, 1.0, 1.0],
         "primitive": {"sphere": {"radius": 1.0}},
         "_is_voronoi": True,
+        "uniform": True,
+
     }
     result = generate_hex_lattice(spec)
     edges = result["edges"]
