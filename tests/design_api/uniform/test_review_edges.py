@@ -12,6 +12,7 @@ def test_generate_hex_lattice_edges():
         "primitive": {"sphere": {"radius": 1.0}},
         "_is_voronoi": True,
         "uniform": True,
+
     }
     result = generate_hex_lattice(spec)
     edges = result["edges"]

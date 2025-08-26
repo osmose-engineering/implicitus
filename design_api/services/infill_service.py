@@ -61,12 +61,14 @@ def generate_hex_lattice(spec: Dict[str, Any]) -> Dict[str, Any]:
     spacing = spec.get("spacing") or spec.get("min_dist") or 2.0
     primitive = spec.get("primitive", {})
     mode = spec.get("mode", "uniform")
+
     if "mode" not in spec:
         uniform_flag = spec.get("uniform")
         if isinstance(uniform_flag, str):
             uniform_flag = uniform_flag.lower() == "true"
         if uniform_flag is not None:
             mode = "uniform" if uniform_flag else "organic"
+
     use_voronoi_edges = spec.get("use_voronoi_edges", False)
 
     reserved_keys = {
@@ -84,8 +86,10 @@ def generate_hex_lattice(spec: Dict[str, Any]) -> Dict[str, Any]:
         "bboxMin",
         "seed_points",
         "use_voronoi_edges",
+
         "_is_voronoi",
         "uniform",
+
     }
     extra_kwargs = {k: v for k, v in spec.items() if k not in reserved_keys}
 
