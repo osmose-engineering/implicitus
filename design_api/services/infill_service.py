@@ -3,6 +3,8 @@ from __future__ import annotations
 from typing import Any, Dict, List
 from types import SimpleNamespace
 import numpy as np
+import inspect
+
 
 from .voronoi_gen.voronoi_gen import (
     compute_voronoi_adjacency,
@@ -86,12 +88,29 @@ def generate_hex_lattice(spec: Dict[str, Any]) -> Dict[str, Any]:
         "bboxMin",
         "seed_points",
         "use_voronoi_edges",
-
         "_is_voronoi",
         "uniform",
-
     }
     extra_kwargs = {k: v for k, v in spec.items() if k not in reserved_keys}
+
+    # Forward only keyword arguments supported by the target cell builder to
+    # avoid leaking unrelated fields (e.g. "wall_thickness") into
+    # ``compute_uniform_cells`` or ``construct_voronoi_cells``.
+    if extra_kwargs:
+        if mode == "uniform":
+            from .voronoi_gen.uniform import compute_uniform_cells  # type: ignore
+
+            allowed = set(inspect.signature(compute_uniform_cells).parameters)
+            allowed -= {"seeds", "imds_mesh", "plane_normal"}
+        else:
+            from .voronoi_gen.organic.construct import (  # type: ignore
+                construct_voronoi_cells,
+            )
+
+            allowed = set(inspect.signature(construct_voronoi_cells).parameters)
+            allowed -= {"points", "bbox_min", "bbox_max"}
+        extra_kwargs = {k: v for k, v in extra_kwargs.items() if k in allowed}
+
 
     imds_mesh = spec.get("imds_mesh")
     if isinstance(imds_mesh, dict):
