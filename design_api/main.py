@@ -14,23 +14,20 @@ import json
 import copy
 import traceback
 import uuid
-import numpy as np
 from json.decoder import JSONDecodeError
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Any
 from dataclasses import dataclass
-from types import SimpleNamespace
 from design_api.services.json_cleaner import clean_llm_output
 from design_api.services.llm_service import generate_design_spec
 from design_api.services.mapping import map_primitive as map_to_proto_dict
 from design_api.services.validator import validate_model_spec as validate_proto
 from ai_adapter.csg_adapter import review_request, generate_summary, update_request
-from design_api.services.voronoi_gen.voronoi_gen import (
-    compute_voronoi_adjacency,
-    build_hex_lattice,
-    primitive_to_imds_mesh,
+from design_api.services.infill_service import (
+    generate_hex_lattice,
+    generate_voronoi,
 )
 
 @dataclass
@@ -136,17 +133,8 @@ async def review(req: dict, sid: Optional[str] = None):
                 pattern = inf.get("pattern")
                 logging.debug(f"PATTERN {pattern}")
                 if pattern == "voronoi":
-
-                    # prefer explicit spacing, otherwise fall back to min_dist or a sane default
-                    spacing = (
-                        inf.get("spacing")
-                        or inf.get("min_dist")
-                        or 2.0
-                    )
-
                     mode = inf.get("mode") or req.get("mode")
                     if mode is None:
-                        # Fallback to legacy boolean flag
                         uniform_flag = inf.get("uniform") or req.get("uniform")
                         if isinstance(uniform_flag, str):
                             uniform_flag = uniform_flag.lower() == "true"
@@ -154,67 +142,22 @@ async def review(req: dict, sid: Optional[str] = None):
                             mode = "uniform"
                     if mode == "uniform":
                         primitive = node.get("primitive", {})
-                        imds_mesh = inf.get("imds_mesh") or req.get("imds_mesh")
-                        if isinstance(imds_mesh, dict):
-                            verts = imds_mesh.get("vertices")
-                            if verts is not None:
-                                imds_mesh = SimpleNamespace(vertices=np.asarray(verts))
-                        if getattr(imds_mesh, "vertices", None) is None:
-
-                            imds_mesh = primitive_to_imds_mesh(primitive)
-                        if getattr(imds_mesh, "vertices", None) is None:
-
-                            raise HTTPException(
-                                status_code=400,
-                                detail="uniform mode requires imds_mesh with vertices",
-                            )
-
-                        plane_normal = (
-                            inf.get("plane_normal")
-                            or req.get("plane_normal")
-                            or [0.0, 0.0, 1.0]
+                        res = generate_hex_lattice(
+                            {
+                                **inf,
+                                "primitive": primitive,
+                                "imds_mesh": inf.get("imds_mesh") or req.get("imds_mesh"),
+                                "plane_normal": inf.get("plane_normal") or req.get("plane_normal"),
+                                "max_distance": inf.get("max_distance") or req.get("max_distance"),
+                                "mode": "uniform",
+                            }
                         )
-
-                        max_distance = inf.get("max_distance") or req.get("max_distance")
-                        plane_normal = np.asarray(plane_normal)
-
-                        pts, cell_vertices, edge_list, cells = build_hex_lattice(
-                            bbox_min,
-                            bbox_max,
-                            spacing,
-                            primitive,
-                            return_cells=True,
-                            mode="uniform",
-                            imds_mesh=imds_mesh,
-                            plane_normal=plane_normal,
-                            max_distance=max_distance,
-                        )
-                        inf["seed_points"] = pts
-                        inf["cell_vertices"] = cell_vertices
-                        inf["edges"] = [list(e) for e in edge_list]
-                        inf["cells"] = cells
                     else:
-                        # compute adjacency of seed points using spatial pruning
-                        # compute_voronoi_adjacency expects half the target spacing so that
-                        # prune_adjacency_via_grid caps edge length at one spacing
-                        adjacency = compute_voronoi_adjacency(pts, spacing=spacing * 0.5)
-
-                        # convert adjacency (edge list or neighbor map) -> unique edge list
-                        edge_list = []
-                        if isinstance(adjacency, dict):
-                            for i, nbrs in adjacency.items():
-                                for j in nbrs:
-                                    if j > i:
-                                        edge_list.append([i, j])
-                        else:
-                            for i, j in adjacency:
-                                edge_list.append([i, j])
-
-                        inf["edges"] = edge_list
-
-                        logging.debug(
-                            f"[DEBUG review] spacing={spacing} produced {len(edge_list)} edges; sample: {edge_list[:10]}"
-                        )
+                        res = generate_voronoi(inf)
+                    inf.update(res)
+                    logging.debug(
+                        f"[DEBUG review] produced {len(res.get('edges', []))} edges"
+                    )
 
 
         # sanitize spec to convert numpy arrays into lists for JSON serialization
@@ -286,16 +229,8 @@ async def update(req: UpdateRequest):
         if pts and bbox_min and bbox_max:
             pattern = inf.get("pattern")
             if pattern == "voronoi":
-
-                spacing = (
-                    inf.get("spacing")
-                    or inf.get("min_dist")
-                    or 2.0
-                )
-
                 mode = inf.get("mode")
                 if mode is None:
-                    # Fallback to legacy boolean flag
                     uniform_flag = inf.get("uniform")
                     if isinstance(uniform_flag, str):
                         uniform_flag = uniform_flag.lower() == "true"
@@ -303,65 +238,22 @@ async def update(req: UpdateRequest):
                         mode = "uniform"
                 if mode == "uniform":
                     primitive = node.get("primitive", {})
-                    imds_mesh = inf.get("imds_mesh") or req.imds_mesh
-                    if isinstance(imds_mesh, dict):
-                        verts = imds_mesh.get("vertices")
-                        if verts is not None:
-                            imds_mesh = SimpleNamespace(vertices=np.asarray(verts))
-                    if getattr(imds_mesh, "vertices", None) is None:
-
-                        imds_mesh = primitive_to_imds_mesh(primitive)
-                    if getattr(imds_mesh, "vertices", None) is None:
-
-                        raise HTTPException(
-                            status_code=400,
-                            detail="uniform mode requires imds_mesh with vertices",
-                        )
-
-                    plane_normal = (
-                        inf.get("plane_normal")
-                        or req.plane_normal
-                        or [0.0, 0.0, 1.0]
+                    res = generate_hex_lattice(
+                        {
+                            **inf,
+                            "primitive": primitive,
+                            "imds_mesh": inf.get("imds_mesh") or req.imds_mesh,
+                            "plane_normal": inf.get("plane_normal") or req.plane_normal,
+                            "max_distance": inf.get("max_distance") or req.max_distance,
+                            "mode": "uniform",
+                        }
                     )
-
-                    max_distance = inf.get("max_distance") or req.max_distance
-                    plane_normal = np.asarray(plane_normal)
-
-                    pts, cell_vertices, edge_list, cells = build_hex_lattice(
-                        bbox_min,
-                        bbox_max,
-                        spacing,
-                        primitive,
-                        return_cells=True,
-                        mode="uniform",
-                        imds_mesh=imds_mesh,
-                        plane_normal=plane_normal,
-                        max_distance=max_distance,
-                    )
-                    inf["seed_points"] = pts
-                    inf["cell_vertices"] = cell_vertices
-                    inf["edges"] = [list(e) for e in edge_list]
-                    inf["cells"] = cells
                 else:
-                    # compute_voronoi_adjacency expects half the target spacing so that
-                    # prune_adjacency_via_grid caps edge length at one spacing
-                    adjacency = compute_voronoi_adjacency(pts, spacing=spacing * 0.5)
-
-                    edge_list = []
-                    if isinstance(adjacency, dict):
-                        for i, nbrs in adjacency.items():
-                            for j in nbrs:
-                                if j > i:
-                                    edge_list.append([i, j])
-                    else:
-                        for i, j in adjacency:
-                            edge_list.append([i, j])
-
-                    inf["edges"] = edge_list
-
-                    logging.debug(
-                        f"[DEBUG update] spacing={spacing} produced {len(edge_list)} edges; sample: {edge_list[:10]}"
-                    )
+                    res = generate_voronoi(inf)
+                inf.update(res)
+                logging.debug(
+                    f"[DEBUG update] produced {len(res.get('edges', []))} edges"
+                )
 
 
     # sanitize new_spec to convert numpy arrays into lists for JSON serialization
