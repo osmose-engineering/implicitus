@@ -78,6 +78,9 @@ def generate_hex_lattice(spec: Dict[str, Any]) -> Dict[str, Any]:
         "bboxMin",
         "seed_points",
         "use_voronoi_edges",
+
+        "_is_voronoi",
+
     }
     extra_kwargs = {k: v for k, v in spec.items() if k not in reserved_keys}
 
