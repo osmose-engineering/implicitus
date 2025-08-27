@@ -2,12 +2,7 @@ import type { ClientRequest, IncomingMessage, ServerResponse } from 'http';
 import { defineConfig } from 'vite'
 import macros from 'vite-plugin-babel-macros'
 import react from '@vitejs/plugin-react'
-import path from 'path'
-
 export default defineConfig({
-  babelMacros: {
-    plugins: ['babel-plugin-glsl/macro']
-  },
   plugins: [
     macros(),
     react()
@@ -21,7 +16,7 @@ export default defineConfig({
         target: 'http://localhost:8000',
         changeOrigin: true,
         secure: false,
-        configure: (proxy, options) => {
+        configure: (proxy, _options) => {
           // cast to any so TS won’t complain
           (proxy as any).on('proxyReq', (_proxyReq: ClientRequest, req: IncomingMessage, _res: ServerResponse) => {
             console.debug('[vite proxy] request to:', req.url);

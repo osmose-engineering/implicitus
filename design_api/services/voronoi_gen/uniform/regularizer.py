@@ -7,7 +7,7 @@ from typing import Tuple, List, Optional
 from typing import Dict, Callable
 import itertools
 
-def regularize_hexagon(hex_pts: np.ndarray, plane_normal: np.ndarray) -> np.ndarray:
+def regularize_hexagon(hex_pts: np.ndarray, plane_normal: np.ndarray = np.array([0.0, 0.0, 1.0])) -> np.ndarray:
     """
     Lightly regularize a hexagon by projecting its vertices onto the plane
     defined by ``plane_normal`` while preserving their in-plane positions.
@@ -21,9 +21,21 @@ def regularize_hexagon(hex_pts: np.ndarray, plane_normal: np.ndarray) -> np.ndar
     """
     centroid = np.mean(hex_pts, axis=0)
     n = plane_normal / np.linalg.norm(plane_normal)
+    # project points onto plane
     rel = hex_pts - centroid
     rel -= np.outer(rel.dot(n), n)
-    return centroid + rel
+    # build orthonormal basis in plane
+    arbitrary = np.array([1.0, 0.0, 0.0])
+    if np.allclose(np.cross(arbitrary, n), 0):
+        arbitrary = np.array([0.0, 1.0, 0.0])
+    u = np.cross(n, arbitrary)
+    u /= np.linalg.norm(u)
+    v = np.cross(n, u)
+    v /= np.linalg.norm(v)
+    radius = np.mean(np.linalg.norm(rel, axis=1))
+    angles = np.linspace(0, 2 * np.pi, 6, endpoint=False)
+    regular = np.outer(np.cos(angles), u) * radius + np.outer(np.sin(angles), v) * radius
+    return centroid + regular
 
 def hexagon_metrics(hex_pts: np.ndarray) -> Dict[str, Any]:
     """
