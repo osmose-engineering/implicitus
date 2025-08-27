@@ -68,18 +68,30 @@ function App() {
   const [isDirty, setIsDirty] = useState(false);
   const [prompt, setPrompt] = useState('');
   const [spec, setSpec] = useState<any[]>([]);
-  // Derive points for the Voronoi viewer, preferring cell_vertices when available
+  const [meshVertices, setMeshVertices] = useState<[number, number, number][]>([]);
+  const [meshEdges, setMeshEdges] = useState<number[][]>([]);
+  // Derive points for the Voronoi viewer, preferring fetched mesh when available
   const seedPoints: [number, number, number][] =
-    spec[0]?.modifiers?.infill?.cell_vertices ??
+    meshVertices.length > 0 ? meshVertices :
     spec[0]?.modifiers?.infill?.seed_points ?? [];
-  const [edges, setEdges] = useState<number[][]>([]);
-  const [infillPoints, setInfillPoints] = useState<[number, number, number][]>([]);
-  const [infillEdges, setInfillEdges] = useState<number[][]>([]);
-  // Debug: log infillPoints and infillEdges state updates
+  const edges = meshEdges;
+  // Fetch mesh from core_engine whenever spec seed points change
   useEffect(() => {
-    console.log('[UI] infillPoints state updated:', infillPoints);
-    console.log('[UI] infillEdges state updated:', infillEdges);
-  }, [infillPoints, infillEdges]);
+    const seeds = spec[0]?.modifiers?.infill?.seed_points;
+    if (seeds && seeds.length > 0) {
+      fetch('http://localhost:4000/voronoi', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seeds }),
+      })
+        .then(res => res.json())
+        .then(data => {
+          setMeshVertices(data.vertices || []);
+          setMeshEdges(data.edges || []);
+        })
+        .catch(err => console.error('Mesh fetch failed', err));
+    }
+  }, [spec]);
   const [error, setError] = useState<string | null>(null);
   const [loading, setLoading] = useState(false);
   const [summary, setSummary] = useState<string>('');
@@ -204,14 +216,6 @@ function App() {
           sampleEdges: infill?.edges?.slice(0, 5),
         });
         setSpec(data.spec);
-
-        setEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
-        setInfillPoints(
-          data.spec[0]?.modifiers?.infill?.cell_vertices ??
-          data.spec[0]?.modifiers?.infill?.seed_points ?? []
-        );
-        setInfillEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
-
         setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
         if (data.summary) {
           setSummary(data.summary);
@@ -334,13 +338,6 @@ function App() {
       const data = await response.json();
       if (data.spec && Array.isArray(data.spec)) {
         setSpec(data.spec);
-        setEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
-        // also refresh infill points and edges so the viewer reflects updates
-        setInfillPoints(
-          data.spec[0]?.modifiers?.infill?.cell_vertices ??
-          data.spec[0]?.modifiers?.infill?.seed_points ?? []
-        );
-        setInfillEdges(data.spec[0]?.modifiers?.infill?.edges ?? []);
         setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
         setIsDirty(false);
         if (data.summary) {
@@ -567,8 +564,8 @@ function App() {
                   key="ray"
                   seedPoints={seedPoints}
                   edges={edges}
-                  infillPoints={infillPoints}
-                  infillEdges={infillEdges}
+                  infillPoints={seedPoints}
+                  infillEdges={edges}
                   bbox={[0, 0, 0, 1, 1, 1]}
                   thickness={0.35}
                   maxSteps={256}
@@ -586,8 +583,8 @@ function App() {
                   key="strut"
                   seedPoints={seedPoints}
                   edges={edges}
-                  infillPoints={infillPoints}
-                  infillEdges={infillEdges}
+                  infillPoints={seedPoints}
+                  infillEdges={edges}
                   bbox={[0, 0, 0, 1, 1, 1]}
                   thickness={0.35}
                   maxSteps={256}

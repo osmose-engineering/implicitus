@@ -9,6 +9,7 @@ use core_engine::slice::{slice_model, SliceConfig};
 use core_engine::implicitus::{Model, Node, Primitive, Sphere};
 use core_engine::implicitus::primitive::Shape;
 use core_engine::implicitus::node::Body;
+use core_engine::voronoi_mesh;
 
 #[derive(Deserialize)]
 struct SliceRequest {
@@ -29,6 +30,17 @@ struct SliceResponse {
     contours: Vec<Vec<(f64, f64)>>,
 }
 
+#[derive(Deserialize)]
+struct VoronoiRequest {
+    seeds: Vec<(f64, f64, f64)>,
+}
+
+#[derive(Serialize)]
+struct VoronoiResponse {
+    vertices: Vec<(f64, f64, f64)>,
+    edges: Vec<(usize, usize)>,
+}
+
 #[tokio::main]
 async fn main() {
     // POST /slice  with JSON body to perform slicing
@@ -37,8 +49,14 @@ async fn main() {
         .and(warp::body::json())
         .and_then(handle_slice);
 
+    // POST /voronoi to generate a mesh from seed points
+    let voronoi_route = warp::post()
+        .and(warp::path("voronoi"))
+        .and(warp::body::json())
+        .and_then(handle_voronoi);
+
     println!("Slicer server listening on 127.0.0.1:4000");
-    warp::serve(slice_route)
+    warp::serve(slice_route.or(voronoi_route))
         .run(([127, 0, 0, 1], 4000))
         .await;
 }
@@ -69,4 +87,13 @@ async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::Rejec
 
     let contours = slice_model(&model, &config);
     Ok(warp::reply::json(&SliceResponse { contours }))
+}
+
+async fn handle_voronoi(req: VoronoiRequest) -> Result<impl warp::Reply, warp::Rejection> {
+    let mesh = voronoi_mesh(&req.seeds);
+    let resp = VoronoiResponse {
+        vertices: mesh.vertices,
+        edges: mesh.edges,
+    };
+    Ok(warp::reply::json(&resp))
 }
