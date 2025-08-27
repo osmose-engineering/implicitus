@@ -33,7 +33,7 @@ core_engine/Cargo.lock
 canvas_api/package-lock.json
 
 # Logs and reports
-logs/
+
 *.log
 coverage/
 *.coverage
