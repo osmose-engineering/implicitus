@@ -5,14 +5,13 @@ from google.protobuf.json_format import ParseDict
 from ai_adapter.schema.implicitus_pb2 import Model
 import uuid
 from google.protobuf import json_format
-from design_api.services.voronoi_gen.organic.sampler import sample_seed_points
+from ai_adapter import rust_primitives
 
 # Maximum number of voronoi seed points to avoid huge arrays
 MAX_SEED_POINTS = 7500
 
 # --- Helper functions for voronoi seed generation ---
 import random
-import numpy as np
 
 def _parse_bool(value):
     """Robustly interpret a JSON boolean that may arrive as a string."""
@@ -21,92 +20,6 @@ def _parse_bool(value):
     if isinstance(value, str):
         return value.strip().lower() in {"1", "true", "yes", "on"}
     return bool(value)
-
-def _auto_generate_seed_points(
-    shape: str,
-    params: dict,
-    bbox_min: tuple,
-    bbox_max: tuple,
-    spacing: float,
-    uniform: bool = False,
-    grid_resolution: tuple = (32, 32, 32)
-) -> list:
-    """
-    Generate seed points inside the given primitive shape within its AABB,
-    using either a uniform grid or Poisson-disk/grid-jitter at the given spacing.
-    """
-    if uniform:
-        # uniform grid at the given spacing + shape rejection
-        nx = int((bbox_max[0] - bbox_min[0]) / spacing) + 1
-        ny = int((bbox_max[1] - bbox_min[1]) / spacing) + 1
-        nz = int((bbox_max[2] - bbox_min[2]) / spacing) + 1
-        xs = [bbox_min[0] + i * spacing for i in range(nx)]
-        ys = [bbox_min[1] + j * spacing for j in range(ny)]
-        zs = [bbox_min[2] + k * spacing for k in range(nz)]
-        raw_seeds = []
-        for x in xs:
-            for y in ys:
-                for z in zs:
-                    raw_seeds.append([x, y, z])
-    else:
-        try:
-            raw_seeds = sample_seed_points(
-                num_points=MAX_SEED_POINTS,
-                bbox_min=bbox_min,
-                bbox_max=bbox_max,
-                min_dist=spacing
-            )
-        except Exception as e:
-            logging.debug(f"_auto_generate_seed_points: Poisson-disk sampling failed, falling back to grid jitter: {e}")
-            raw_seeds = []
-            nx = int((bbox_max[0] - bbox_min[0]) / spacing) + 1
-            ny = int((bbox_max[1] - bbox_min[1]) / spacing) + 1
-            nz = int((bbox_max[2] - bbox_min[2]) / spacing) + 1
-            for i in range(nx):
-                for j in range(ny):
-                    for k in range(nz):
-                        x = bbox_min[0] + i * spacing + (random.random() - 0.5) * spacing
-                        y = bbox_min[1] + j * spacing + (random.random() - 0.5) * spacing
-                        z = bbox_min[2] + k * spacing + (random.random() - 0.5) * spacing
-                        raw_seeds.append([x, y, z])
-    # Reject any points outside the exact primitive volume
-    seeds = [pt for pt in raw_seeds if _point_inside_shape(shape, params, tuple(pt))]
-    logging.debug(
-        f"_auto_generate_seed_points: shape={shape}, spacing={spacing}, "
-        f"bbox_min={bbox_min}, bbox_max={bbox_max}, sampled={len(raw_seeds)}, after_rejection={len(seeds)}"
-    )
-    # Cap seed list to avoid excessive points
-    if len(seeds) > MAX_SEED_POINTS:
-        random.shuffle(seeds)
-        seeds = seeds[:MAX_SEED_POINTS]
-        logging.debug(f"_auto_generate_seed_points: capped seed count to {len(seeds)}")
-    return seeds
-
-def _point_inside_shape(shape: str, params: dict, pt: tuple) -> bool:
-    """
-    Check if point pt is inside the primitive defined by shape and params.
-    """
-    x, y, z = pt
-    if shape == 'sphere':
-        r = params.get('radius', params.get('radius_mm', 0))
-        return (x*x + y*y + z*z) <= r*r
-    if shape in ('cube', 'box'):
-        # size may be dict or scalar
-        size = params.get('size')
-        if isinstance(size, dict):
-            sx, sy, sz = size.get('x',0)/2, size.get('y',0)/2, size.get('z',0)/2
-        else:
-            half = size/2
-            sx = sy = sz = half
-        return abs(x) <= sx and abs(y) <= sy and abs(z) <= sz
-    if shape == 'cylinder':
-        r = params.get('radius', params.get('radius_mm',0))
-        h = params.get('height', params.get('height_mm',0))
-        inside_circle = (x*x + y*y) <= r*r
-        return inside_circle and (0 <= z <= h)
-    # default: accept
-    return True
-
 
 import logging
 logging.basicConfig(level=logging.DEBUG)
@@ -133,7 +46,15 @@ def _compute_bbox_from_primitive(prim: dict):
         return (-r, -r, 0.0), (r, r, h)
     # default fallback
     return (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
-from ai_adapter.inference_pipeline import generate as llm_generate
+
+# Lazily import the LLM pipeline so that tests can run without the heavy
+# `transformers` dependency.  Functions that rely on the pipeline will raise a
+# clear error if it is unavailable.
+try:  # pragma: no cover - exercised in integration environments
+    from ai_adapter.inference_pipeline import generate as llm_generate
+except Exception:  # pragma: no cover - fall back to a stub
+    def llm_generate(*_args, **_kwargs):
+        raise RuntimeError("LLM inference pipeline is not available")
 
 import re
 
@@ -441,27 +362,25 @@ def interpret_llm_request(llm_output):
                 # surface uniform‐sampling toggle in spec
                 infill.setdefault('uniform', True)
                 # Auto-generate seed points inside the primitive if missing
-                shape, params = next(iter(node['primitive'].items()))
+                shape, _params = next(iter(node['primitive'].items()))
                 if 'seed_points' not in infill:
-                    # include uniform/resolution flags in update branch
                     uniform = _parse_bool(infill.get('uniform', True))
-                    resolution = tuple(infill.get('resolution', [32, 32, 32]))
-                    logging.debug(f"interpret_llm_request update-branch: uniform sampling={uniform}, resolution={resolution}")
-                    seeds = _auto_generate_seed_points(
-                        shape, params, bbox_min, bbox_max,
-                        infill['min_dist'],
-                        uniform=uniform,
-                        grid_resolution=resolution
+                    infill['uniform'] = uniform
+                    logging.debug(
+                        f"interpret_llm_request update-branch: uniform sampling={uniform}"
                     )
-                    # Set num_points default if not present
+                    seeds = rust_primitives.sample_inside(node['primitive'], infill['min_dist'])
+                    if len(seeds) > MAX_SEED_POINTS:
+                        seeds = seeds[:MAX_SEED_POINTS]
                     infill.setdefault('num_points', len(seeds))
-                    # if user specified a desired count, trim to that many
                     if 'num_points' in infill:
                         import random
                         random.shuffle(seeds)
                         seeds = seeds[: int(infill['num_points'])]
                     infill['seed_points'] = seeds
-                    logging.debug(f"interpret_llm_request: generated {len(seeds)} seed points for {shape}")
+                    logging.debug(
+                        f"interpret_llm_request: generated {len(seeds)} seed points for {shape}"
+                    )
         return {"primitives": nodes}
     else:
         raw = llm_output
@@ -521,24 +440,24 @@ def interpret_llm_request(llm_output):
             infill.setdefault('uniform', True)
             # Also support uniform/resolution for auto seed generation if seed_points missing
             if 'seed_points' not in infill:
-                shape, params = next(iter(node['primitive'].items()))
-                # include uniform/resolution flags in update branch
+                shape, _params = next(iter(node['primitive'].items()))
                 uniform = _parse_bool(infill.get('uniform', True))
-                resolution = tuple(infill.get('resolution', [32, 32, 32]))
-                logging.debug(f"interpret_llm_request update-branch: uniform sampling={uniform}, resolution={resolution}")
-                seeds = _auto_generate_seed_points(
-                    shape, params, bbox_min, bbox_max,
-                    infill['min_dist'],
-                    uniform=uniform,
-                    grid_resolution=resolution
+                infill['uniform'] = uniform
+                logging.debug(
+                    f"interpret_llm_request update-branch: uniform sampling={uniform}"
                 )
+                seeds = rust_primitives.sample_inside(node['primitive'], infill['min_dist'])
+                if len(seeds) > MAX_SEED_POINTS:
+                    seeds = seeds[:MAX_SEED_POINTS]
                 infill.setdefault('num_points', len(seeds))
                 if 'num_points' in infill:
                     import random
                     random.shuffle(seeds)
                     seeds = seeds[: int(infill['num_points'])]
                 infill['seed_points'] = seeds
-                logging.debug(f"interpret_llm_request: generated {len(seeds)} seed points for {shape}")
+                logging.debug(
+                    f"interpret_llm_request: generated {len(seeds)} seed points for {shape}"
+                )
     return {"primitives": nodes}
 
 def build_model_from_spec(nodes, boolean_op=None):
@@ -760,12 +679,10 @@ def update_request(sid: str, spec: list, raw: str):
             infill.setdefault('auto_cap', False)
             # always regenerate seed points, and expose num_points parameter
             uniform = _parse_bool(infill.get('uniform', True))
-            resolution = tuple(infill.get('resolution', [32, 32, 32]))
-            seeds = _auto_generate_seed_points(
-                shape, params, bbox_min, bbox_max,
-                infill['min_dist'], uniform=uniform,
-                grid_resolution=resolution
-            )
+            infill['uniform'] = uniform
+            seeds = rust_primitives.sample_inside(node['primitive'], infill['min_dist'])
+            if len(seeds) > MAX_SEED_POINTS:
+                seeds = seeds[:MAX_SEED_POINTS]
             # expose a tunable count parameter for seed generation
             infill.setdefault('num_points', len(seeds))
             if 'num_points' in infill:

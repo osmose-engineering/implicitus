@@ -10,6 +10,7 @@ use implicitus::node::Body;
 use implicitus::primitive::Shape;
 pub mod voronoi;
 pub mod uniform;
+pub mod primitives;
 
 // A very basic SDF evaluator that handles a few primitive shapes.
 pub fn evaluate_sdf(model: &Model, x: f64, y: f64, z: f64) -> f64 {
@@ -83,5 +84,6 @@ fn core_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     m.add_function(wrap_pyfunction!(voronoi::cells::construct_voronoi_cells, m)?)?;
     m.add_function(wrap_pyfunction!(voronoi::cells::construct_surface_voronoi_cells, m)?)?;
     m.add_function(wrap_pyfunction!(uniform::hex::compute_uniform_cells, m)?)?;
+    m.add_function(wrap_pyfunction!(primitives::sample_inside, m)?)?;
     Ok(())
 }
