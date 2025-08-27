@@ -94,14 +94,16 @@ pub fn construct_voronoi_cells(
 
     let mut cells: Vec<PyObject> = Vec::new();
     for (ci, seed) in points.iter().enumerate() {
-        let arr = Array3::from_shape_vec((nx,ny,nz), grids[ci].clone()).unwrap().into_pyarray(py);
-        let dict = PyDict::new(py);
+        let arr = Array3::from_shape_vec((nx,ny,nz), grids[ci].clone())
+            .unwrap()
+            .into_pyarray_bound(py);
+        let dict = PyDict::new_bound(py);
         dict.set_item("site", seed)?;
         dict.set_item("sdf", arr)?;
         dict.set_item("vertices", Vec::<(f64,f64,f64)>::new())?;
         dict.set_item("volume", 0.0)?;
         dict.set_item("neighbors", neighbors[ci].clone())?;
-        cells.push(dict.into());
+        cells.push(dict.into_py(py));
     }
     Ok((cells, edges, neighbors))
 }
@@ -166,14 +168,16 @@ pub fn construct_surface_voronoi_cells(
 
     let mut cells: Vec<PyObject>=Vec::new();
     for (ci, seed) in points.iter().enumerate() {
-        let arr = Array3::from_shape_vec((nx,ny,nz), grids[ci].clone()).unwrap().into_pyarray(py);
-        let dict=PyDict::new(py);
+        let arr = Array3::from_shape_vec((nx,ny,nz), grids[ci].clone())
+            .unwrap()
+            .into_pyarray_bound(py);
+        let dict = PyDict::new_bound(py);
         dict.set_item("site", seed)?;
         dict.set_item("sdf", arr)?;
         dict.set_item("vertices", Vec::<(f64,f64,f64)>::new())?;
         dict.set_item("area", 0.0)?;
         dict.set_item("neighbors", neighbors[ci].clone())?;
-        cells.push(dict.into());
+        cells.push(dict.into_py(py));
     }
     Ok((cells, edges, neighbors))
 }
