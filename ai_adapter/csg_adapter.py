@@ -210,6 +210,11 @@ def _build_modifier_dict(raw_spec: dict) -> dict:
     # nested infill
     if isinstance(raw_spec.get('infill'), dict):
         infill_data.update(raw_spec['infill'])
+    # Normalize bounding box keys to snake_case if they slipped through
+    if 'bboxMin' in infill_data:
+        infill_data['bbox_min'] = infill_data.pop('bboxMin')
+    if 'bboxMax' in infill_data:
+        infill_data['bbox_max'] = infill_data.pop('bboxMax')
     # flattened fields
     if 'infill_pattern' in raw_spec:
         infill_data['pattern'] = raw_spec.pop('infill_pattern')
