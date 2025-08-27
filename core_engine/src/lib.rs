@@ -31,4 +31,26 @@ pub fn evaluate_sdf(model: &Model, x: f64, y: f64, z: f64) -> f64 {
     f64::MAX
 }
 
+/// Simple mesh structure containing explicit vertices and edge indices.
+pub struct VoronoiMesh {
+    pub vertices: Vec<(f64, f64, f64)>,
+    pub edges: Vec<(usize, usize)>,
+}
+
+/// Prototype Voronoi mesher.
+///
+/// For now this merely echoes the seed points as vertices and links them in a
+/// ring.  It provides a stand‑in API for downstream consumers.
+pub fn voronoi_mesh(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
+    let vertices = seeds.to_vec();
+    let mut edges = Vec::new();
+    if seeds.len() > 1 {
+        for i in 0..seeds.len() {
+            let j = (i + 1) % seeds.len();
+            edges.push((i, j));
+        }
+    }
+    VoronoiMesh { vertices, edges }
+}
+
 pub mod slice;
