@@ -9,7 +9,9 @@ from ai_adapter.csg_adapter import (
     update_request,
     MAX_SEED_POINTS,
 )
-from design_api.services.voronoi_gen.voronoi_gen  import _call_sdf
+from design_api.services.voronoi_gen.voronoi_gen import _call_sdf
+from design_api.services.infill_service import generate_voronoi
+import networkx as nx
 
 def test_parse_sphere_spec():
     raw = '{"shape":"sphere","size_mm":10}'
@@ -271,6 +273,29 @@ def test_review_request_with_voronoi_infill():
     # Default lattice params should be present
     assert 'min_dist' in infill and isinstance(infill['min_dist'], float)
     assert 'bbox_min' in infill and 'bbox_max' in infill
+
+    # Generate deterministic seed points and adjacency for connectivity checks
+    seeds = csg_adapter._auto_generate_seed_points(
+        'box', box, tuple(infill['bbox_min']), tuple(infill['bbox_max']), infill['min_dist'], uniform=True
+    )
+    voronoi = generate_voronoi(
+        {
+            'seed_points': seeds,
+            'min_dist': infill['min_dist'],
+            'bbox_min': infill['bbox_min'],
+            'bbox_max': infill['bbox_max'],
+        }
+    )
+    assert 'seed_points' in voronoi
+    assert 'bbox_min' in voronoi and 'bbox_max' in voronoi
+
+    # Edges should form at least one connected component
+    edges = voronoi.get('edges', [])
+    assert edges, 'expected voronoi edges to be generated'
+    graph = nx.Graph()
+    graph.add_edges_from(edges)
+    assert nx.number_connected_components(graph) >= 1
+
     # Summary should mention voronoi
     assert isinstance(summary, str)
     assert 'voronoi' in summary.lower()
@@ -307,3 +332,6 @@ def test_update_request_seed_generation_count(monkeypatch):
     num_points = infill.get('num_points')
     assert isinstance(num_points, int)
     assert num_points <= MAX_SEED_POINTS
+    assert 'seed_points' in infill
+    assert len(infill['seed_points']) == num_points
+    assert 'bbox_min' in infill and 'bbox_max' in infill
