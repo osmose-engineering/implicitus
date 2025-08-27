@@ -9,7 +9,7 @@ use implicitus::Model;
 use implicitus::node::Body;
 use implicitus::primitive::Shape;
 
-// A very basic SDF evaluator that only handles a single sphere at the root.
+// A very basic SDF evaluator that handles a few primitive shapes.
 pub fn evaluate_sdf(model: &Model, x: f64, y: f64, z: f64) -> f64 {
     // Check for a root node
     if let Some(root_node) = &model.root {
@@ -22,7 +22,24 @@ pub fn evaluate_sdf(model: &Model, x: f64, y: f64, z: f64) -> f64 {
                         let dist = (x*x + y*y + z*z).sqrt();
                         return dist - s.radius;
                     }
-                    _ => {},
+                    Shape::Box(b) => {
+                        // Axis-aligned box centered at the origin
+                        if let Some(size) = &b.size {
+                            let hx = size.x / 2.0;
+                            let hy = size.y / 2.0;
+                            let hz = size.z / 2.0;
+                            let qx = x.abs() - hx;
+                            let qy = y.abs() - hy;
+                            let qz = z.abs() - hz;
+                            let outside = (qx.max(0.0).powi(2)
+                                + qy.max(0.0).powi(2)
+                                + qz.max(0.0).powi(2))
+                                .sqrt();
+                            let inside = qx.max(qy.max(qz)).min(0.0);
+                            return outside + inside;
+                        }
+                    }
+                    _ => {}
                 }
             }
         }
