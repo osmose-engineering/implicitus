@@ -74,7 +74,9 @@ pub fn voronoi_mesh(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
 pub mod slice;
 
 #[pymodule]
-fn core_engine(_py: Python, m: &PyModule) -> PyResult<()> {
+
+fn core_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
+
     m.add_function(wrap_pyfunction!(voronoi::sampling::sample_seed_points, m)?)?;
     m.add_function(wrap_pyfunction!(voronoi::sampling::prune_adjacency_via_grid, m)?)?;
     Ok(())
