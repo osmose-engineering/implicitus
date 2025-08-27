@@ -54,6 +54,32 @@ def _call_sdf(sdf_func, pt):
     except TypeError:
         return sdf_func(tuple(pt))
 
+import importlib.util
+import pathlib
+import sys
+
+def _load_core_engine():
+    spec = importlib.util.find_spec("core_engine.core_engine")
+    if spec is None or spec.loader is None:
+        candidates = [
+            pathlib.Path(sys.prefix) / f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages",
+            pathlib.Path(__file__).resolve().parents[4] / ".venv/lib/python3.11/site-packages",
+        ]
+        for site in candidates:
+            sys.path.append(str(site))
+            spec = importlib.util.find_spec("core_engine.core_engine")
+            if spec is not None and spec.loader is not None:
+                break
+        if spec is None or spec.loader is None:  # pragma: no cover
+            raise ImportError("core_engine.core_engine not found")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
+
+_core = _load_core_engine()
+_sample_seed_points_rust = _core.sample_seed_points
+
+
 def sample_seed_points(
     num_points: int,
     bbox_min: Tuple[float, float, float],
@@ -62,145 +88,21 @@ def sample_seed_points(
     density_field: Optional[Callable[[Tuple[float, float, float]], float]] = None,
     min_dist: Optional[float] = None,
     max_trials: int = 10000,
-    pattern: str = "poisson"
+    pattern: str = "poisson",
 ) -> List[Tuple[float, float, float]]:
-    """
-    Sample seed points within the axis-aligned bounding box.
-
-    When ``pattern`` is ``"poisson"`` (the default) Bridson's Poisson-disk
-    sampling is used.  When ``pattern`` is ``"hex"`` a deterministic hexagonal
-    lattice is generated via an internal seed generator.
-
-    Args:
-        num_points (int): Number of points to sample.
-        bbox_min (tuple): Minimum (x, y, z) of bounding box.
-        bbox_max (tuple): Maximum (x, y, z) of bounding box.
-        min_dist (float, optional): Minimum distance between points. If not provided, spacing is chosen to target num_points by volume.
-        max_trials (int): Maximum number of points to attempt to generate.
-        pattern (str): ``"poisson"`` or ``"hex"``.
-    """
+    """Sample seed points using Rust bindings."""
     logging.debug(
         f"[sample_seed_points] called with num_points={num_points}, bbox_min={bbox_min}, bbox_max={bbox_max}, min_dist={min_dist}, density_field={'yes' if density_field is not None else 'no'}, pattern={pattern}"
     )
-    # Compute domain volume and minimal distance r
-    xmin, ymin, zmin = bbox_min
-    xmax, ymax, zmax = bbox_max
-    volume = (xmax - xmin) * (ymax - ymin) * (zmax - zmin)
-    if num_points <= 0 or volume <= 0:
-        return []
-
-    if pattern == "hex":
-        if min_dist is not None:
-            r = min_dist
-        else:
-            r = (volume / num_points) ** (1 / 3)
-        seeds = _hex_lattice(bbox_min, bbox_max, cell_size=r, slice_thickness=r)
-        logging.debug(
-            f"[sample_seed_points] returning {len(seeds)} hex lattice points with spacing {r:.3f}"
-        )
-        return [tuple(pt) for pt in seeds.tolist()]
-
-    if pattern != "poisson":
-        raise ValueError(f"Unsupported pattern '{pattern}'")
-
-    if min_dist is not None:
-        r = min_dist
-    else:
-        r = (volume / num_points) ** (1/3)
-    logging.debug(f"[sample_seed_points] volume={volume:.3f}, computed spacing r={r:.3f}, max_trials={max_trials}")
-    # Determine local Poisson radius
-    if density_field is not None:
-        def _get_r(p):
-            d = density_field(p)
-            if d is None or d <= 0:
-                return float('inf')
-            return (1.0 / d) ** (1/3)
-    elif min_dist is not None:
-        def _get_r(p):
-            return min_dist
-    else:
-        def _get_r(p):
-            return r
-    cell_size = r / math.sqrt(3)
-    nx = int(math.ceil((xmax - xmin) / cell_size))
-    ny = int(math.ceil((ymax - ymin) / cell_size))
-    nz = int(math.ceil((zmax - zmin) / cell_size))
-    grid = [[[None for _ in range(nz)] for _ in range(ny)] for _ in range(nx)]
-    def grid_coords(pt):
-        return (
-            int((pt[0] - xmin) / cell_size),
-            int((pt[1] - ymin) / cell_size),
-            int((pt[2] - zmin) / cell_size)
-        )
-    def in_bbox(pt):
-        return (xmin <= pt[0] <= xmax and ymin <= pt[1] <= ymax and zmin <= pt[2] <= zmax)
-    def neighbors(ix, iy, iz):
-        for dx in [-2, -1, 0, 1, 2]:
-            for dy in [-2, -1, 0, 1, 2]:
-                for dz in [-2, -1, 0, 1, 2]:
-                    x = ix + dx
-                    y = iy + dy
-                    z = iz + dz
-                    if 0 <= x < nx and 0 <= y < ny and 0 <= z < nz:
-                        if grid[x][y][z] is not None:
-                            yield grid[x][y][z]
-    # Initialize with one random point
-    first_pt = tuple(random.uniform(bbox_min[i], bbox_max[i]) for i in range(3))
-    points = [first_pt]
-    active_list = [first_pt]
-    gx, gy, gz = grid_coords(first_pt)
-    grid[gx][gy][gz] = first_pt
-    k = 30
-    while active_list and len(points) < num_points and len(points) < max_trials:
-        idx = random.randrange(len(active_list))
-        center = active_list[idx]
-        found = False
-        for _ in range(k):
-            local_r = _get_r(center)
-            # Random point in the spherical shell [local_r, 2*local_r]
-            rr = random.uniform(local_r, 2*local_r)
-            theta = random.uniform(0, 2*math.pi)
-            phi = math.acos(2*random.uniform(0,1)-1)
-            dx = rr * math.sin(phi) * math.cos(theta)
-            dy = rr * math.sin(phi) * math.sin(theta)
-            dz = rr * math.cos(phi)
-            pt = (center[0] + dx, center[1] + dy, center[2] + dz)
-            if not in_bbox(pt):
-                continue
-            gx, gy, gz = grid_coords(pt)
-            # Check min distance to neighbors
-            too_close = False
-            for neighbor in neighbors(gx, gy, gz):
-                dist = math.sqrt((pt[0]-neighbor[0])**2 + (pt[1]-neighbor[1])**2 + (pt[2]-neighbor[2])**2)
-                if dist < local_r:
-                    too_close = True
-                    break
-            if not too_close:
-                if density_field is not None:
-                    prob = density_field(pt)
-                    if random.random() > prob:
-                        continue
-                points.append(pt)
-                active_list.append(pt)
-                grid[gx][gy][gz] = pt
-                found = True
-                break
-        if not found:
-            active_list.pop(idx)
-    # Adjust if too many or too few points
-    if len(points) > num_points:
-        points = random.sample(points, num_points)
-    elif len(points) < num_points:
-        # Fill remainder with uniform random points, respecting density_field
-        n_extra = num_points - len(points)
-        for _ in range(n_extra):
-            while True:
-                pt = tuple(random.uniform(bbox_min[i], bbox_max[i]) for i in range(3))
-                if density_field is None or random.random() <= density_field(pt):
-                    points.append(pt)
-                    break
-    logging.debug(f"[sample_seed_points] returning {len(points)} seed points (requested {num_points})")
-    return points
+    return _sample_seed_points_rust(
+        num_points,
+        tuple(bbox_min),
+        tuple(bbox_max),
+        density_field=density_field,
+        min_dist=min_dist,
+        max_trials=max_trials,
+        pattern=pattern,
+    )
 
 def sample_surface_seed_points(
     num_points: int,
