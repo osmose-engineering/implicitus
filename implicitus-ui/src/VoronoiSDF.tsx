@@ -1,4 +1,3 @@
-// components/VoronoiLatticePreview.tsx
 import React, { useMemo } from 'react'
 import { useFrame, extend } from '@react-three/fiber'
 import * as THREE from 'three'
@@ -7,24 +6,28 @@ import { VoronoiLatticeMaterial } from './VoronoiLatticeMaterial'
 extend({ VoronoiLatticeMaterial })
 
 const MAX_SEEDS = 1024;
+const MM_TO_UNIT = 0.1;
 
 type Props = {
-  seedPoints?: Array<[number,number,number]>,
-  bboxMin?: [number,number,number],
-  bboxMax?: [number,number,number],
-  thickness: number,
-  maxSteps?: number,
-  epsilon?: number,
-}
+  spec: {
+    seed_points?: Array<[number, number, number]>;
+    wall_thickness?: number;
+    min_dist?: number;
+  };
+  bounds: [number, number, number][];
+  maxSteps?: number;
+  epsilon?: number;
+};
 
 export default function VoronoiSDF({
-  seedPoints = [],
-  bboxMin = [0,0,0],
-  bboxMax = [0,0,0],
-  thickness,
+  spec,
+  bounds,
   maxSteps = 64,
-  epsilon  = 0.001,
+  epsilon = 0.001,
 }: Props) {
+  const seedPoints = spec.seed_points ?? [];
+  const thickness = ((spec.wall_thickness ?? spec.min_dist ?? 1) as number) * MM_TO_UNIT;
+  const [bboxMin, bboxMax] = bounds;
   const seedsArray = useMemo(() => {
     const pts = seedPoints || [];
     const arr = new Float32Array(pts.length * 3);
@@ -78,7 +81,7 @@ export default function VoronoiSDF({
   const [minX, minY, minZ] = bboxMin;
   const [maxX, maxY, maxZ] = bboxMax;
 
-  const materialRef = React.useRef<THREE.ShaderMaterial>()
+  const materialRef = React.useRef<THREE.ShaderMaterial>(null)
   // Debug: log uniform values once on mount
   React.useEffect(() => {
     const mat = materialRef.current;
@@ -119,7 +122,6 @@ export default function VoronoiSDF({
       }
       tex.needsUpdate = true;
       mat.uniforms.uNumSeeds.value = count;
-      mat.uniforms.uNumSeeds.needsUpdate = true;
       // console.log('Updated seed texture and count', {
       //   uNumSeeds: mat.uniforms.uNumSeeds.value,
       //   sampleFirstSeed: [texData[0], texData[1], texData[2]]

@@ -8,6 +8,7 @@ interface VoronoiLatticePreviewProps {
     seed_points?: [number, number, number][];
     wall_thickness?: number;
   };
+  bounds?: [number, number, number][];
 }
 
 const MM_TO_UNIT = 0.1;
@@ -20,10 +21,8 @@ const SEED_SPHERE_RADIUS_MM = 1.0; // 1mm
  */
 const VoronoiLatticePreview: React.FC<VoronoiLatticePreviewProps> = ({
   spec,
-  bounds,
+  bounds: _bounds,
 }) => {
-  const seedPoints = spec.seed_points ?? [];
-
   const seedPointsUnits = useMemo(
     () =>
       (spec.seed_points ?? []).map(
@@ -133,12 +132,7 @@ const VoronoiLatticePreview: React.FC<VoronoiLatticePreviewProps> = ({
       </instancedMesh>
       <points>
         <bufferGeometry>
-          <bufferAttribute
-            attach="attributes-position"
-            count={pointsPositions.length / 3}
-            array={pointsPositions}
-            itemSize={3}
-          />
+          <bufferAttribute attach="attributes-position" args={[pointsPositions, 3]} />
         </bufferGeometry>
         <pointsMaterial color="red" size={SEED_SPHERE_RADIUS_MM * MM_TO_UNIT * 2} sizeAttenuation={false} />
       </points>
