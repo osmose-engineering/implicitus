@@ -46,7 +46,15 @@ def _compute_bbox_from_primitive(prim: dict):
         return (-r, -r, 0.0), (r, r, h)
     # default fallback
     return (0.0, 0.0, 0.0), (1.0, 1.0, 1.0)
-from ai_adapter.inference_pipeline import generate as llm_generate
+
+# Lazily import the LLM pipeline so that tests can run without the heavy
+# `transformers` dependency.  Functions that rely on the pipeline will raise a
+# clear error if it is unavailable.
+try:  # pragma: no cover - exercised in integration environments
+    from ai_adapter.inference_pipeline import generate as llm_generate
+except Exception:  # pragma: no cover - fall back to a stub
+    def llm_generate(*_args, **_kwargs):
+        raise RuntimeError("LLM inference pipeline is not available")
 
 import re
 

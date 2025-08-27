@@ -49,11 +49,11 @@ def _load_core_engine() -> ModuleType:
     return module
 
 
-
 _core = _load_core_engine()
 _sample_inside_rust = _core.sample_inside
 
 
 def sample_inside(shape_spec, spacing):
     """Return seed points inside the given primitive at the specified spacing."""
+
     return _sample_inside_rust(shape_spec, spacing)
