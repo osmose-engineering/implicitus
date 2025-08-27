@@ -9,6 +9,7 @@ from ai_adapter.csg_adapter import (
     update_request,
     MAX_SEED_POINTS,
 )
+import ai_adapter.rust_primitives as rust_primitives
 from design_api.services.voronoi_gen.voronoi_gen import _call_sdf
 from design_api.services.infill_service import generate_voronoi
 import networkx as nx
@@ -135,20 +136,21 @@ def test_review_request_with_dict_input_multiple_primitives():
 def test_uniform_string_false_parsing(monkeypatch):
     called = {}
 
-    def fake_auto(shape, params, bbox_min, bbox_max, spacing, *, uniform=False, grid_resolution=(32, 32, 32)):
-        called['uniform'] = uniform
+    def fake_sample(shape_spec, spacing):
+        called['called'] = True
         return []
 
-    import ai_adapter.csg_adapter as csg
-    monkeypatch.setattr(csg, '_auto_generate_seed_points', fake_auto)
+    monkeypatch.setattr(csg_adapter.rust_primitives, 'sample_inside', fake_sample)
 
     request_data = {
         'shape': 'sphere',
         'size_mm': 10,
         'infill': {'pattern': 'voronoi', 'uniform': 'false'}
     }
-    csg.interpret_llm_request(request_data)
-    assert called['uniform'] is False
+    spec = csg_adapter.interpret_llm_request(request_data)
+    assert called['called'] is True
+    infill = spec['primitives'][0]['modifiers']['infill']
+    assert infill['uniform'] is False
 
 
 # Additional tests for review_request with existing/modified spec
@@ -275,9 +277,7 @@ def test_review_request_with_voronoi_infill():
     assert 'bbox_min' in infill and 'bbox_max' in infill
 
     # Generate deterministic seed points and adjacency for connectivity checks
-    seeds = csg_adapter._auto_generate_seed_points(
-        'box', box, tuple(infill['bbox_min']), tuple(infill['bbox_max']), infill['min_dist'], uniform=True
-    )
+    seeds = rust_primitives.sample_inside({'box': box}, infill['min_dist'])
     voronoi = generate_voronoi(
         {
             'seed_points': seeds,
@@ -318,8 +318,8 @@ def test_update_request_seed_generation_count(monkeypatch):
 
     monkeypatch.setattr(csg_adapter, 'review_request', fake_review_request)
     monkeypatch.setattr(
-        csg_adapter,
-        '_auto_generate_seed_points',
+        csg_adapter.rust_primitives,
+        'sample_inside',
         lambda *args, **kwargs: [[0, 0, 0]] * MAX_SEED_POINTS,
     )
 
