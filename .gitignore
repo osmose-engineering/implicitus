@@ -14,6 +14,7 @@ Thumbs.db
 /core_engine/target/
 **/*.rs.bk
 core_engine/Cargo.lock
+llm/Cargo.lock
 
 # Generated Protobuf bindings
 /core_engine/OUT_DIR/
@@ -24,7 +25,7 @@ core_engine/Cargo.lock
 /ai_adapter/*.pyc
 /ai_adapter/env/
 /ai_adapter/venv/
-/ai_adapter/*.egg-info/
+*.egg-info/
 *__pycache__*
 
 # Node.js dependencies and environment

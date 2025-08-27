@@ -55,25 +55,44 @@ def _call_sdf(sdf_func, pt):
         return sdf_func(tuple(pt))
 
 import importlib.util
+import importlib.machinery
 import pathlib
+import subprocess
 import sys
 
+
 def _load_core_engine():
+    """Import the Rust extension, building it on the fly if necessary."""
+    # First, attempt to import if it's already installed in site-packages
     spec = importlib.util.find_spec("core_engine.core_engine")
-    if spec is None or spec.loader is None:
-        candidates = [
-            pathlib.Path(sys.prefix) / f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages",
-            pathlib.Path(__file__).resolve().parents[4] / ".venv/lib/python3.11/site-packages",
-        ]
-        for site in candidates:
-            sys.path.append(str(site))
-            spec = importlib.util.find_spec("core_engine.core_engine")
-            if spec is not None and spec.loader is not None:
-                break
-        if spec is None or spec.loader is None:  # pragma: no cover
-            raise ImportError("core_engine.core_engine not found")
+    if spec is not None and spec.loader is not None:
+        module = importlib.util.module_from_spec(spec)
+        spec.loader.exec_module(module)
+        return module
+
+    # If not installed, build the cdylib with cargo and load directly
+    crate_dir = pathlib.Path(__file__).resolve().parents[4] / "core_engine"
+    try:
+        subprocess.run(["cargo", "build"], cwd=crate_dir, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+    except Exception as exc:  # pragma: no cover - build failure
+        raise ImportError("core_engine.core_engine build failed") from exc
+
+    if sys.platform.startswith("win"):
+        lib_name = "core_engine.dll"
+    elif sys.platform == "darwin":
+        lib_name = "libcore_engine.dylib"
+    else:
+        lib_name = "libcore_engine.so"
+
+    lib_path = crate_dir / "target" / "debug" / lib_name
+    if not lib_path.exists():  # pragma: no cover - unexpected build output
+        raise ImportError(f"built library {lib_path} not found")
+
+    loader = importlib.machinery.ExtensionFileLoader("core_engine.core_engine", str(lib_path))
+    spec = importlib.util.spec_from_loader("core_engine.core_engine", loader)
     module = importlib.util.module_from_spec(spec)
-    spec.loader.exec_module(module)
+    loader.exec_module(module)
+
     return module
 
 _core = _load_core_engine()
