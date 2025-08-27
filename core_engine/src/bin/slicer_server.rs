@@ -1,15 +1,14 @@
-
-
 // core_engine/src/bin/slicer_server.rs
 
-use warp::Filter;
+use core_engine::implicitus::node::Body;
+use core_engine::implicitus::primitive::Shape;
+use core_engine::implicitus::{Model, Node, Primitive, Sphere};
+use core_engine::slice::{slice_model, SliceConfig};
+use core_engine::voronoi_mesh;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use core_engine::slice::{slice_model, SliceConfig};
-use core_engine::implicitus::{Model, Node, Primitive, Sphere};
-use core_engine::implicitus::primitive::Shape;
-use core_engine::implicitus::node::Body;
-use core_engine::voronoi_mesh;
+use warp::http::Method;
+use warp::Filter;
 
 #[derive(Deserialize)]
 struct SliceRequest {
@@ -55,10 +54,14 @@ async fn main() {
         .and(warp::body::json())
         .and_then(handle_voronoi);
 
+    let cors = warp::cors()
+        .allow_any_origin()
+        .allow_methods(vec![Method::POST])
+        .allow_header("content-type");
+
     println!("Slicer server listening on 127.0.0.1:4000");
-    warp::serve(slice_route.or(voronoi_route))
-        .run(([127, 0, 0, 1], 4000))
-        .await;
+    let routes = slice_route.or(voronoi_route).with(cors);
+    warp::serve(routes).run(([127, 0, 0, 1], 4000)).await;
 }
 
 async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::Rejection> {
