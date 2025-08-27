@@ -73,71 +73,31 @@ def primitive_to_imds_mesh(primitive: Dict[str, Any]) -> Optional[Any]:
 
     return None
 
-def build_spatial_index(
-    seeds: List[Tuple[float, float, float]],
-    spacing: float
-) -> Dict[Tuple[int, int, int], List[int]]:
-    """
-    Build a 3D spatial hash grid of seed indices.
+import importlib.util
+import pathlib
+import sys
 
-    Args:
-        seeds: list of (x,y,z) seed coordinates
-        spacing: target minimal seed spacing (r);
-                 grid cell size will be 2 * spacing
+def _load_core_engine():
+    spec = importlib.util.find_spec("core_engine.core_engine")
+    if spec is None or spec.loader is None:
+        candidates = [
+            pathlib.Path(sys.prefix) / f"lib/python{sys.version_info.major}.{sys.version_info.minor}/site-packages",
+            pathlib.Path(__file__).resolve().parents[3] / ".venv/lib/python3.11/site-packages",
+        ]
+        for site in candidates:
+            sys.path.append(str(site))
+            spec = importlib.util.find_spec("core_engine.core_engine")
+            if spec is not None and spec.loader is not None:
+                break
+        if spec is None or spec.loader is None:  # pragma: no cover
+            raise ImportError("core_engine.core_engine not found")
+    module = importlib.util.module_from_spec(spec)
+    spec.loader.exec_module(module)
+    return module
 
-    Returns:
-        A dict mapping (i,j,k) cell keys to lists of seed indices in that cell.
-    """
-    grid: Dict[Tuple[int, int, int], List[int]] = {}
-    cell_size = max(2 * spacing, 1e-9)
-    for idx, (x, y, z) in enumerate(seeds):
-        i = math.floor(x / cell_size)
-        j = math.floor(y / cell_size)
-        k = math.floor(z / cell_size)
-        key = (i, j, k)
-        grid.setdefault(key, []).append(idx)
-    return grid
+_core = _load_core_engine()
+prune_adjacency_via_grid = _core.prune_adjacency_via_grid
 
-
-# --- Prune adjacency using spatial hash grid (efficient) ---
-def prune_adjacency_via_grid(
-    seeds: List[Tuple[float, float, float]],
-    spacing: float
-) -> List[Tuple[int, int]]:
-    """
-    Prune adjacency by only checking seeds in the same or neighboring spatial hash cells.
-    Args:
-        seeds: list of (x,y,z) seed coordinates
-        spacing: target minimal seed spacing (r)
-    Returns:
-        List of undirected edges (i,j) where j>i and distance ≤ 2*spacing.
-    """
-    # build cell grid
-    grid = build_spatial_index(seeds, spacing)
-    edges = []
-    max_dist2 = (2 * spacing) ** 2
-    # neighbor cell offsets (3×3×3)
-    neighbor_offsets = [(di, dj, dk)
-                        for di in (-1, 0, 1)
-                        for dj in (-1, 0, 1)
-                        for dk in (-1, 0, 1)]
-    # for each cell and its seeds
-    for cell_key, idx_list in grid.items():
-        i0, j0, k0 = cell_key
-        # gather seeds in neighboring cells
-        for di, dj, dk in neighbor_offsets:
-            neighbor_key = (i0 + di, j0 + dj, k0 + dk)
-            for idx in idx_list:
-                for jdx in grid.get(neighbor_key, []):
-                    if jdx > idx:
-                        x0, y0, z0 = seeds[idx]
-                        x1, y1, z1 = seeds[jdx]
-                        dx = x0 - x1
-                        dy = y0 - y1
-                        dz = z0 - z1
-                        if dx*dx + dy*dy + dz*dz <= max_dist2:
-                            edges.append((idx, jdx))
-    return edges
 
 
 import logging
