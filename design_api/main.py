@@ -125,8 +125,8 @@ async def review(req: dict, sid: Optional[str] = None):
         for node in spec:
             inf = node.get("modifiers", {}).get("infill", {})
             pts = inf.get("seed_points")
-            bbox_min = inf.get("bbox_min") or inf.get("bboxMin")
-            bbox_max = inf.get("bbox_max") or inf.get("bboxMax")
+            bbox_min = inf.get("bbox_min")
+            bbox_max = inf.get("bbox_max")
             logging.debug(f"pts {pts} bbox_min {bbox_min} bbox_max {bbox_max}")
 
             if pts and bbox_min and bbox_max:
@@ -224,8 +224,8 @@ async def update(req: UpdateRequest):
     for node in new_spec:
         inf = node.get("modifiers", {}).get("infill", {})
         pts = inf.get("seed_points")
-        bbox_min = inf.get("bbox_min") or inf.get("bboxMin")
-        bbox_max = inf.get("bbox_max") or inf.get("bboxMax")
+        bbox_min = inf.get("bbox_min")
+        bbox_max = inf.get("bbox_max")
         if pts and bbox_min and bbox_max:
             pattern = inf.get("pattern")
             if pattern == "voronoi":

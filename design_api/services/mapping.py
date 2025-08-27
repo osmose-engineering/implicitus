@@ -79,6 +79,8 @@ def map_primitive(node: dict) -> dict:
     if 'infill' in modifiers:
         logger.debug(f"Applying infill with params: {modifiers.get('infill')}")
         infill_params = modifiers['infill']
+        if 'bboxMin' in infill_params or 'bboxMax' in infill_params:
+            raise SomeMappingError("Bounding box keys must use snake_case (bbox_min/bbox_max)")
         root = {
             "booleanOp": {"intersection": {}},
             "children": [

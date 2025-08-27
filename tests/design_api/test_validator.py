@@ -17,3 +17,17 @@ def test_validate_missing_root():
         assert hasattr(msg, 'root')
     except ValidationError:
         pytest.skip("Missing root raises ValidationError")
+
+
+def test_rejects_mixed_case_keys():
+    spec = map_primitive({"shape": "sphere", "size_mm": 10})
+    spec["root"]["bboxMin"] = [0, 0, 0]
+    with pytest.raises(ValidationError):
+        validate_model_spec(spec)
+
+
+def test_rejects_unknown_keys():
+    spec = map_primitive({"shape": "sphere", "size_mm": 10})
+    spec["root"]["unknown_field"] = 123
+    with pytest.raises(ValidationError):
+        validate_model_spec(spec)

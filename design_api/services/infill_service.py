@@ -50,16 +50,16 @@ def generate_voronoi(spec: Dict[str, Any]) -> Dict[str, Any]:
         "seed_points": pts,
         "edges": edge_list,
         "cells": spec.get("cells"),
-        "bbox_min": spec.get("bbox_min") or spec.get("bboxMin"),
-        "bbox_max": spec.get("bbox_max") or spec.get("bboxMax"),
+        "bbox_min": spec.get("bbox_min"),
+        "bbox_max": spec.get("bbox_max"),
     }
 
 
 def generate_hex_lattice(spec: Dict[str, Any]) -> Dict[str, Any]:
     """Generate a hexagonal lattice for the given spec and return adjacency."""
 
-    bbox_min = spec.get("bbox_min") or spec.get("bboxMin")
-    bbox_max = spec.get("bbox_max") or spec.get("bboxMax")
+    bbox_min = spec.get("bbox_min")
+    bbox_max = spec.get("bbox_max")
     spacing = spec.get("spacing") or spec.get("min_dist") or 2.0
     primitive = spec.get("primitive", {})
     mode = spec.get("mode", "uniform")
@@ -83,9 +83,7 @@ def generate_hex_lattice(spec: Dict[str, Any]) -> Dict[str, Any]:
         "plane_normal",
         "max_distance",
         "bbox_min",
-        "bboxMax",
         "bbox_max",
-        "bboxMin",
         "seed_points",
         "use_voronoi_edges",
         "_is_voronoi",
