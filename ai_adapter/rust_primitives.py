@@ -1,3 +1,4 @@
+
 """Python bindings for Rust primitive sampling functions.
 
 This module loads the ``core_engine`` Rust extension on demand without
