@@ -62,6 +62,7 @@ import sys
 import os
 
 
+
 def _load_core_engine():
     """Import the Rust extension, building it on the fly if necessary."""
     # First, attempt to import if it's already installed in site-packages
@@ -74,6 +75,7 @@ def _load_core_engine():
     # If not installed, build the cdylib with cargo and load directly
     crate_dir = pathlib.Path(__file__).resolve().parents[4] / "core_engine"
     try:
+
         env = os.environ.copy()
         env.setdefault("PYO3_USE_ABI3_FORWARD_COMPATIBILITY", "1")
         subprocess.run(
@@ -84,6 +86,7 @@ def _load_core_engine():
             stdout=subprocess.PIPE,
             stderr=subprocess.PIPE,
         )
+
     except Exception as exc:  # pragma: no cover - build failure
         raise ImportError("core_engine.core_engine build failed") from exc
 
@@ -102,6 +105,7 @@ def _load_core_engine():
     spec = importlib.util.spec_from_loader("core_engine.core_engine", loader)
     module = importlib.util.module_from_spec(spec)
     loader.exec_module(module)
+
     return module
 
 _core = _load_core_engine()
