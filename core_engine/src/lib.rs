@@ -79,5 +79,7 @@ fn core_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
 
     m.add_function(wrap_pyfunction!(voronoi::sampling::sample_seed_points, m)?)?;
     m.add_function(wrap_pyfunction!(voronoi::sampling::prune_adjacency_via_grid, m)?)?;
+    m.add_function(wrap_pyfunction!(voronoi::cells::construct_voronoi_cells, m)?)?;
+    m.add_function(wrap_pyfunction!(voronoi::cells::construct_surface_voronoi_cells, m)?)?;
     Ok(())
 }
