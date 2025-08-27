@@ -1,4 +1,4 @@
-// src/lib.rs
+use pyo3::prelude::*;
 
 // Import the generated Protobuf definitions
 pub mod implicitus {
@@ -8,6 +8,7 @@ pub mod implicitus {
 use implicitus::Model;
 use implicitus::node::Body;
 use implicitus::primitive::Shape;
+pub mod voronoi;
 
 // A very basic SDF evaluator that handles a few primitive shapes.
 pub fn evaluate_sdf(model: &Model, x: f64, y: f64, z: f64) -> f64 {
@@ -71,3 +72,10 @@ pub fn voronoi_mesh(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
 }
 
 pub mod slice;
+
+#[pymodule]
+fn core_engine(_py: Python, m: &PyModule) -> PyResult<()> {
+    m.add_function(wrap_pyfunction!(voronoi::sampling::sample_seed_points, m)?)?;
+    m.add_function(wrap_pyfunction!(voronoi::sampling::prune_adjacency_via_grid, m)?)?;
+    Ok(())
+}
