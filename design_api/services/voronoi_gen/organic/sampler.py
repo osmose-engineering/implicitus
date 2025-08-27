@@ -59,6 +59,8 @@ import importlib.machinery
 import pathlib
 import subprocess
 import sys
+import os
+
 
 
 def _load_core_engine():
@@ -73,7 +75,18 @@ def _load_core_engine():
     # If not installed, build the cdylib with cargo and load directly
     crate_dir = pathlib.Path(__file__).resolve().parents[4] / "core_engine"
     try:
-        subprocess.run(["cargo", "build"], cwd=crate_dir, check=True, stdout=subprocess.PIPE, stderr=subprocess.PIPE)
+
+        env = os.environ.copy()
+        env.setdefault("PYO3_USE_ABI3_FORWARD_COMPATIBILITY", "1")
+        subprocess.run(
+            ["cargo", "build"],
+            cwd=crate_dir,
+            env=env,
+            check=True,
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+        )
+
     except Exception as exc:  # pragma: no cover - build failure
         raise ImportError("core_engine.core_engine build failed") from exc
 
