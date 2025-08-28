@@ -49,10 +49,17 @@ Implicitus provides a fully implicit pipeline for manufacturing design, enabling
 **Setup & Run**
 
 ```bash
-# 1) Start the Rust slicer service
+# 1a) Start the Rust slicer service
 cd core_engine
 cargo build
 cargo run --bin slicer_server   # listens on port 4000
+
+# 1b) Start the API Server) Start the Rust slicer service
+uvicorn design_api.main:app --host 127.0.0.1 --port 8000 --reload   # listens on port 8000
+
+# 1c) Start the UI Server
+cd implicitus_ui
+npm run dev # listens on port 3000
 
 # 2) Start the Canvas API
 cd ../canvas_api
