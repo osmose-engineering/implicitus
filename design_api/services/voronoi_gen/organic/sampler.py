@@ -78,6 +78,7 @@ def _load_core_engine():
 
         env = os.environ.copy()
         env.setdefault("PYO3_USE_ABI3_FORWARD_COMPATIBILITY", "1")
+        env.setdefault("PYO3_PYTHON", sys.executable)
         subprocess.run(
             ["cargo", "build"],
             cwd=crate_dir,
