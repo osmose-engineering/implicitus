@@ -44,7 +44,15 @@ fn hex_lattice(
 // -----------------------------------------------------------------------------
 // Poisson-disk sampling (simplified Bridson)
 // -----------------------------------------------------------------------------
-#[pyfunction]
+#[pyfunction(signature = (
+    num_points,
+    bbox_min,
+    bbox_max,
+    density_field=None,
+    min_dist=None,
+    max_trials=None,
+    pattern=None
+))]
 pub fn sample_seed_points(
     py: Python<'_>,
     num_points: usize,

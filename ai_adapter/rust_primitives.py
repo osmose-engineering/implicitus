@@ -31,7 +31,14 @@ def _load_core_engine() -> ModuleType:
     env = os.environ.copy()
     env.setdefault("PYO3_USE_ABI3_FORWARD_COMPATIBILITY", "1")
     env.setdefault("PYO3_PYTHON", sys.executable)
-    subprocess.run(["cargo", "build"], cwd=crate_dir, env=env, check=True)
+
+    subprocess.run(
+        ["cargo", "build", "--features", "extension-module"],
+        cwd=crate_dir,
+        env=env,
+        check=True,
+    )
+
 
     if sys.platform.startswith("win"):
         lib_name = "core_engine.dll"
