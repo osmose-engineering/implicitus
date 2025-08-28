@@ -40,6 +40,7 @@ struct VoronoiResponse {
 
 #[tokio::main]
 async fn main() {
+    pyo3::prepare_freethreaded_python();
     // POST /slice  with JSON body to perform slicing
     let slice_route = warp::post()
         .and(warp::path("slice"))
