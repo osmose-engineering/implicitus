@@ -1,7 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
-use numpy::IntoPyArray;
-use ndarray::Array3;
+use numpy::{ndarray::Array3, PyArray3};
 use rayon::prelude::*;
 use std::collections::HashSet;
 use std::cmp::{min, max};
@@ -16,7 +15,13 @@ fn index(i: usize, j: usize, k: usize, ny: usize, nz: usize) -> usize {
     i * ny * nz + j * nz + k
 }
 
-#[pyfunction]
+#[pyfunction(signature = (
+    points,
+    bbox_min,
+    bbox_max,
+    resolution=None,
+    wall_thickness=None
+))]
 pub fn construct_voronoi_cells(
     py: Python<'_>,
     points: Vec<(f64,f64,f64)>,
@@ -94,9 +99,10 @@ pub fn construct_voronoi_cells(
 
     let mut cells: Vec<PyObject> = Vec::new();
     for (ci, seed) in points.iter().enumerate() {
-        let arr = Array3::from_shape_vec((nx,ny,nz), grids[ci].clone())
-            .unwrap()
-            .into_pyarray_bound(py);
+        let arr = PyArray3::from_owned_array_bound(
+            py,
+            Array3::from_shape_vec((nx, ny, nz), grids[ci].clone()).unwrap(),
+        );
         let dict = PyDict::new_bound(py);
         dict.set_item("site", seed)?;
         dict.set_item("sdf", arr)?;
@@ -108,7 +114,13 @@ pub fn construct_voronoi_cells(
     Ok((cells, edges, neighbors))
 }
 
-#[pyfunction]
+#[pyfunction(signature = (
+    points,
+    bbox_min,
+    bbox_max,
+    resolution=None,
+    wall_thickness=None
+))]
 pub fn construct_surface_voronoi_cells(
     py: Python<'_>,
     points: Vec<(f64,f64,f64)>,
@@ -168,9 +180,10 @@ pub fn construct_surface_voronoi_cells(
 
     let mut cells: Vec<PyObject>=Vec::new();
     for (ci, seed) in points.iter().enumerate() {
-        let arr = Array3::from_shape_vec((nx,ny,nz), grids[ci].clone())
-            .unwrap()
-            .into_pyarray_bound(py);
+        let arr = PyArray3::from_owned_array_bound(
+            py,
+            Array3::from_shape_vec((nx, ny, nz), grids[ci].clone()).unwrap(),
+        );
         let dict = PyDict::new_bound(py);
         dict.set_item("site", seed)?;
         dict.set_item("sdf", arr)?;
