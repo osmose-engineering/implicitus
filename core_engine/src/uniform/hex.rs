@@ -1,6 +1,6 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
-use numpy::{PyReadonlyArray2, PyReadonlyArray1, PyArray1, PyArray2};
+use numpy::{PyReadonlyArray2, PyReadonlyArray1, PyArray1, PyArray2, PyArrayMethods};
 use std::collections::{HashMap, HashSet};
 
 fn hexagon_metrics(pts: &Vec<[f64;3]>) -> (Vec<f64>, f64, f64, f64) {
@@ -71,7 +71,7 @@ pub fn compute_uniform_cells(
     return_status: bool,
     return_edges: bool,
 ) -> PyResult<PyObject> {
-    let module = py.import("design_api.services.voronoi_gen.uniform.construct")?;
+    let module = py.import_bound("design_api.services.voronoi_gen.uniform.construct")?;
     let compute_medial_axis = module.getattr("compute_medial_axis")?;
     let trace_hexagon = module.getattr("trace_hexagon")?;
     let dump_fn = module.getattr("dump_uniform_cell_map")?;
@@ -84,41 +84,41 @@ pub fn compute_uniform_cells(
     let plane_vec = plane_normal.as_array();
     let plane_list = vec![plane_vec[0], plane_vec[1], plane_vec[2]];
 
-    let dump_cells = PyDict::new(py);
-    let dump_data = PyDict::new(py);
+    let dump_cells = PyDict::new_bound(py);
+    let dump_data = PyDict::new_bound(py);
     dump_data.set_item("seeds", &seed_list)?;
     dump_data.set_item("plane_normal", &plane_list)?;
     dump_data.set_item("max_distance", max_distance)?;
     dump_data.set_item("medial_points", medial_points.clone_ref(py))?;
-    dump_data.set_item("cells", dump_cells)?;
-    let fallback_list = PyList::empty(py);
+    dump_data.set_item("cells", dump_cells.clone())?;
+    let fallback_list = PyList::empty_bound(py);
     dump_data.set_item("fallback_indices", fallback_list)?;
-    let failed_list = PyList::empty(py);
+    let failed_list = PyList::empty_bound(py);
     dump_data.set_item("failed_indices", failed_list)?;
     let _ = vertex_tolerance;
 
     let mut all_vertices: Vec<[f64;3]> = Vec::new();
     let mut cell_slices: HashMap<usize,(usize,usize)> = HashMap::new();
-    let cells_out = PyDict::new(py);
+    let cells_out = PyDict::new_bound(py);
 
     for (idx, seed) in seed_list.iter().enumerate() {
-        let seed_arr = PyArray1::from_slice(py, seed);
-        let plane_arr = PyArray1::from_slice(py, &plane_list);
+        let seed_arr = PyArray1::from_slice_bound(py, seed);
+        let plane_arr = PyArray1::from_slice_bound(py, &plane_list);
         let mut args: Vec<PyObject> = vec![
             seed_arr.into_py(py),
             medial_points.clone_ref(py),
             plane_arr.into_py(py),
         ];
         if let Some(md) = max_distance { args.push(md.into_py(py)); }
-        let kwargs = PyDict::new(py);
+        let kwargs = PyDict::new_bound(py);
         kwargs.set_item("report_method", true)?;
         kwargs.set_item("return_raw", true)?;
-        let result = trace_hexagon.call(PyTuple::new(py, args), Some(kwargs))?;
-        let tpl: &PyTuple = result.downcast()?;
+        let result = trace_hexagon.call(PyTuple::new_bound(py, &args), Some(&kwargs))?;
+        let tpl = result.downcast::<PyTuple>()?.clone();
         let hex_pts = tpl.get_item(0)?;
         let used_fallback: bool = tpl.get_item(1)?.extract()?;
         let raw_hex = tpl.get_item(2)?;
-        let hex_array: &PyArray2<f64> = hex_pts.downcast()?;
+        let hex_array = hex_pts.downcast::<PyArray2<f64>>()?.clone();
         let hex_vec = unsafe { hex_array.as_array() };
         let mut pts_vec: Vec<[f64;3]> = Vec::new();
         for row in hex_vec.outer_iter() {
@@ -129,11 +129,11 @@ pub fn compute_uniform_cells(
         let end = all_vertices.len();
         cell_slices.insert(idx, (start, end));
         let (edge_lengths, mean_edge, std_edge, area) = hexagon_metrics(&pts_vec);
-        let cell_info = PyDict::new(py);
+        let cell_info = PyDict::new_bound(py);
         cell_info.set_item("seed", seed)?;
-        cell_info.set_item("vertices", hex_pts)?;
+        cell_info.set_item("vertices", hex_pts.clone())?;
         cell_info.set_item("raw_vertices", raw_hex)?;
-        let metrics = PyDict::new(py);
+        let metrics = PyDict::new_bound(py);
         metrics.set_item("edge_lengths", edge_lengths)?;
         metrics.set_item("mean_edge_length", mean_edge)?;
         metrics.set_item("std_edge_length", std_edge)?;
@@ -149,16 +149,28 @@ pub fn compute_uniform_cells(
     let _ = dump_fn.call1((dump_data,));
 
     if return_status && return_edges {
-        let tuple = PyTuple::new(py, &[cells_out.into_py(py), edges.clone().into_py(py), 0i32.into_py(py), PyList::empty(py).into_py(py)]);
-        return Ok(tuple.into());
+        let tuple = PyTuple::new_bound(py, &[
+            cells_out.clone().into_py(py),
+            edges.clone().into_py(py),
+            0i32.into_py(py),
+            PyList::empty_bound(py).into_py(py),
+        ]);
+        return Ok(tuple.into_py(py));
     }
     if return_status {
-        let tuple = PyTuple::new(py, &[cells_out.into_py(py), 0i32.into_py(py), PyList::empty(py).into_py(py)]);
-        return Ok(tuple.into());
+        let tuple = PyTuple::new_bound(py, &[
+            cells_out.clone().into_py(py),
+            0i32.into_py(py),
+            PyList::empty_bound(py).into_py(py),
+        ]);
+        return Ok(tuple.into_py(py));
     }
     if return_edges {
-        let tuple = PyTuple::new(py, &[cells_out.into_py(py), edges.into_py(py)]);
-        return Ok(tuple.into());
+        let tuple = PyTuple::new_bound(py, &[
+            cells_out.into_py(py),
+            edges.into_py(py),
+        ]);
+        return Ok(tuple.into_py(py));
     }
     Ok(cells_out.into_py(py))
 }
