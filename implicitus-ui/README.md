@@ -3,6 +3,17 @@
 
 This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
 
+## Getting Started
+
+This UI requires **Node.js 18.18 or newer**. To launch the development server:
+
+```bash
+npm install
+npm run dev
+```
+
+`npm run dev` starts the Vite server. Running `npm install dev` will try to install a package named `dev` which depends on the Linux-only `inotify` module and fails on macOS.
+
 ## Current Progress
 
 Our application now includes a full-featured Voronoi lattice generation backend with the following capabilities:
