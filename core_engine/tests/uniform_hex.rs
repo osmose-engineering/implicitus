@@ -38,7 +38,9 @@ fn make_mesh<'py>(py: Python<'py>) -> PyResult<PyObject> {
 
 #[test]
 fn test_compute_uniform_cells_basic() {
+
     init_python();
+
     Python::with_gil(|py| {
         let core = py.import("core_engine").unwrap();
         let func = core.getattr("compute_uniform_cells").unwrap();
@@ -61,8 +63,9 @@ fn test_compute_uniform_cells_basic() {
 }
 
 #[test]
-fn test_edges_generated_for_simple_seed() {
+
     init_python();
+
     Python::with_gil(|py| {
         let core = py.import("core_engine").unwrap();
         let func = core.getattr("compute_uniform_cells").unwrap();
@@ -84,7 +87,9 @@ fn test_edges_generated_for_simple_seed() {
 
 #[test]
 fn test_uniform_dump_file_created() {
+
     init_python();
+
     Python::with_gil(|py| {
         let core = py.import("core_engine").unwrap();
         let func = core.getattr("compute_uniform_cells").unwrap();
