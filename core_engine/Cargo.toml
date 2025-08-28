@@ -5,6 +5,7 @@ edition = "2021"
 
 [build-dependencies]
 prost-build = "0.11"
+pyo3-build-config = { version = "0.21", features = ["resolve-config"] }
 
 [dependencies]
 prost = "0.11"
