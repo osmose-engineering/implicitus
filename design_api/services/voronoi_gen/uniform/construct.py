@@ -6,7 +6,58 @@ from typing import Any, Dict
 from pathlib import Path
 
 from .sampler import compute_medial_axis, trace_hexagon
-from core_engine import compute_uniform_cells as _compute_uniform_cells
+
+import importlib
+import importlib.machinery
+import importlib.util
+import pathlib
+import subprocess
+import sys
+
+
+def _load_core_engine():
+    """Import the Rust extension, building it on demand if needed."""
+    try:
+        module = importlib.import_module("core_engine")
+        if module:
+            return module
+    except ModuleNotFoundError:
+        spec = importlib.util.find_spec("core_engine.core_engine")
+        if spec and spec.loader:
+            module = importlib.util.module_from_spec(spec)
+            spec.loader.exec_module(module)
+            return module
+
+    crate_dir = pathlib.Path(__file__).resolve().parents[4] / "core_engine"
+    env = os.environ.copy()
+    env.setdefault("PYO3_USE_ABI3_FORWARD_COMPATIBILITY", "1")
+    env.setdefault("PYO3_PYTHON", sys.executable)
+    subprocess.run(
+        ["cargo", "build", "--lib", "--features", "extension-module"],
+        cwd=crate_dir,
+        env=env,
+        check=True,
+    )
+
+    if sys.platform.startswith("win"):
+        lib_name = "core_engine.dll"
+    elif sys.platform == "darwin":
+        lib_name = "libcore_engine.dylib"
+    else:
+        lib_name = "libcore_engine.so"
+
+    lib_path = crate_dir / "target" / "debug" / lib_name
+    loader = importlib.machinery.ExtensionFileLoader(
+        "core_engine.core_engine", str(lib_path)
+    )
+    spec = importlib.util.spec_from_loader("core_engine.core_engine", loader)
+    module = importlib.util.module_from_spec(spec)
+    loader.exec_module(module)
+    return module
+
+
+_core = _load_core_engine()
+_compute_uniform_cells_rust = _core.compute_uniform_cells
 
 
 def dump_uniform_cell_map(dump_data: Dict[str, Any]) -> None:
@@ -47,6 +98,6 @@ def dump_uniform_cell_map(dump_data: Dict[str, Any]) -> None:
 
 
 # Expose the Rust implementation while keeping helpers available for monkeypatching
-compute_uniform_cells = _compute_uniform_cells
+compute_uniform_cells = _compute_uniform_cells_rust
 
 __all__ = ["compute_uniform_cells", "dump_uniform_cell_map", "compute_medial_axis", "trace_hexagon"]
