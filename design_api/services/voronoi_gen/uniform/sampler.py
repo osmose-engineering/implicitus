@@ -234,6 +234,7 @@ def trace_hexagon(
     # Pre-compute bounding box of the medial points for ray fallback
     bbox_min = medial_points.min(axis=0)
     bbox_max = medial_points.max(axis=0)
+    bbox_diag = float(np.linalg.norm(bbox_max - bbox_min))
 
     def _ray_box_intersection(origin: np.ndarray, direction: np.ndarray) -> Optional[float]:
         """Return distance to intersection with bbox or None if no hit."""
@@ -302,12 +303,15 @@ def trace_hexagon(
         for theta in angles:
             dir_vec = np.cos(theta) * u + np.sin(theta) * v
             length = _ray_box_intersection(seed_pt, dir_vec)
-            if length is not None:
-                hex_pts.append(seed_pt + dir_vec * length)
-            elif max_distance is not None:
-                hex_pts.append(seed_pt + dir_vec * max_distance)
+            if length is None:
+                fallback = (
+                    max_distance
+                    if max_distance is not None
+                    else (bbox_diag if bbox_diag > 0 else 1.0)
+                )
+                hex_pts.append(seed_pt + dir_vec * fallback)
             else:
-                raise ValueError("No valid intersection for ray; resample seed point")
+                hex_pts.append(seed_pt + dir_vec * length)
         hex_pts = np.vstack(hex_pts)
         hex_success = False
 

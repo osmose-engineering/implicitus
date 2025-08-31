@@ -180,12 +180,15 @@ def test_hexagons_share_vertices_with_adjacent_seeds():
     assert 0 in close2
 
 
-def test_trace_hexagon_no_intersection_error():
+def test_trace_hexagon_no_intersection_uses_fallback():
     seed = np.array([0.0, 0.0, 0.0])
     medial = np.tile(np.array([-1.0, 0.0, 0.0]), (10, 1))
     plane_normal = np.array([0.0, 0.0, 1.0])
-    with pytest.raises(ValueError):
-        trace_hexagon(seed, medial, plane_normal)
+    pts, used_fallback = trace_hexagon(
+        seed, medial, plane_normal, report_method=True
+    )
+    assert used_fallback is True
+    assert pts.shape == (6, 3)
 
 
 def test_trace_hexagon_origin_medial_cluster(monkeypatch):
