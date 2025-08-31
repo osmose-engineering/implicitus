@@ -33,7 +33,8 @@ def _load_core_engine() -> ModuleType:
     env.setdefault("PYO3_PYTHON", sys.executable)
 
     subprocess.run(
-        ["cargo", "build", "--features", "extension-module"],
+        ["cargo", "build", "--lib", "--features", "extension-module"],
+
         cwd=crate_dir,
         env=env,
         check=True,
