@@ -14,6 +14,16 @@ npm run dev
 
 `npm run dev` starts the Vite server. Running `npm install dev` will try to install a package named `dev` which depends on the Linux-only `inotify` module and fails on macOS.
 
+## Running Tests
+
+Use [Vitest](https://vitest.dev) to execute the UI unit tests:
+
+```bash
+npm test
+# or
+npx vitest
+```
+
 ## Current Progress
 
 Our application now includes a full-featured Voronoi lattice generation backend with the following capabilities:

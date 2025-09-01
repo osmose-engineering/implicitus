@@ -102,6 +102,17 @@ curl "http://localhost:3000/models/test_sphere/slices?layer=0.0&nx=5&ny=5"
 cd ../
 python3 test_slice.py
 
+## UI Unit Tests
+
+Execute the frontend test suite with [Vitest](https://vitest.dev):
+
+```bash
+cd implicitus-ui
+npm test
+# or
+npx vitest
+```
+
 ## Logging
 
 The Design API configures Python logging before any Voronoi utilities are
