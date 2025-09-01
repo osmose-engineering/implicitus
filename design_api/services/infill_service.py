@@ -135,7 +135,7 @@ def generate_hex_lattice(spec: Dict[str, Any]) -> Dict[str, Any]:
             }
         )
 
-    seed_pts, _, _, cells = build_hex_lattice(
+    seed_pts, cell_vertices, edge_list, cells = build_hex_lattice(
         bbox_min,
         bbox_max,
         spacing,
@@ -143,6 +143,16 @@ def generate_hex_lattice(spec: Dict[str, Any]) -> Dict[str, Any]:
         **lattice_kwargs,
         **extra_kwargs,
     )
+
+    if use_voronoi_edges:
+        return {
+            "seed_points": seed_pts,
+            "vertices": cell_vertices,
+            "edges": edge_list,
+            "cells": cells,
+            "bbox_min": bbox_min,
+            "bbox_max": bbox_max,
+        }
 
     adjacency = compute_voronoi_adjacency(seed_pts, spacing=spacing * 0.5)
     edge_list = _edge_list_from_adjacency(adjacency)
