@@ -217,6 +217,18 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
   const validCells = Array.isArray(safeCells)
     ? safeCells.filter(c => Array.isArray(c?.verts) && Array.isArray(c?.faces))
     : [];
+
+  const voronoiSpec = useMemo(() => ({
+    pattern: 'voronoi',
+    seed_points: validSeedPoints,
+    bbox_min: [bbox[0], bbox[1], bbox[2]],
+    bbox_max: [bbox[3], bbox[4], bbox[5]],
+    use_voronoi_edges: true,
+  }), [validSeedPoints, bbox]);
+
+  useEffect(() => {
+    DEBUG_CANVAS && console.log('VoronoiCanvas infill spec:', voronoiSpec);
+  }, [voronoiSpec]);
   DEBUG_CANVAS && console.log('VoronoiCanvas validInfillPoints count:', validInfillPoints.length);
   DEBUG_CANVAS && console.log('VoronoiCanvas validInfillEdges count:', validInfillEdges.length);
   DEBUG_CANVAS && console.log('VoronoiCanvas validCells count:', validCells.length);
