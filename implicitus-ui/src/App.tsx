@@ -74,9 +74,18 @@ function App() {
   const seedPoints: [number, number, number][] =
     spec[0]?.modifiers?.infill?.seed_points ?? [];
   const edges = meshEdges;
-  // Fetch mesh from core_engine whenever spec seed points change
+  // Use geometry from the spec when available; otherwise, fetch from the
+  // ``core_engine`` service using the seed points.
   useEffect(() => {
-    const seeds = spec[0]?.modifiers?.infill?.seed_points;
+    const infill = spec[0]?.modifiers?.infill;
+    const verts = infill?.vertices;
+    const edgeList = infill?.edges;
+    if (Array.isArray(verts) && verts.length && Array.isArray(edgeList) && edgeList.length) {
+      setMeshVertices(verts);
+      setMeshEdges(edgeList);
+      return; // geometry already provided in spec; skip fetch
+    }
+    const seeds = infill?.seed_points;
     if (seeds && seeds.length > 0) {
       fetch('http://localhost:4000/voronoi', {
         method: 'POST',
