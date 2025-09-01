@@ -48,6 +48,7 @@ def generate_voronoi(spec: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "seed_points": pts,
+        "vertices": pts,
         "edges": edge_list,
         "cells": spec.get("cells"),
         "bbox_min": spec.get("bbox_min"),

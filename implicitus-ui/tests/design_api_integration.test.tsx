@@ -69,6 +69,7 @@ describe('design_api integration with VoronoiCanvas', () => {
     const body = await resp.json();
     const infill = body.spec[0].modifiers.infill;
     expect(infill.edges.length).toBeGreaterThan(0);
+    expect(infill.vertices.length).toBeGreaterThan(0);
 
     render(
       <VoronoiCanvas

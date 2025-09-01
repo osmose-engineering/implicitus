@@ -58,6 +58,15 @@ except Exception:  # pragma: no cover - fall back to a stub
 
 import re
 
+# Ensure any infill that includes edges also exposes a matching vertex list.
+def _ensure_vertices_for_edges(nodes):
+    for node in nodes:
+        infill = node.get('modifiers', {}).get('infill')
+        if isinstance(infill, dict) and 'edges' in infill and 'vertices' not in infill:
+            verts = infill.get('seed_points')
+            if verts is not None:
+                infill['vertices'] = verts
+
 # declarative requirements for primitives and modifiers
 PRIMITIVE_REQUIREMENTS = {
     "sphere": {"oneOf": [["size_mm", "radius_mm"]]},
@@ -564,12 +573,14 @@ def review_request(request_data):
     ):
         interpreted = interpret_llm_request(request_data)
         spec = interpreted.get("primitives", [])
+        _ensure_vertices_for_edges(spec)
         summary = generate_summary(spec)
         return spec, summary
 
     # Manual JSON-only spec from UI: just summarize and return
     if isinstance(request_data, dict) and "spec" in request_data:
         spec = request_data["spec"]
+        _ensure_vertices_for_edges(spec)
         summary = generate_summary(spec)
         return spec, summary
 
@@ -589,6 +600,7 @@ def review_request(request_data):
                 infill.setdefault('bbox_min', list(bbox_min))
                 infill.setdefault('bbox_max', list(bbox_max))
                 infill.setdefault('uniform', True)
+        _ensure_vertices_for_edges(nodes)
         summary = generate_summary(nodes)
         return nodes, summary
 
@@ -617,6 +629,7 @@ def review_request(request_data):
             response["sid"] = sid
         return response
     spec = interpreted.get("primitives", [])
+    _ensure_vertices_for_edges(spec)
     summary = generate_summary(spec)
     return spec, summary
 
