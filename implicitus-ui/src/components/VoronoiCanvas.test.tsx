@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { describe, it, expect } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import { generateHexTest3D, computeFilteredEdges } from './VoronoiCanvas';
 import VoronoiCanvas from './VoronoiCanvas';
@@ -41,5 +41,21 @@ describe('VoronoiCanvas warning', () => {
       <VoronoiCanvas seedPoints={[]} edges={[]} bbox={[0, 0, 0, 1, 1, 1]} />
     );
     expect(screen.getByTestId('no-edges-warning')).toBeTruthy();
+  });
+
+  it('logs a warning when vertices are absent', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    render(
+      <VoronoiCanvas
+        seedPoints={[]}
+        vertices={[]}
+        edges={[[0, 1]]}
+        bbox={[0, 0, 0, 1, 1, 1]}
+      />
+    );
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('no vertices provided')
+    );
+    warn.mockRestore();
   });
 });

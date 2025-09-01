@@ -241,7 +241,19 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
   DEBUG_CANVAS && console.log('VoronoiCanvas sample validSeedPoints (first 5):', validSeedPoints.slice(0,5));
   // Filter out long edges to avoid hairball: only keep edges shorter than ~1.5× the average edge length
   const filteredEdges = useMemo(() => {
-    DEBUG_CANVAS && console.log('VoronoiCanvas useMemo input:', { validVertices, validEdges, edgeLengthThreshold });
+    if (validVertices.length === 0) {
+      validEdges.length > 0 &&
+        console.warn(
+          'VoronoiCanvas: no vertices provided; skipping edge filtering and strut geometry.'
+        );
+      return [];
+    }
+    DEBUG_CANVAS &&
+      console.log('VoronoiCanvas useMemo input:', {
+        validVertices,
+        validEdges,
+        edgeLengthThreshold,
+      });
     return computeFilteredEdges(validVertices, validEdges, edgeLengthThreshold);
   }, [validEdges, validVertices, edgeLengthThreshold]);
   DEBUG_CANVAS && console.log('VoronoiCanvas filteredEdges count:', filteredEdges.length);
