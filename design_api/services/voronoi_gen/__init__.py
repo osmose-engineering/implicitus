@@ -12,6 +12,7 @@ __all__ = [
     "smooth_union",
     "_call_sdf",
     "OctreeNode",
+    "generate_adaptive_grid",
 ]
 
 _LAZY_ATTRS = {
@@ -22,6 +23,7 @@ _LAZY_ATTRS = {
     "smooth_union",
     "_call_sdf",
     "OctreeNode",
+    "generate_adaptive_grid",
 }
 
 

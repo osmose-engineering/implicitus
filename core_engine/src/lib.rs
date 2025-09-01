@@ -5,12 +5,13 @@ pub mod implicitus {
     include!(concat!(env!("OUT_DIR"), "/implicitus.rs"));
 }
 
-use implicitus::Model;
 use implicitus::node::Body;
 use implicitus::primitive::Shape;
-pub mod voronoi;
-pub mod uniform;
+use implicitus::Model;
 pub mod primitives;
+pub mod spatial;
+pub mod uniform;
+pub mod voronoi;
 
 // A very basic SDF evaluator that handles a few primitive shapes.
 pub fn evaluate_sdf(model: &Model, x: f64, y: f64, z: f64) -> f64 {
@@ -22,7 +23,7 @@ pub fn evaluate_sdf(model: &Model, x: f64, y: f64, z: f64) -> f64 {
             if let Some(shape) = &p.shape {
                 match shape {
                     Shape::Sphere(s) => {
-                        let dist = (x*x + y*y + z*z).sqrt();
+                        let dist = (x * x + y * y + z * z).sqrt();
                         return dist - s.radius;
                     }
                     Shape::Box(b) => {
@@ -34,10 +35,9 @@ pub fn evaluate_sdf(model: &Model, x: f64, y: f64, z: f64) -> f64 {
                             let qx = x.abs() - hx;
                             let qy = y.abs() - hy;
                             let qz = z.abs() - hz;
-                            let outside = (qx.max(0.0).powi(2)
-                                + qy.max(0.0).powi(2)
-                                + qz.max(0.0).powi(2))
-                                .sqrt();
+                            let outside =
+                                (qx.max(0.0).powi(2) + qy.max(0.0).powi(2) + qz.max(0.0).powi(2))
+                                    .sqrt();
                             let inside = qx.max(qy.max(qz)).min(0.0);
                             return outside + inside;
                         }
@@ -77,12 +77,25 @@ pub mod slice;
 
 #[pymodule]
 pub fn core_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
-
     m.add_function(wrap_pyfunction!(voronoi::sampling::sample_seed_points, m)?)?;
-    m.add_function(wrap_pyfunction!(voronoi::sampling::prune_adjacency_via_grid, m)?)?;
-    m.add_function(wrap_pyfunction!(voronoi::cells::construct_voronoi_cells, m)?)?;
-    m.add_function(wrap_pyfunction!(voronoi::cells::construct_surface_voronoi_cells, m)?)?;
+    m.add_function(wrap_pyfunction!(
+        voronoi::sampling::prune_adjacency_via_grid,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        voronoi::cells::construct_voronoi_cells,
+        m
+    )?)?;
+    m.add_function(wrap_pyfunction!(
+        voronoi::cells::construct_surface_voronoi_cells,
+        m
+    )?)?;
     m.add_function(wrap_pyfunction!(uniform::hex::compute_uniform_cells, m)?)?;
     m.add_function(wrap_pyfunction!(primitives::sample_inside, m)?)?;
+    m.add_class::<spatial::octree::OctreeNode>()?;
+    m.add_function(wrap_pyfunction!(
+        spatial::octree::generate_adaptive_grid,
+        m
+    )?)?;
     Ok(())
 }
