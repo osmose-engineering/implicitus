@@ -1,4 +1,18 @@
-from transformers import pipeline, AutoTokenizer
+"""Inference helpers for the LLM-backed design flow.
+
+The original implementation imported ``transformers`` at module import time,
+which meant simply importing this module would fail in environments where the
+heavy ``transformers`` dependency is not installed.  Many of our tests stub out
+LLM calls and therefore shouldn't require the real library.  To make the module
+safe to import without ``transformers`` present, we attempt the import lazily
+and fall back to stubs that raise a clear error if ``generate`` is invoked
+without the dependency.
+"""
+
+try:  # pragma: no cover - exercised in integration environments
+    from transformers import pipeline, AutoTokenizer  # type: ignore
+except Exception:  # pragma: no cover - allows tests without transformers
+    pipeline = AutoTokenizer = None  # type: ignore
 
 # system-level guardrail: only emit raw JSON with shape parameters
 SYSTEM_PROMPT = {
@@ -17,11 +31,19 @@ SYSTEM_PROMPT = {
 _chat = None
 
 def _init_chat():
+    """Initialise and cache the chat pipeline.
+
+    Raises:
+        RuntimeError: if ``transformers`` is not installed.
+    """
+    if pipeline is None or AutoTokenizer is None:
+        raise RuntimeError("transformers is required for LLM inference")
+
     global _chat
     if _chat is None:
         tokenizer = AutoTokenizer.from_pretrained(
             "mistralai/Mistral-7B-Instruct-v0.3",
-            use_fast=False
+            use_fast=False,
         )
         _chat = pipeline(
             "text-generation",
@@ -58,5 +80,4 @@ def generate(prompt: str) -> str:
         raw = resp
     else:
         raise RuntimeError(f"Unexpected pipeline return type: {resp!r}")
-
     return raw.strip()
