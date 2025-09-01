@@ -146,10 +146,15 @@ def generate_hex_lattice(spec: Dict[str, Any]) -> Dict[str, Any]:
     )
 
     if use_voronoi_edges:
+        # ``build_hex_lattice`` returns vertices and edges as tuples. Convert them
+        # into plain lists so the structure can be serialized directly into
+        # JSON without relying on the caller's sanitization step.
+        verts = [list(v) for v in cell_vertices]
+        edges = [list(e) for e in edge_list]
         return {
             "seed_points": seed_pts,
-            "vertices": cell_vertices,
-            "edges": edge_list,
+            "vertices": verts,
+            "edges": edges,
             "cells": cells,
             "bbox_min": bbox_min,
             "bbox_max": bbox_max,
