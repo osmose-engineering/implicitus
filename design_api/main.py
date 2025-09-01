@@ -151,6 +151,7 @@ async def review(req: dict, sid: Optional[str] = None):
                                 "plane_normal": inf.get("plane_normal") or req.get("plane_normal"),
                                 "max_distance": inf.get("max_distance") or req.get("max_distance"),
                                 "mode": "uniform",
+                                "use_voronoi_edges": inf.get("use_voronoi_edges", False),
                             }
                         )
                     else:
@@ -247,6 +248,7 @@ async def update(req: UpdateRequest):
                             "plane_normal": inf.get("plane_normal") or req.plane_normal,
                             "max_distance": inf.get("max_distance") or req.max_distance,
                             "mode": "uniform",
+                            "use_voronoi_edges": inf.get("use_voronoi_edges", False),
                         }
                     )
                 else:
