@@ -104,15 +104,36 @@ export function generateHexTest3D(bboxMin, bboxMax, spacing) {
   return [pts, edges];
 }
 
-// Exposed for testing: remove unusually long edges relative to the average
+// Robust statistic helper -------------------------------------------------
+// Exported so tests or other modules can reason about the thresholds.
+export function robustEdgeThreshold(lengths: number[], factor: number) {
+  if (lengths.length === 0) return Infinity;
+  const sorted = [...lengths].sort((a, b) => a - b);
+  const mid = Math.floor(sorted.length / 2);
+  const median =
+    sorted.length % 2 === 0
+      ? (sorted[mid - 1] + sorted[mid]) / 2
+      : sorted[mid];
+  const q1 = sorted[Math.floor((sorted.length - 1) * 0.25)];
+  const q3 = sorted[Math.floor((sorted.length - 1) * 0.75)];
+  const iqr = q3 - q1;
+  return median + factor * iqr;
+}
+
+// Exposed for testing: remove unusually long edges using a robust threshold.
+// We also separate vertical edges so that legitimately tall struts aren’t
+// discarded simply because the z-range is large compared to x/y.
 export function computeFilteredEdges(
   points: [number, number, number][],
   edges: [number, number][],
   thresholdFactor: number = 1.5
 ) {
   if (!Array.isArray(edges) || edges.length === 0) return [];
-  const valid: [number, number][] = [];
-  const lengths: number[] = [];
+  type EdgeInfo = { edge: [number, number]; length: number; vertical: boolean };
+  const data: EdgeInfo[] = [];
+  const verticalLengths: number[] = [];
+  const otherLengths: number[] = [];
+
   for (const [i, j] of edges) {
     const pi = points[i];
     const pj = points[j];
@@ -122,13 +143,23 @@ export function computeFilteredEdges(
     const dx = xi - xj,
       dy = yi - yj,
       dz = zi - zj;
-    lengths.push(Math.sqrt(dx * dx + dy * dy + dz * dz));
-    valid.push([i, j]);
+    const length = Math.sqrt(dx * dx + dy * dy + dz * dz);
+    const vertical = Math.abs(dz) > Math.max(Math.abs(dx), Math.abs(dy));
+    data.push({ edge: [i, j], length, vertical });
+    (vertical ? verticalLengths : otherLengths).push(length);
   }
-  if (lengths.length === 0) return [];
-  const avg = lengths.reduce((sum, d) => sum + d, 0) / lengths.length;
-  const threshold = avg * thresholdFactor;
-  return valid.filter((_, idx) => lengths[idx] <= threshold);
+
+  if (data.length === 0) return [];
+
+  // Compute robust thresholds for vertical vs. non-vertical edges. Using the
+  // median and IQR keeps the estimate stable even when a few edges are wildly
+  // longer than the rest.
+  const vThreshold = robustEdgeThreshold(verticalLengths, thresholdFactor);
+  const oThreshold = robustEdgeThreshold(otherLengths, thresholdFactor);
+
+  return data
+    .filter(({ length, vertical }) => length <= (vertical ? vThreshold : oThreshold))
+    .map(({ edge }) => edge);
 }
 
 interface VoronoiCanvasProps {
@@ -239,7 +270,8 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
   const zValues = validSeedPoints.map(p => p[2]);
   DEBUG_CANVAS && console.log('VoronoiCanvas validSeedPoints z-range:', Math.min(...zValues), Math.max(...zValues));
   DEBUG_CANVAS && console.log('VoronoiCanvas sample validSeedPoints (first 5):', validSeedPoints.slice(0,5));
-  // Filter out long edges to avoid hairball: only keep edges shorter than ~1.5× the average edge length
+  // Filter out spurious edges. We use a robust median/IQR-based threshold and
+  // treat vertical edges separately so tall z-struts survive the filter.
   const filteredEdges = useMemo(() => {
     if (validVertices.length === 0) {
       validEdges.length > 0 &&
