@@ -10,5 +10,8 @@
   },
   "devDependencies": {
     "babel-plugin-glsl": "^1.0.0"
+  },
+  "scripts": {
+    "test": "npm --prefix implicitus-ui test"
   }
 }
