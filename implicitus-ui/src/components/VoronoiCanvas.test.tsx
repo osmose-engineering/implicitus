@@ -36,6 +36,32 @@ describe('VoronoiCanvas filteredEdges', () => {
     const components = alg.components(g);
     expect(components.length).toBe(1);
   });
+
+  it('keeps long vertical edges that exceed horizontal lengths', () => {
+    // A star-shaped set of short horizontal edges around a central point
+    // plus one tall vertical edge. In older implementations using a single
+    // length threshold, the vertical edge would be discarded as an outlier.
+    const pts = [
+      [0, 0, 0],   // center
+      [1, 0, 0],   // +x
+      [0, 1, 0],   // +y
+      [-1, 0, 0],  // -x
+      [0, -1, 0],  // -y
+      [0, 0, 5],   // tall z
+    ];
+    const edges = [
+      [0, 1],
+      [0, 2],
+      [0, 3],
+      [0, 4],
+      [0, 5], // vertical edge length 5
+    ];
+
+    const filtered = computeFilteredEdges(pts as any, edges as any);
+    // All edges, including the vertical one, should survive filtering.
+    expect(filtered).toContainEqual([0, 5]);
+    expect(filtered.length).toBe(edges.length);
+  });
 });
 
 describe('VoronoiCanvas warning', () => {
