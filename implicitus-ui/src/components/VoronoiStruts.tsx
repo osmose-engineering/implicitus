@@ -3,25 +3,25 @@ import * as THREE from 'three';
 
 
 export interface VoronoiStrutsProps {
-  seedPoints: [number, number, number][];
+  vertices: [number, number, number][];
   edges: [number, number][];      // list of index pairs
   strutRadius: number;
   color?: string | number;
 }
 
 export const VoronoiStruts: React.FC<VoronoiStrutsProps> = ({
-  seedPoints,
+  vertices,
   edges = [],
   strutRadius,
   color = 'white'
 }) => {
-  // Convert index‐pairs to coordinate pairs
+  // Convert index‐pairs to coordinate pairs from Voronoi vertices
   const edgePairs = useMemo(() => {
     return (edges || []).map(([i, j]) => [
-      seedPoints[i] as [number, number, number],
-      seedPoints[j] as [number, number, number]
+      vertices[i] as [number, number, number],
+      vertices[j] as [number, number, number]
     ]);
-  }, [edges, seedPoints]);
+  }, [edges, vertices]);
 
   const meshRef = useRef<THREE.InstancedMesh>(null!);
 
