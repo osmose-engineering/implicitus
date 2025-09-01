@@ -15,17 +15,20 @@ describe('VoronoiCanvas filteredEdges', () => {
     const filtered = computeFilteredEdges(pts as any, edges as any);
 
     expect(filtered.length).toBeGreaterThan(0);
-
-    const lengths = filtered.map(([i, j]) => {
+    const lengths: number[] = [];
+    let verticalCount = 0;
+    filtered.forEach(([i, j]) => {
       const [xi, yi, zi] = pts[i];
       const [xj, yj, zj] = pts[j];
       const dx = xi - xj;
       const dy = yi - yj;
       const dz = zi - zj;
-      return Math.sqrt(dx * dx + dy * dy + dz * dz);
+      lengths.push(Math.sqrt(dx * dx + dy * dy + dz * dz));
+      if (Math.abs(dz) > Math.max(Math.abs(dx), Math.abs(dy))) verticalCount++;
     });
     const unique = new Set(lengths.map(l => l.toFixed(6)));
     expect(unique.size).toBeLessThanOrEqual(2);
+    expect(verticalCount).toBeGreaterThan(0);
 
     const g = new Graph();
     pts.forEach((_, idx) => g.setNode(String(idx)));
