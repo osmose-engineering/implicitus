@@ -38,6 +38,24 @@ Implicitus provides a fully implicit pipeline for manufacturing design, enabling
   - `POST /design/submit`: Accepts a finalized spec JSON and maps it to the internal Proto, validating it for downstream processing.
 - **Next steps**: Integrate ongoing conversational edits, branch history, and diff-based review workflows.
 
+### Voronoi infill payload
+
+Responses that include Voronoi edges now also return a matching `vertices` array.
+Each entry in `edges` references two indices into this `vertices` list:
+
+```json
+{
+  "modifiers": {
+    "infill": {
+      "pattern": "voronoi",
+      "seed_points": [[0,0,0], [1,0,0]],
+      "vertices": [[0,0,0], [1,0,0]],
+      "edges": [[0,1]]
+    }
+  }
+}
+```
+
 
 ## Getting Started
 

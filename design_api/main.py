@@ -54,6 +54,7 @@ def log_turn(session_id: str, turn_type: str, raw: str, spec: list, summary: Opt
         if mods and isinstance(mods.get("infill"), dict):
             mods["infill"].pop("seed_points", None)
             mods["infill"].pop("cell_vertices", None)
+            mods["infill"].pop("vertices", None)
         scrubbed_spec.append(node_copy)
     entry["spec"] = scrubbed_spec
     if summary is not None:
