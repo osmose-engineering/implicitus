@@ -24,6 +24,20 @@ npm test
 npx vitest
 ```
 
+### Integration test binaries
+
+Some tests spawn helper servers implemented in Python and Rust. The paths to
+their binaries can be overridden with the `PYTHON` and `CARGO` environment
+variables:
+
+```bash
+PYTHON=/usr/bin/python3 CARGO=/usr/bin/cargo npm test
+```
+
+If these binaries or their dependencies are not available, the tests fall back
+to mocked HTTP responses so the rendering logic is still exercised without
+starting the real servers.
+
 ## Current Progress
 
 Our application now includes a full-featured Voronoi lattice generation backend with the following capabilities:
