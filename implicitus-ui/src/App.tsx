@@ -70,9 +70,8 @@ function App() {
   const [spec, setSpec] = useState<any[]>([]);
   const [meshVertices, setMeshVertices] = useState<[number, number, number][]>([]);
   const [meshEdges, setMeshEdges] = useState<number[][]>([]);
-  // Derive points for the Voronoi viewer, preferring fetched mesh when available
+  // Seed points remain tied to the raw spec definition
   const seedPoints: [number, number, number][] =
-    meshVertices.length > 0 ? meshVertices :
     spec[0]?.modifiers?.infill?.seed_points ?? [];
   const edges = meshEdges;
   // Fetch mesh from core_engine whenever spec seed points change
@@ -563,8 +562,9 @@ function App() {
                 <VoronoiCanvas
                   key="ray"
                   seedPoints={seedPoints}
+                  vertices={meshVertices}
                   edges={edges}
-                  infillPoints={seedPoints}
+                  infillPoints={meshVertices}
                   infillEdges={edges}
                   bbox={[0, 0, 0, 1, 1, 1]}
                   thickness={0.35}
@@ -582,8 +582,9 @@ function App() {
                 <VoronoiCanvas
                   key="strut"
                   seedPoints={seedPoints}
+                  vertices={meshVertices}
                   edges={edges}
-                  infillPoints={seedPoints}
+                  infillPoints={meshVertices}
                   infillEdges={edges}
                   bbox={[0, 0, 0, 1, 1, 1]}
                   thickness={0.35}
