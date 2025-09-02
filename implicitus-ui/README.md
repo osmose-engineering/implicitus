@@ -24,6 +24,20 @@ npm test
 npx vitest
 ```
 
+### Visual regression tests
+
+Playwright checks the `VoronoiCanvas` rendering against a committed baseline:
+
+```bash
+npm run test:playwright
+```
+
+If the rendering changes intentionally, update the snapshot with:
+
+```bash
+npx playwright test tests/voronoi_canvas.visual.spec.ts --update-snapshots
+```
+
 ### Integration test binaries
 
 Some tests spawn helper servers implemented in Python and Rust. The paths to

@@ -1,0 +1,559 @@
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
+diff --git a/implicitus-ui/README.md b/implicitus-ui/README.md
+index 29959900a68aef18deceac961767c73fcd46d870..2ec56fdc3fd02348cae04a45c07c4d8987aa1a1c 100644
+--- a/implicitus-ui/README.md
++++ b/implicitus-ui/README.md
+@@ -2,50 +2,64 @@
+ 
+ 
+ This template provides a minimal setup to get React working in Vite with HMR and some ESLint rules.
+ 
+ ## Getting Started
+ 
+ This UI requires **Node.js 18.18 or newer**. To launch the development server:
+ 
+ ```bash
+ npm install
+ npm run dev
+ ```
+ 
+ `npm run dev` starts the Vite server. Running `npm install dev` will try to install a package named `dev` which depends on the Linux-only `inotify` module and fails on macOS.
+ 
+ ## Running Tests
+ 
+ Use [Vitest](https://vitest.dev) to execute the UI unit tests:
+ 
+ ```bash
+ npm test
+ # or
+ npx vitest
+ ```
+ 
++### Visual regression tests
++
++Playwright checks the `VoronoiCanvas` rendering against a committed baseline:
++
++```bash
++npm run test:playwright
++```
++
++If the rendering changes intentionally, update the snapshot with:
++
++```bash
++npx playwright test tests/voronoi_canvas.visual.spec.ts --update-snapshots
++```
++
+ ### Integration test binaries
+ 
+ Some tests spawn helper servers implemented in Python and Rust. The paths to
+ their binaries can be overridden with the `PYTHON` and `CARGO` environment
+ variables:
+ 
+ ```bash
+ PYTHON=/usr/bin/python3 CARGO=/usr/bin/cargo npm test
+ ```
+ 
+ If these binaries or their dependencies are not available, the tests fall back
+ to mocked HTTP responses so the rendering logic is still exercised without
+ starting the real servers.
+ 
+ ## Current Progress
+ 
+ Our application now includes a full-featured Voronoi lattice generation backend with the following capabilities:
+ 
+ - **Seed-point sampling**: uniform, Poisson-disk with `min_dist`, spatially-varying `density_field`, and anisotropic sampling (`scale_field`).
+ - **Adaptive grid resolution**: octree subdivision driven by curvature or custom error metrics; multi-resolution support.
+ - **Voronoi cell construction**: surface-only and full-volume lattices, with customizable wall thickness and lattice parameters.
+ - **CSG operations**: smooth union, intersection, and difference with user-provided SDFs and blend radii.
+ - **Hybrid surface-to-solid shells**: blend curves and shell offsets to transition from thin shells to solid infill.
+ - **Test coverage**: comprehensive unit tests covering all core functionality.
+ 
+diff --git a/implicitus-ui/package-lock.json b/implicitus-ui/package-lock.json
+index 26c94f6dd1ee4855a988e53f6a02b1e0fc8da7f1..c6bdcb28eb7508bef22187b5d220187a79c354ba 100644
+--- a/implicitus-ui/package-lock.json
++++ b/implicitus-ui/package-lock.json
+@@ -1,46 +1,48 @@
+ {
+   "name": "implicitus-ui",
+   "version": "0.0.0",
+   "lockfileVersion": 3,
+   "requires": true,
+   "packages": {
+     "": {
+       "name": "implicitus-ui",
+       "version": "0.0.0",
+       "dependencies": {
+         "@monaco-editor/react": "^4.7.0",
+         "@react-three/drei": "^10.3.0",
+         "@react-three/fiber": "^9.1.2",
+         "monaco-editor": "^0.52.2",
+         "react": "^19.1.0",
+         "react-dom": "^19.1.0",
+         "react-tabs": "^6.1.0",
+         "three": "^0.177.0"
+       },
+       "devDependencies": {
+         "@eslint/js": "^9.25.0",
++        "@playwright/experimental-ct-react": "^1.55.0",
++        "@playwright/test": "^1.55.0",
+         "@testing-library/react": "^16.1.0",
+         "@types/react": "^19.1.2",
+         "@types/react-dom": "^19.1.2",
+         "@vitejs/plugin-react": "^4.4.1",
+         "babel-plugin-glsl": "^1.0.0",
+         "babel-plugin-macros": "^3.1.0",
+         "eslint": "^9.25.0",
+         "eslint-plugin-react-hooks": "^5.2.0",
+         "eslint-plugin-react-refresh": "^0.4.19",
+         "globals": "^16.0.0",
+         "graphlib": "^2.1.8",
+         "jsdom": "^24.0.0",
+         "msw": "^2.11.1",
+         "typescript": "~5.8.3",
+         "typescript-eslint": "^8.30.1",
+         "vite": "^6.3.5",
+         "vite-plugin-babel-macros": "^1.0.6",
+         "vitest": "^2.1.3"
+       },
+       "engines": {
+         "node": ">=18.18.0"
+       }
+     },
+     "node_modules/@ampproject/remapping": {
+       "version": "2.3.0",
+@@ -1373,50 +1375,98 @@
+     "node_modules/@open-draft/deferred-promise": {
+       "version": "2.2.0",
+       "resolved": "https://registry.npmjs.org/@open-draft/deferred-promise/-/deferred-promise-2.2.0.tgz",
+       "integrity": "sha512-CecwLWx3rhxVQF6V4bAgPS5t+So2sTbPgAzafKkVizyi7tlwpcFpdFqq+wqF2OwNBmqFuu6tOyouTuxgpMfzmA==",
+       "dev": true,
+       "license": "MIT"
+     },
+     "node_modules/@open-draft/logger": {
+       "version": "0.3.0",
+       "resolved": "https://registry.npmjs.org/@open-draft/logger/-/logger-0.3.0.tgz",
+       "integrity": "sha512-X2g45fzhxH238HKO4xbSr7+wBS8Fvw6ixhTDuvLd5mqh6bJJCFAPwU9mPDxbcrRtfxv4u5IHCEH77BmxvXmmxQ==",
+       "dev": true,
+       "license": "MIT",
+       "dependencies": {
+         "is-node-process": "^1.2.0",
+         "outvariant": "^1.4.0"
+       }
+     },
+     "node_modules/@open-draft/until": {
+       "version": "2.1.0",
+       "resolved": "https://registry.npmjs.org/@open-draft/until/-/until-2.1.0.tgz",
+       "integrity": "sha512-U69T3ItWHvLwGg5eJ0n3I62nWuE6ilHlmz7zM0npLBRvPRd7e6NYmg54vvRtP5mZG7kZqZCFVdsTWo7BPtBujg==",
+       "dev": true,
+       "license": "MIT"
+     },
++    "node_modules/@playwright/experimental-ct-core": {
++      "version": "1.55.0",
++      "resolved": "https://registry.npmjs.org/@playwright/experimental-ct-core/-/experimental-ct-core-1.55.0.tgz",
++      "integrity": "sha512-8HRI8Envzgv3bVr6CrKCW3NxFR3dvXaE10OACkfs50GiTn5t4m31UJ3wDpFAgzxZvXPoyLfG3mLG16YbpWS5Ww==",
++      "dev": true,
++      "license": "Apache-2.0",
++      "dependencies": {
++        "playwright": "1.55.0",
++        "playwright-core": "1.55.0",
++        "vite": "^6.3.4"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
++    "node_modules/@playwright/experimental-ct-react": {
++      "version": "1.55.0",
++      "resolved": "https://registry.npmjs.org/@playwright/experimental-ct-react/-/experimental-ct-react-1.55.0.tgz",
++      "integrity": "sha512-mtm5kkcQx7ilqBnBIWHqhKVjvAjHQi5OBx+ySmofwj82IS8GiQvpKLVsFDeAEfNpVj+j6B1Dm+8610rqfH/9sw==",
++      "dev": true,
++      "license": "Apache-2.0",
++      "dependencies": {
++        "@playwright/experimental-ct-core": "1.55.0",
++        "@vitejs/plugin-react": "^4.2.1"
++      },
++      "bin": {
++        "playwright": "cli.js"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
++    "node_modules/@playwright/test": {
++      "version": "1.55.0",
++      "resolved": "https://registry.npmjs.org/@playwright/test/-/test-1.55.0.tgz",
++      "integrity": "sha512-04IXzPwHrW69XusN/SIdDdKZBzMfOT9UNT/YiJit/xpy2VuAoB8NHc8Aplb96zsWDddLnbkPL3TsmrS04ZU2xQ==",
++      "dev": true,
++      "license": "Apache-2.0",
++      "dependencies": {
++        "playwright": "1.55.0"
++      },
++      "bin": {
++        "playwright": "cli.js"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
+     "node_modules/@react-three/drei": {
+       "version": "10.7.3",
+       "resolved": "https://registry.npmjs.org/@react-three/drei/-/drei-10.7.3.tgz",
+       "integrity": "sha512-Krq6rRkBdOb9CfVOlYJqjoweSjX0mvj0fnXt1OGphCG8WA7cv8E0WB6XPuURklqVfdHmDB5wfnpXTHB+KFaGfA==",
+       "license": "MIT",
+       "dependencies": {
+         "@babel/runtime": "^7.26.0",
+         "@mediapipe/tasks-vision": "0.10.17",
+         "@monogrid/gainmap-js": "^3.0.6",
+         "@use-gesture/react": "^10.3.1",
+         "camera-controls": "^3.1.0",
+         "cross-env": "^7.0.3",
+         "detect-gpu": "^5.0.56",
+         "glsl-noise": "^0.0.0",
+         "hls.js": "^1.5.17",
+         "maath": "^0.10.8",
+         "meshline": "^3.3.1",
+         "stats-gl": "^2.2.8",
+         "stats.js": "^0.17.0",
+         "suspend-react": "^0.1.3",
+         "three-mesh-bvh": "^0.8.3",
+         "three-stdlib": "^2.35.6",
+         "troika-three-text": "^0.52.4",
+         "tunnel-rat": "^0.1.2",
+         "use-sync-external-store": "^1.4.0",
+@@ -4809,50 +4859,97 @@
+       "integrity": "sha512-//nshmD55c46FuFw26xV/xFAaB5HF9Xdap7HJBBnrKdAd6/GxDBaNA1870O79+9ueg61cZLSVc+OaFlfmObYVQ==",
+       "dev": true,
+       "license": "MIT",
+       "engines": {
+         "node": ">= 14.16"
+       }
+     },
+     "node_modules/picocolors": {
+       "version": "1.1.1",
+       "resolved": "https://registry.npmjs.org/picocolors/-/picocolors-1.1.1.tgz",
+       "integrity": "sha512-xceH2snhtb5M9liqDsmEw56le376mTZkEX/jEb/RxNFyegNul7eNslCXP9FDj/Lcu0X8KEyMceP2ntpaHrDEVA==",
+       "dev": true
+     },
+     "node_modules/picomatch": {
+       "version": "2.3.1",
+       "resolved": "https://registry.npmjs.org/picomatch/-/picomatch-2.3.1.tgz",
+       "integrity": "sha512-JU3teHTNjmE2VCGFzuY8EXzCDVwEqB2a8fsIvwaStHhAWJEeVd1o1QD80CU6+ZdEXXSLbSsuLwJjkCBWqRQUVA==",
+       "dev": true,
+       "engines": {
+         "node": ">=8.6"
+       },
+       "funding": {
+         "url": "https://github.com/sponsors/jonschlinkert"
+       }
+     },
++    "node_modules/playwright": {
++      "version": "1.55.0",
++      "resolved": "https://registry.npmjs.org/playwright/-/playwright-1.55.0.tgz",
++      "integrity": "sha512-sdCWStblvV1YU909Xqx0DhOjPZE4/5lJsIS84IfN9dAZfcl/CIZ5O8l3o0j7hPMjDvqoTF8ZUcc+i/GL5erstA==",
++      "dev": true,
++      "license": "Apache-2.0",
++      "dependencies": {
++        "playwright-core": "1.55.0"
++      },
++      "bin": {
++        "playwright": "cli.js"
++      },
++      "engines": {
++        "node": ">=18"
++      },
++      "optionalDependencies": {
++        "fsevents": "2.3.2"
++      }
++    },
++    "node_modules/playwright-core": {
++      "version": "1.55.0",
++      "resolved": "https://registry.npmjs.org/playwright-core/-/playwright-core-1.55.0.tgz",
++      "integrity": "sha512-GvZs4vU3U5ro2nZpeiwyb0zuFaqb9sUiAJuyrWpcGouD8y9/HLgGbNRjIph7zU9D3hnPaisMl9zG9CgFi/biIg==",
++      "dev": true,
++      "license": "Apache-2.0",
++      "bin": {
++        "playwright-core": "cli.js"
++      },
++      "engines": {
++        "node": ">=18"
++      }
++    },
++    "node_modules/playwright/node_modules/fsevents": {
++      "version": "2.3.2",
++      "resolved": "https://registry.npmjs.org/fsevents/-/fsevents-2.3.2.tgz",
++      "integrity": "sha512-xiqMQR4xAeHTuB9uWm+fFRcIOgKBMiOBP+eXiyT7jsgVCq1bkVygt00oASowB7EdtpOHaaPgKt812P9ab+DDKA==",
++      "dev": true,
++      "hasInstallScript": true,
++      "license": "MIT",
++      "optional": true,
++      "os": [
++        "darwin"
++      ],
++      "engines": {
++        "node": "^8.16.0 || ^10.6.0 || >=11.0.0"
++      }
++    },
+     "node_modules/postcss": {
+       "version": "8.5.6",
+       "resolved": "https://registry.npmjs.org/postcss/-/postcss-8.5.6.tgz",
+       "integrity": "sha512-3Ybi1tAuwAP9s0r1UQ2J4n5Y0G05bJkpUIO0/bI9MhwmD70S5aTWbXGBwxHrelT+XM1k6dM0pk+SwNkpTRN7Pg==",
+       "dev": true,
+       "funding": [
+         {
+           "type": "opencollective",
+           "url": "https://opencollective.com/postcss/"
+         },
+         {
+           "type": "tidelift",
+           "url": "https://tidelift.com/funding/github/npm/postcss"
+         },
+         {
+           "type": "github",
+           "url": "https://github.com/sponsors/ai"
+         }
+       ],
+       "dependencies": {
+         "nanoid": "^3.3.11",
+         "picocolors": "^1.1.1",
+         "source-map-js": "^1.2.1"
+       },
+       "engines": {
+diff --git a/implicitus-ui/package.json b/implicitus-ui/package.json
+index ca16cc1396a3c863f978a80ecc6bff45a6104039..cf92ecb3bd7a6ae8939e9b1605a3a067b2cf3e4b 100644
+--- a/implicitus-ui/package.json
++++ b/implicitus-ui/package.json
+@@ -1,47 +1,51 @@
+ {
+   "name": "implicitus-ui",
+   "private": true,
+   "version": "0.0.0",
+   "type": "module",
+   "engines": {
+     "node": ">=18.18.0"
+   },
+   "scripts": {
+     "dev": "vite",
+     "build": "vite build",
+     "lint": "eslint .",
+     "preview": "vite preview",
+-    "test": "vitest run"
++    "test": "vitest run",
++    "test:playwright": "npx playwright test",
++    "test:vitest": "vitest run"
+   },
+   "dependencies": {
+     "@monaco-editor/react": "^4.7.0",
+     "@react-three/drei": "^10.3.0",
+     "@react-three/fiber": "^9.1.2",
+     "monaco-editor": "^0.52.2",
+     "react": "^19.1.0",
+     "react-dom": "^19.1.0",
+     "react-tabs": "^6.1.0",
+     "three": "^0.177.0"
+   },
+   "devDependencies": {
+     "@eslint/js": "^9.25.0",
+     "@types/react": "^19.1.2",
+     "@types/react-dom": "^19.1.2",
+     "@vitejs/plugin-react": "^4.4.1",
+     "babel-plugin-glsl": "^1.0.0",
+     "babel-plugin-macros": "^3.1.0",
+     "eslint": "^9.25.0",
+     "eslint-plugin-react-hooks": "^5.2.0",
+     "eslint-plugin-react-refresh": "^0.4.19",
+     "globals": "^16.0.0",
+     "typescript": "~5.8.3",
+     "typescript-eslint": "^8.30.1",
+     "vite": "^6.3.5",
+     "vite-plugin-babel-macros": "^1.0.6",
+     "vitest": "^2.1.3",
+     "graphlib": "^2.1.8",
+     "@testing-library/react": "^16.1.0",
+     "jsdom": "^24.0.0",
+-    "msw": "^2.11.1"
++    "msw": "^2.11.1",
++    "@playwright/experimental-ct-react": "^1.55.0",
++    "@playwright/test": "^1.55.0"
+   }
+ }
+diff --git a/implicitus-ui/playwright.config.ts b/implicitus-ui/playwright.config.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..a7e90ce880f5c3d2443c4cd220b7f37bacd66fe6
+--- /dev/null
++++ b/implicitus-ui/playwright.config.ts
+@@ -0,0 +1,7 @@
++import { defineConfig } from '@playwright/test';
++
++export default defineConfig({
++  testDir: './tests',
++  snapshotPathTemplate: '{testDir}/__screenshots__/{testFilePath}/{arg}{ext}',
++  timeout: 60000,
++});
+diff --git a/implicitus-ui/tests/__screenshots__/voronoi_canvas.visual.spec.ts/voronoi-canvas-baseline.png b/implicitus-ui/tests/__screenshots__/voronoi_canvas.visual.spec.ts/voronoi-canvas-baseline.png
+new file mode 100644
+index 0000000000000000000000000000000000000000..1bc5b56579d9f3ae53ebe3bf4444e7badec6705a
+GIT binary patch
+literal 3134
+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
+L%Z23h>wo?NrtGPm
+
+literal 0
+HcmV?d00001
+
+diff --git a/implicitus-ui/tests/visual/voronoi_canvas_page.html b/implicitus-ui/tests/visual/voronoi_canvas_page.html
+new file mode 100644
+index 0000000000000000000000000000000000000000..b7b5884581455a9ed7a472cbd460060daacbebbd
+--- /dev/null
++++ b/implicitus-ui/tests/visual/voronoi_canvas_page.html
+@@ -0,0 +1,11 @@
++<!DOCTYPE html>
++<html>
++  <head>
++    <meta charset="utf-8" />
++    <title>VoronoiCanvas Test</title>
++  </head>
++  <body>
++    <div id="root"></div>
++    <script type="module" src="./voronoi_canvas_page.tsx"></script>
++  </body>
++</html>
+diff --git a/implicitus-ui/tests/visual/voronoi_canvas_page.tsx b/implicitus-ui/tests/visual/voronoi_canvas_page.tsx
+new file mode 100644
+index 0000000000000000000000000000000000000000..b43db44591ddd3077865e93bc085ea61e0770917
+--- /dev/null
++++ b/implicitus-ui/tests/visual/voronoi_canvas_page.tsx
+@@ -0,0 +1,31 @@
++import React from 'react';
++import ReactDOM from 'react-dom/client';
++import VoronoiCanvas from '../../src/components/VoronoiCanvas';
++
++const root = ReactDOM.createRoot(document.getElementById('root')!);
++
++root.render(
++  <div style={{ width: 300, height: 300 }}>
++    <VoronoiCanvas
++      seedPoints={[
++        [0, 0, 0],
++        [1, 0, 0],
++        [0, 1, 0],
++        [0, 0, 1],
++      ]}
++      vertices={[
++        [0, 0, 0],
++        [1, 0, 0],
++        [0, 1, 0],
++        [0, 0, 1],
++      ]}
++      edges={[
++        [0, 1],
++        [1, 2],
++        [2, 3],
++        [3, 0],
++      ]}
++      bbox={[0, 0, 0, 1, 1, 1]}
++    />
++  </div>
++);
+diff --git a/implicitus-ui/tests/voronoi_canvas.visual.spec.ts b/implicitus-ui/tests/voronoi_canvas.visual.spec.ts
+new file mode 100644
+index 0000000000000000000000000000000000000000..1deabbedf3bc78296e2a2de1e4fe3766f4d32891
+--- /dev/null
++++ b/implicitus-ui/tests/voronoi_canvas.visual.spec.ts
+@@ -0,0 +1,35 @@
++import { test, expect } from '@playwright/test';
++import { createServer, ViteDevServer } from 'vite';
++import path from 'path';
++import { fileURLToPath } from 'url';
++
++// Update baseline with:
++//   npx playwright test tests/voronoi_canvas.visual.spec.ts --update-snapshots
++
++const __dirname = fileURLToPath(new URL('.', import.meta.url));
++
++let server: ViteDevServer | undefined;
++
++test.beforeAll(async () => {
++  server = await createServer({
++    configFile: path.resolve(__dirname, '../vite.config.ts'),
++    root: path.resolve(__dirname, '..'),
++    server: { port: 3000, strictPort: true },
++  });
++  await server.listen();
++});
++
++test.afterAll(async () => {
++  await server?.close();
++});
++
++test('VoronoiCanvas visual regression', async ({ page }) => {
++  page.on('pageerror', err => console.error('pageerror:', err));
++  page.on('console', msg => console.log('console:', msg.text()));
++  await page.addInitScript(() => {
++    (window as any).process = { env: { NODE_ENV: 'test' } };
++  });
++  await page.goto('http://localhost:3000/tests/visual/voronoi_canvas_page.html');
++  const canvas = page.locator('canvas');
++  await expect(canvas).toHaveScreenshot('voronoi-canvas-baseline.png');
++});
+diff --git a/implicitus-ui/vitest.config.ts b/implicitus-ui/vitest.config.ts
+index 30bf5e5432d673e760db7efa629d3cc527a0f0f0..dc1e87c67fa6a0400a2f04028b5c29a730ed2ead 100644
+--- a/implicitus-ui/vitest.config.ts
++++ b/implicitus-ui/vitest.config.ts
+@@ -1,10 +1,12 @@
+ import { defineConfig } from 'vitest/config'
+ 
+ export default defineConfig({
+   test: {
+     environment: 'jsdom',
+     setupFiles: ['./tests/setup.ts'],
+     globals: true,
+     testTimeout: 30000,
++    include: ['tests/**/*.test.ts?(x)', 'src/**/*.test.ts?(x)'],
++    exclude: ['tests/**/*.visual.spec.ts'],
+   },
+ })
+ 
+EOF
+)
