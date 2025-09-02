@@ -28,7 +28,7 @@ export const VoronoiStruts: React.FC<VoronoiStrutsProps> = ({
   useEffect(() => {
     const mesh = meshRef.current;
     // ensure instance count matches dynamic edgePairs length
-    // mesh.count = edgePairs.length;
+    mesh.count = edgePairs.length;
     // Position and scale instances
     edgePairs.forEach(([a, b], i) => {
       const pa = new THREE.Vector3(...a);
