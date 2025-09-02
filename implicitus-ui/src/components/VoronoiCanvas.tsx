@@ -162,6 +162,12 @@ export function computeFilteredEdges(
     .map(({ edge }) => edge);
 }
 
+// Threshold for detecting edges with effectively zero variation along the z-axis.
+// Edges flatter than this tolerance are usually an indication that upstream
+// geometry generation collapsed the edge onto a plane.  The value is exported so
+// tests can dial it in or reference it directly.
+export const EDGE_Z_VARIATION_TOLERANCE = 1e-5;
+
 interface VoronoiCanvasProps {
   seedPoints: [number, number, number][];
   vertices?: [number, number, number][];
@@ -290,6 +296,28 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
   }, [validEdges, validVertices, edgeLengthThreshold]);
   DEBUG_CANVAS && console.log('VoronoiCanvas filteredEdges count:', filteredEdges.length);
   DEBUG_CANVAS && console.log('VoronoiCanvas sample filteredEdges (first 5):', filteredEdges.slice(0,5));
+
+  // After filtering, ensure that surviving edges still span some distance in z.
+  // Completely flat edges often hint at upstream bugs that collapsed 3D
+  // geometry into a single layer.  We warn in development and optionally throw
+  // when a strict diagnostic flag is enabled.
+  const hasFlatEdges = useMemo(() => {
+    if (filteredEdges.length === 0 || validVertices.length === 0) return false;
+    const flat = filteredEdges.some(([i, j]) => {
+      const zi = validVertices[i]?.[2];
+      const zj = validVertices[j]?.[2];
+      return Math.abs(zi - zj) < EDGE_Z_VARIATION_TOLERANCE;
+    });
+    if (flat) {
+      const msg = `VoronoiCanvas: edge z-range below tolerance (${EDGE_Z_VARIATION_TOLERANCE})`;
+      if (process.env.VORONOI_ASSERT_Z === 'true') {
+        throw new Error(msg);
+      }
+      console.warn(msg);
+    }
+    return flat;
+  }, [filteredEdges, validVertices]);
+  DEBUG_CANVAS && console.log('VoronoiCanvas hasFlatEdges:', hasFlatEdges);
   // For debug: only render seed points inside the sphere when no edges
   const debugSeedPoints = useMemo(() => {
     if (filteredEdges.length > 0) return [];
@@ -420,6 +448,8 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
         position: 'relative',
         flexShrink: 0
       }}
+      data-testid="voronoi-canvas-root"
+      data-has-flat-edges={hasFlatEdges}
     >
       {noEdges ? (
         <div
