@@ -1,5 +1,5 @@
 use pyo3::prelude::*;
-use rand::Rng;
+use rand::{seq::SliceRandom, Rng};
 use std::collections::HashMap;
 
 // -----------------------------------------------------------------------------
@@ -127,6 +127,79 @@ pub fn sample_seed_points(
         points.push(p);
     }
     Ok(points)
+}
+
+// -----------------------------------------------------------------------------
+// Poisson-disk / grid thinning
+// -----------------------------------------------------------------------------
+/// Reduce a set of seed points using a simple Poisson-disk style thinning.
+///
+/// Points are shuffled and greedily retained if they are at least a target
+/// spacing away from previously accepted points. The spacing is chosen from the
+/// bounding box volume so that roughly `max_points` samples remain. This is not
+/// a perfect Poisson-disk implementation but yields a reasonable distribution
+/// while ensuring the output set does not exceed `max_points`.
+pub fn thin_points(
+    seeds: &[(f64, f64, f64)],
+    max_points: usize,
+) -> Vec<(f64, f64, f64)> {
+    if seeds.len() <= max_points {
+        return seeds.to_vec();
+    }
+
+    let mut rng = rand::thread_rng();
+    let mut candidates = seeds.to_vec();
+    candidates.shuffle(&mut rng);
+
+    // Compute bounding box of the candidates
+    let (mut xmin, mut ymin, mut zmin) = (f64::INFINITY, f64::INFINITY, f64::INFINITY);
+    let (mut xmax, mut ymax, mut zmax) = (f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+    for &(x, y, z) in &candidates {
+        xmin = xmin.min(x);
+        ymin = ymin.min(y);
+        zmin = zmin.min(z);
+        xmax = xmax.max(x);
+        ymax = ymax.max(y);
+        zmax = zmax.max(z);
+    }
+    let volume = ((xmax - xmin) * (ymax - ymin) * (zmax - zmin)).max(1e-9);
+    let r = (volume / max_points as f64).cbrt();
+    let r2 = r * r;
+
+    let mut result: Vec<(f64, f64, f64)> = Vec::new();
+    for p in candidates {
+        let mut ok = true;
+        for q in &result {
+            let dx = p.0 - q.0;
+            let dy = p.1 - q.1;
+            let dz = p.2 - q.2;
+            if dx * dx + dy * dy + dz * dz < r2 {
+                ok = false;
+                break;
+            }
+        }
+        if ok {
+            result.push(p);
+            if result.len() >= max_points {
+                break;
+            }
+        }
+    }
+
+    // If we didn't manage to pick enough points (due to spacing),
+    // pad with remaining seeds to reach at most `max_points`.
+    if result.len() < max_points {
+        for p in seeds {
+            if result.len() >= max_points {
+                break;
+            }
+            if !result.contains(p) {
+                result.push(*p);
+            }
+        }
+    }
+
+    result
 }
 
 // -----------------------------------------------------------------------------
