@@ -86,6 +86,7 @@ def generate_hex_lattice(spec: Dict[str, Any]) -> Dict[str, Any]:
         "bbox_min",
         "bbox_max",
         "seed_points",
+        "num_points",
         "use_voronoi_edges",
         "_is_voronoi",
         "uniform",
@@ -122,6 +123,9 @@ def generate_hex_lattice(spec: Dict[str, Any]) -> Dict[str, Any]:
     plane_normal = spec.get("plane_normal") or [0.0, 0.0, 1.0]
     max_distance = spec.get("max_distance")
 
+    seeds = spec.get("seed_points")
+    num_points = spec.get("num_points")
+
     lattice_kwargs = {
         "return_cells": True,
         "use_voronoi_edges": use_voronoi_edges,
@@ -135,6 +139,12 @@ def generate_hex_lattice(spec: Dict[str, Any]) -> Dict[str, Any]:
                 "max_distance": max_distance,
             }
         )
+
+    if seeds is not None:
+        lattice_kwargs["seeds"] = seeds
+        num_points = num_points or len(seeds)
+    if num_points is not None:
+        lattice_kwargs["num_points"] = int(num_points)
 
     seed_pts, cell_vertices, edge_list, cells = build_hex_lattice(
         bbox_min,
