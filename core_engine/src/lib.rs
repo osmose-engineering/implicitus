@@ -57,19 +57,129 @@ pub struct VoronoiMesh {
     pub edges: Vec<(usize, usize)>,
 }
 
-/// Prototype Voronoi mesher.
+fn sub(a: (f64, f64, f64), b: (f64, f64, f64)) -> (f64, f64, f64) {
+    (a.0 - b.0, a.1 - b.1, a.2 - b.2)
+}
+
+fn add(a: (f64, f64, f64), b: (f64, f64, f64)) -> (f64, f64, f64) {
+    (a.0 + b.0, a.1 + b.1, a.2 + b.2)
+}
+
+fn scale(a: (f64, f64, f64), s: f64) -> (f64, f64, f64) {
+    (a.0 * s, a.1 * s, a.2 * s)
+}
+
+fn dot(a: (f64, f64, f64), b: (f64, f64, f64)) -> f64 {
+    a.0 * b.0 + a.1 * b.1 + a.2 * b.2
+}
+
+fn cross(a: (f64, f64, f64), b: (f64, f64, f64)) -> (f64, f64, f64) {
+    (
+        a.1 * b.2 - a.2 * b.1,
+        a.2 * b.0 - a.0 * b.2,
+        a.0 * b.1 - a.1 * b.0,
+    )
+}
+
+fn norm_sq(a: (f64, f64, f64)) -> f64 {
+    dot(a, a)
+}
+
+fn circumcenter(
+    p1: (f64, f64, f64),
+    p2: (f64, f64, f64),
+    p3: (f64, f64, f64),
+    p4: (f64, f64, f64),
+) -> Option<(f64, f64, f64)> {
+    let a = sub(p1, p4);
+    let b = sub(p2, p4);
+    let c = sub(p3, p4);
+    let cross_bc = cross(b, c);
+    let denom = 2.0 * dot(a, cross_bc);
+    if denom.abs() < 1e-12 {
+        return None;
+    }
+    let cross_ca = cross(c, a);
+    let cross_ab = cross(a, b);
+    let u = add(
+        add(scale(cross_bc, norm_sq(a)), scale(cross_ca, norm_sq(b))),
+        scale(cross_ab, norm_sq(c)),
+    );
+    let u = scale(u, 1.0 / denom);
+    Some(add(p4, u))
+}
+
+/// Compute a 3D Voronoi diagram for the provided seed points.
 ///
-/// For now this merely echoes the seed points as vertices and links them in a
-/// ring.  It provides a stand‑in API for downstream consumers.
+/// The returned mesh lists Voronoi vertices (circumcenters of valid
+/// tetrahedra) and edges connecting them.  Each edge corresponds to a triple of
+/// neighboring seeds whose cells share a face.
 pub fn voronoi_mesh(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
-    let vertices = seeds.to_vec();
-    let mut edges = Vec::new();
-    if seeds.len() > 1 {
-        for i in 0..seeds.len() {
-            let j = (i + 1) % seeds.len();
-            edges.push((i, j));
+    use std::collections::{HashMap, HashSet};
+
+    let n = seeds.len();
+    let mut vertices: Vec<(f64, f64, f64)> = Vec::new();
+    let mut quad_to_vertex: HashMap<[usize; 4], usize> = HashMap::new();
+
+    // Enumerate all tetrahedra and collect valid circumcenters as Voronoi vertices
+    for i in 0..n {
+        for j in (i + 1)..n {
+            for k in (j + 1)..n {
+                for l in (k + 1)..n {
+                    if let Some(center) = circumcenter(seeds[i], seeds[j], seeds[k], seeds[l]) {
+                        let dist2 = norm_sq(sub(center, seeds[i]));
+                        let mut valid = true;
+                        for m in 0..n {
+                            if m == i || m == j || m == k || m == l {
+                                continue;
+                            }
+                            let d2 = norm_sq(sub(center, seeds[m]));
+                            if d2 < dist2 - 1e-9 {
+                                valid = false;
+                                break;
+                            }
+                        }
+                        if valid {
+                            let idx = vertices.len();
+                            vertices.push(center);
+                            let mut key = [i, j, k, l];
+                            key.sort();
+                            quad_to_vertex.insert(key, idx);
+                        }
+                    }
+                }
+            }
         }
     }
+
+    // Build adjacency edges between Voronoi vertices sharing a triangle of seeds
+    let mut triple_map: HashMap<[usize; 3], Vec<usize>> = HashMap::new();
+    for (quad, &v_idx) in &quad_to_vertex {
+        let [a, b, c, d] = *quad;
+        let triples = [[a, b, c], [a, b, d], [a, c, d], [b, c, d]];
+        for mut t in triples {
+            t.sort();
+            triple_map.entry(t).or_default().push(v_idx);
+        }
+    }
+
+    let mut edge_set: HashSet<(usize, usize)> = HashSet::new();
+    for verts in triple_map.values() {
+        if verts.len() >= 2 {
+            for i in 0..verts.len() {
+                for j in (i + 1)..verts.len() {
+                    let a = verts[i];
+                    let b = verts[j];
+                    let e = if a < b { (a, b) } else { (b, a) };
+                    edge_set.insert(e);
+                }
+            }
+        }
+    }
+
+    let mut edges: Vec<(usize, usize)> = edge_set.into_iter().collect();
+    edges.sort();
+
     VoronoiMesh { vertices, edges }
 }
 
