@@ -214,10 +214,12 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
   cells = [],
   edgeLengthThreshold = 1.5,
 }) => {
-  const noEdges = edges.length === 0;
-  if (noEdges) {
-    console.warn('VoronoiCanvas: no edges provided');
-  }
+  // Strut geometry can come from either the primary vertex/edge arrays or, when
+  // those are absent, from the infill geometry.  Previously we logged a warning
+  // as soon as the component mounted with no `edges` prop which produced noisy
+  // console output while data was still loading.  Instead we defer any warnings
+  // until after sanitising the inputs and establishing whether *any* usable
+  // edge list was supplied.
   // In debug mode, hide the ray-march solid box
   if (DEBUG_HEX_TEST) showSolid = false;
   DEBUG_CANVAS && console.log('VoronoiCanvas debug props:', { seedPoints, vertices, edges, bbox });
@@ -259,6 +261,21 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
     ? safeCells.filter(c => Array.isArray(c?.verts) && Array.isArray(c?.faces))
     : [];
 
+  // Prefer the explicit vertex/edge arrays for strut rendering; fall back to
+  // infill geometry when the main arrays are missing.  This allows the canvas to
+  // render struts even when only `seed_points`/`infill` data is available from
+  // the backend.
+  const pointsForStruts =
+    validVertices.length > 0
+      ? validVertices
+      : validInfillPoints.length > 0
+        ? validInfillPoints
+        : validSeedPoints;
+  const edgesForStruts = validEdges.length > 0 ? validEdges : validInfillEdges;
+  const noEdges = edgesForStruts.length === 0;
+  const usingFallbackSeeds =
+    validVertices.length === 0 && validInfillPoints.length === 0;
+
   const voronoiSpec = useMemo(() => ({
     pattern: 'voronoi',
     seed_points: validSeedPoints,
@@ -281,24 +298,31 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
   DEBUG_CANVAS && console.log('VoronoiCanvas validSeedPoints z-range:', Math.min(...zValues), Math.max(...zValues));
   DEBUG_CANVAS && console.log('VoronoiCanvas sample validSeedPoints (first 5):', validSeedPoints.slice(0,5));
   // Filter out spurious edges. We use a robust median/IQR-based threshold and
-  // treat vertical edges separately so tall z-struts survive the filter.
+  // treat vertical edges separately so tall z-struts survive the filter.  When
+  // no explicit vertex/edge arrays are supplied we fall back to the infill
+  // geometry; only after this fallback do we warn about truly missing data.
   const filteredEdges = useMemo(() => {
-    if (validVertices.length === 0) {
-      validEdges.length > 0 &&
-        console.warn(
-          'VoronoiCanvas: no vertices provided; skipping edge filtering and strut geometry.'
-        );
+    if (edgesForStruts.length === 0) {
+      (edges.length > 0 || infillEdges.length > 0) &&
+        console.warn('VoronoiCanvas: no valid edges provided');
+      return [];
+    }
+    if (pointsForStruts.length === 0) {
+      console.warn(
+        'VoronoiCanvas: no vertices provided; skipping edge filtering and strut geometry.'
+      );
       return [];
     }
     DEBUG_CANVAS &&
       console.log('VoronoiCanvas useMemo input:', {
-        validVertices,
-        validEdges,
+        validVertices: pointsForStruts,
+        validEdges: edgesForStruts,
         edgeLengthThreshold,
       });
-    return computeFilteredEdges(validVertices, validEdges, edgeLengthThreshold);
-  }, [validEdges, validVertices, edgeLengthThreshold]);
-  DEBUG_CANVAS && console.log('VoronoiCanvas filteredEdges count:', filteredEdges.length);
+    return computeFilteredEdges(pointsForStruts, edgesForStruts, edgeLengthThreshold);
+  }, [pointsForStruts, edgesForStruts, edgeLengthThreshold, edges, infillEdges]);
+  DEBUG_CANVAS &&
+    console.log('VoronoiCanvas filteredEdges count:', filteredEdges.length);
   DEBUG_CANVAS && console.log('VoronoiCanvas sample filteredEdges (first 5):', filteredEdges.slice(0,5));
 
   // After filtering, ensure that surviving edges still span some distance in z.
@@ -306,10 +330,15 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
   // geometry into a single layer.  We warn in development and optionally throw
   // when a strict diagnostic flag is enabled.
   const hasFlatEdges = useMemo(() => {
-    if (filteredEdges.length === 0 || validVertices.length === 0) return false;
+    if (
+      filteredEdges.length === 0 ||
+      pointsForStruts.length === 0 ||
+      usingFallbackSeeds
+    )
+      return false;
     const flat = filteredEdges.some(([i, j]) => {
-      const zi = validVertices[i]?.[2];
-      const zj = validVertices[j]?.[2];
+      const zi = pointsForStruts[i]?.[2];
+      const zj = pointsForStruts[j]?.[2];
       return Math.abs(zi - zj) < EDGE_Z_VARIATION_TOLERANCE;
     });
     if (flat) {
@@ -323,7 +352,7 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
       console.warn(msg);
     }
     return flat;
-  }, [filteredEdges, validVertices]);
+  }, [filteredEdges, pointsForStruts, usingFallbackSeeds]);
   DEBUG_CANVAS && console.log('VoronoiCanvas hasFlatEdges:', hasFlatEdges);
   // For debug: only render seed points inside the sphere when no edges
   const debugSeedPoints = useMemo(() => {
@@ -513,7 +542,7 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
         )}
         {showStruts && (
           <VoronoiStruts
-            vertices={validVertices}
+            vertices={pointsForStruts}
             edges={filteredEdges}
             strutRadius={strutRadius}
             color={strutColor}
