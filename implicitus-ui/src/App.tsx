@@ -87,17 +87,25 @@ function App() {
     }
     const seeds = infill?.seed_points;
     if (seeds && seeds.length > 0) {
+      console.debug('[UI] Fetching Voronoi mesh from slicer server', { count: seeds.length });
       fetch('http://localhost:4000/voronoi', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ seeds }),
       })
-        .then(res => res.json())
+        .then(res => {
+          console.debug('[UI] Voronoi response status', res.status);
+          return res.json();
+        })
         .then(data => {
+          console.debug('[UI] Voronoi mesh received', {
+            vertices: data.vertices?.length,
+            edges: data.edges?.length,
+          });
           setMeshVertices(data.vertices || []);
           setMeshEdges(data.edges || []);
         })
-        .catch(err => console.error('Mesh fetch failed', err));
+        .catch(err => console.error('[UI] Mesh fetch failed', err));
     }
   }, [spec]);
   const [error, setError] = useState<string | null>(null);

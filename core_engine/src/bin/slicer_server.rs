@@ -87,7 +87,16 @@ pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::R
 }
 
 async fn handle_voronoi(req: VoronoiRequest) -> Result<impl warp::Reply, warp::Rejection> {
+    println!(
+        "[slicer_server] /voronoi request: {} seeds", 
+        req.seeds.len()
+    );
     let mesh = voronoi_mesh(&req.seeds);
+    println!(
+        "[slicer_server] /voronoi response: {} vertices, {} edges",
+        mesh.vertices.len(),
+        mesh.edges.len()
+    );
     let resp = VoronoiResponse {
         vertices: mesh.vertices,
         edges: mesh.edges,
