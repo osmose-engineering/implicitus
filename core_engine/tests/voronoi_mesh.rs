@@ -24,6 +24,24 @@ fn nondegenerate_voronoi_mesh() {
 }
 
 #[test]
+fn ignores_distant_seed() {
+    // Four local seeds form a tetrahedron; a distant seed should not affect it
+    let mut seeds = vec![
+        (0.0, 0.0, 0.0),
+        (1.0, 0.0, 0.0),
+        (0.0, 1.0, 0.0),
+        (0.0, 0.0, 1.0),
+    ];
+    seeds.push((1000.0, 1000.0, 1000.0));
+    let mesh = voronoi_mesh(&seeds);
+    // The local tetrahedron should still yield its circumsphere center
+    assert!(mesh
+        .vertices
+        .iter()
+        .any(|&(x, y, z)| approx(x, 0.5) && approx(y, 0.5) && approx(z, 0.5)));
+}
+
+#[test]
 fn grid_voronoi_counts() {
     // Deterministic grid of points that should yield a regular lattice of Voronoi cells.
     let n = 10u32;

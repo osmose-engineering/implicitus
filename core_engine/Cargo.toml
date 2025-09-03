@@ -21,6 +21,7 @@ numpy = "0.22"
 ndarray = "0.16"
 
 pyo3 = { version = "0.22", features = ["abi3-py39"] }
+kiddo = "5.2"
 
 [features]
 default = []
