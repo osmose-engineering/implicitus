@@ -233,6 +233,8 @@ def build_hex_lattice(
     return_cells: bool = False,
     use_voronoi_edges: bool = False,
     mode: Literal["organic", "uniform"] = "organic",
+    seeds: Optional[List[Tuple[float, float, float]]] = None,
+    num_points: Optional[int] = None,
     **cell_kwargs: Any,
 ) -> Union[
     Tuple[List[Tuple[float, float, float]], List[Tuple[int, int]]],
@@ -261,46 +263,52 @@ def build_hex_lattice(
     the seed coordinates and ``cell_vertices`` is the vertex list referenced by
     ``edges``.
     """
-    # Unpack bounds
-    x0, y0, z0 = bbox_min
-    x1, y1, z1 = bbox_max
+    if seeds is not None:
+        pts = [tuple(map(float, p)) for p in seeds]
+    else:
+        # Unpack bounds
+        x0, y0, z0 = bbox_min
+        x1, y1, z1 = bbox_max
 
-    # Calculate the vertical and horizontal offsets for hex packing
-    dx = spacing
-    dy = spacing * np.sqrt(3) / 2
-    dz = spacing * np.sqrt(6) / 3
+        # Calculate the vertical and horizontal offsets for hex packing
+        dx = spacing
+        dy = spacing * np.sqrt(3) / 2
+        dz = spacing * np.sqrt(6) / 3
 
-    coords = []
-    pts = []
-    # layer-by-layer hex grid with integer coords
-    k = 0
-    z = z0
-    while z <= z1:
-        offset_y = (k % 2) * dy / 2
-        offset_x = (k % 3) * dx / 2
-        j = 0
-        y = y0 + offset_y
-        while y <= y1:
-            i = 0
-            x = x0 + offset_x
-            while x <= x1:
-                coords.append((i, j, k))
-                pts.append((float(x), float(y), float(z)))
-                i += 1
-                x = x0 + offset_x + i * dx
-            j += 1
-            y = y0 + offset_y + j * dy
-        k += 1
-        z = z0 + k * dz
+        coords = []
+        pts = []
+        # layer-by-layer hex grid with integer coords
+        k = 0
+        z = z0
+        while z <= z1:
+            offset_y = (k % 2) * dy / 2
+            offset_x = (k % 3) * dx / 2
+            j = 0
+            y = y0 + offset_y
+            while y <= y1:
+                i = 0
+                x = x0 + offset_x
+                while x <= x1:
+                    coords.append((i, j, k))
+                    pts.append((float(x), float(y), float(z)))
+                    i += 1
+                    x = x0 + offset_x + i * dx
+                j += 1
+                y = y0 + offset_y + j * dy
+            k += 1
+            z = z0 + k * dz
 
-    # Clip to the target shape
-    if primitive:
-        filtered = [(c, p) for c, p in zip(coords, pts) if point_in_primitive(p, primitive)]
-        if filtered:
-            coords, pts = zip(*filtered)
-            coords, pts = list(coords), list(pts)
-        else:
-            coords, pts = [], []
+        # Clip to the target shape
+        if primitive:
+            filtered = [(c, p) for c, p in zip(coords, pts) if point_in_primitive(p, primitive)]
+            if filtered:
+                coords, pts = zip(*filtered)
+                coords, pts = list(coords), list(pts)
+            else:
+                coords, pts = [], []
+
+    if num_points is not None and len(pts) > num_points:
+        pts = list(pts[:num_points])
 
     adjacency = prune_adjacency_via_grid(pts, spacing * 0.5)
     if use_voronoi_edges:
