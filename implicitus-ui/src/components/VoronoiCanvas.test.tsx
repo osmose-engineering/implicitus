@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { describe, it, expect, vi } from 'vitest';
+import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import {
   generateHexTest3D,
@@ -9,6 +9,22 @@ import {
 } from './VoronoiCanvas';
 import VoronoiCanvas from './VoronoiCanvas';
 import { Graph, alg } from 'graphlib';
+
+const originalWarn = console.warn;
+
+beforeEach(() => {
+  console.warn = (...args: any[]) => {
+    const msg = args.join(' ');
+    if (msg.includes('edge z-range below tolerance')) {
+      throw new Error(msg);
+    }
+    return originalWarn(...args);
+  };
+});
+
+afterEach(() => {
+  console.warn = originalWarn;
+});
 
 describe('VoronoiCanvas filteredEdges', () => {
   it('produces uniform edge lengths and a single connected component', () => {

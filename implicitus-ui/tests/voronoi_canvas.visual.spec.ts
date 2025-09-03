@@ -24,10 +24,19 @@ test.afterAll(async () => {
 });
 
 test('VoronoiCanvas visual regression', async ({ page }) => {
-  page.on('pageerror', err => console.error('pageerror:', err));
-  page.on('console', msg => console.log('console:', msg.text()));
+  page.on('pageerror', err => { throw err; });
+  page.on('console', msg => {
+    if (
+      msg.type() === 'warning' &&
+      msg.text().includes('edge z-range below tolerance')
+    ) {
+      throw new Error(msg.text());
+    }
+  });
   await page.addInitScript(() => {
-    (window as any).process = { env: { NODE_ENV: 'test' } };
+    (window as any).process = {
+      env: { NODE_ENV: 'test', VORONOI_ASSERT_Z: 'true' }
+    };
   });
   await page.goto('http://localhost:3000/tests/visual/voronoi_canvas_page.html');
   const root = page.locator('[data-testid="voronoi-canvas-root"]');
