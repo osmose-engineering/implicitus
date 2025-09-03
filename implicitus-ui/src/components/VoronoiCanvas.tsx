@@ -189,8 +189,12 @@ interface VoronoiCanvasProps {
   edgeLengthThreshold?: number;
 }
 
-// Toggle verbose logging
-const DEBUG_CANVAS = process.env.NODE_ENV === 'development';
+// Toggle verbose logging. In the browser `process` may be undefined, so guard
+// the access to avoid a ReferenceError at runtime.
+const DEBUG_CANVAS =
+  typeof process !== 'undefined'
+    ? process.env.NODE_ENV === 'development'
+    : false;
 
 const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
   seedPoints = [],
@@ -310,7 +314,10 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
     });
     if (flat) {
       const msg = `VoronoiCanvas: edge z-range below tolerance (${EDGE_Z_VARIATION_TOLERANCE})`;
-      if (process.env.VORONOI_ASSERT_Z === 'true') {
+      if (
+        typeof process !== 'undefined' &&
+        process.env.VORONOI_ASSERT_Z === 'true'
+      ) {
         throw new Error(msg);
       }
       console.warn(msg);
