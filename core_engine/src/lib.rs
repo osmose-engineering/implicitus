@@ -1,6 +1,8 @@
 use pyo3::prelude::*;
 use rayon::prelude::*;
 use std::sync::{Arc, Mutex};
+use kiddo::{SquaredEuclidean};
+use kiddo::float::kdtree::KdTree;
 
 // Import the generated Protobuf definitions
 pub mod implicitus {
@@ -159,6 +161,13 @@ pub fn voronoi_mesh(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
         adjacency[b].insert(a);
     }
 
+    // Build a k-d tree of seeds for efficient radius queries
+    let mut tree: KdTree<f64, u64, 3, 128, u32> = KdTree::with_capacity(n);
+    for (idx, &(x, y, z)) in seeds.iter().enumerate() {
+        tree.add(&[x, y, z], idx as u64);
+    }
+
+
     // For each seed, form tetrahedra from localized neighbor sets.
     (0..n).into_par_iter().for_each(|i| {
         let mut neighbors: Vec<usize> = adjacency[i].iter().cloned().filter(|&j| j > i).collect();
@@ -178,16 +187,15 @@ pub fn voronoi_mesh(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
                     }
                     if let Some(center) = circumcenter(seeds[i], seeds[j], seeds[k], seeds[l]) {
                         let dist2 = norm_sq(sub(center, seeds[i]));
+                        let search_radius = (dist2 - 1e-9).max(0.0);
                         let mut valid = true;
-                        for (m, &p) in seeds.iter().enumerate() {
+                        for nn in tree.within_unsorted::<SquaredEuclidean>(&[center.0, center.1, center.2], search_radius) {
+                            let m = nn.item as usize;
                             if m == i || m == j || m == k || m == l {
                                 continue;
                             }
-                            let d2 = norm_sq(sub(center, p));
-                            if d2 < dist2 - 1e-9 {
-                                valid = false;
-                                break;
-                            }
+                            valid = false;
+                            break;
                         }
                         if valid {
                             let mut key = [i, j, k, l];
