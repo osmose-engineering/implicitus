@@ -13,6 +13,11 @@ pub mod spatial;
 pub mod uniform;
 pub mod voronoi;
 
+/// Maximum number of seed points to consider when constructing a Voronoi mesh.
+/// Any additional seeds are thinned to this limit to avoid explosive
+/// combinatorial growth in the naive Voronoi implementation.
+pub const MAX_VORONOI_SEEDS: usize = 50;
+
 // A very basic SDF evaluator that handles a few primitive shapes.
 pub fn evaluate_sdf(model: &Model, x: f64, y: f64, z: f64) -> f64 {
     // Check for a root node
@@ -116,6 +121,15 @@ fn circumcenter(
 /// neighboring seeds whose cells share a face.
 pub fn voronoi_mesh(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
     use std::collections::{HashMap, HashSet};
+
+    // Limit the number of seeds to avoid explosive growth in the naive
+    // tetrahedral enumeration. When the input exceeds the limit we apply a
+    // simple Poisson-disk thinning.
+    let seeds: Vec<(f64, f64, f64)> = if seeds.len() > MAX_VORONOI_SEEDS {
+        voronoi::sampling::thin_points(seeds, MAX_VORONOI_SEEDS)
+    } else {
+        seeds.to_vec()
+    };
 
     let n = seeds.len();
     let mut vertices: Vec<(f64, f64, f64)> = Vec::new();
