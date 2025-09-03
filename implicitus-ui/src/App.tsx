@@ -70,6 +70,7 @@ function App() {
   const [spec, setSpec] = useState<any[]>([]);
   const [meshVertices, setMeshVertices] = useState<[number, number, number][]>([]);
   const [meshEdges, setMeshEdges] = useState<number[][]>([]);
+  const [rendering, setRendering] = useState(false);
   // Seed points remain tied to the raw spec definition
   const seedPoints: [number, number, number][] =
     spec[0]?.modifiers?.infill?.seed_points ?? [];
@@ -88,24 +89,49 @@ function App() {
     const seeds = infill?.seed_points;
     if (seeds && seeds.length > 0) {
       console.debug('[UI] Fetching Voronoi mesh from slicer server', { count: seeds.length });
+      let cancelled = false;
+      setRendering(true);
       fetch('http://localhost:4000/voronoi', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ seeds }),
       })
-        .then(res => {
-          console.debug('[UI] Voronoi response status', res.status);
-          return res.json();
-        })
+        .then(res => res.json())
         .then(data => {
-          console.debug('[UI] Voronoi mesh received', {
-            vertices: data.vertices?.length,
-            edges: data.edges?.length,
-          });
-          setMeshVertices(data.vertices || []);
-          setMeshEdges(data.edges || []);
+          const jobId = data.job_id;
+          const poll = () => {
+            fetch(`http://localhost:4000/voronoi/status/${jobId}`)
+              .then(res => {
+                if (res.status === 202) {
+                  if (!cancelled) setTimeout(poll, 500);
+                  return null;
+                }
+                return res.json();
+              })
+              .then(data => {
+                if (!data) return;
+                console.debug('[UI] Voronoi mesh received', {
+                  vertices: data.vertices?.length,
+                  edges: data.edges?.length,
+                });
+                setMeshVertices(data.vertices || []);
+                setMeshEdges(data.edges || []);
+                setRendering(false);
+              })
+              .catch(err => {
+                console.error('[UI] Mesh polling failed', err);
+                setRendering(false);
+              });
+          };
+          poll();
         })
-        .catch(err => console.error('[UI] Mesh fetch failed', err));
+        .catch(err => {
+          console.error('[UI] Mesh fetch failed', err);
+          setRendering(false);
+        });
+      return () => {
+        cancelled = true;
+      };
     }
   }, [spec]);
   const [error, setError] = useState<string | null>(null);
@@ -564,7 +590,7 @@ function App() {
           </div>
 
           {/* Tabbed preview: Ray-March and Strut views */}
-          {tabIndex === 1 && (
+          {rendering && (
             <div style={{ margin: '1em', fontStyle: 'italic', color: '#555' }}>
               Rendering...
             </div>
