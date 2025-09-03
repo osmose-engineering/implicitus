@@ -1,0 +1,178 @@
+ (cd "$(git rev-parse --show-toplevel)" && git apply --3way <<'EOF' 
+diff --git a/implicitus-ui/tests/__screenshots__/voronoi_canvas.visual.spec.ts/voronoi-canvas-baseline.png b/implicitus-ui/tests/__screenshots__/voronoi_canvas.visual.spec.ts/voronoi-canvas-baseline.png
+index 1bc5b56579d9f3ae53ebe3bf4444e7badec6705a..7e5a11be2580028363b8a379601d0074c7e4a053 100644
+GIT binary patch
+delta 2164
+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
+
+delta 2172
+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
+
+diff --git a/implicitus-ui/tests/visual/voronoi_canvas_page.tsx b/implicitus-ui/tests/visual/voronoi_canvas_page.tsx
+index b43db44591ddd3077865e93bc085ea61e0770917..989f9ceecbc15948751fbaf97c98549a37654de8 100644
+--- a/implicitus-ui/tests/visual/voronoi_canvas_page.tsx
++++ b/implicitus-ui/tests/visual/voronoi_canvas_page.tsx
+@@ -1,31 +1,34 @@
+ import React from 'react';
+ import ReactDOM from 'react-dom/client';
+ import VoronoiCanvas from '../../src/components/VoronoiCanvas';
+ 
+ const root = ReactDOM.createRoot(document.getElementById('root')!);
+ 
+ root.render(
+   <div style={{ width: 300, height: 300 }}>
+     <VoronoiCanvas
+       seedPoints={[
+         [0, 0, 0],
+-        [1, 0, 0],
+-        [0, 1, 0],
+-        [0, 0, 1],
++        [1, 0, 0.5],
++        [0, 1, 1.0],
++        [1, 1, 1.5],
++        [0.5, 0.5, 2.0],
+       ]}
+       vertices={[
+         [0, 0, 0],
+-        [1, 0, 0],
+-        [0, 1, 0],
+-        [0, 0, 1],
++        [1, 0, 0.5],
++        [0, 1, 1.0],
++        [1, 1, 1.5],
++        [0.5, 0.5, 2.0],
+       ]}
+       edges={[
+         [0, 1],
+         [1, 2],
+         [2, 3],
+-        [3, 0],
++        [3, 4],
++        [4, 0],
+       ]}
+-      bbox={[0, 0, 0, 1, 1, 1]}
++      bbox={[0, 0, 0, 1, 1, 2]}
+     />
+-  </div>
++  </div>,
+ );
+diff --git a/implicitus-ui/tests/voronoi_canvas.visual.spec.ts b/implicitus-ui/tests/voronoi_canvas.visual.spec.ts
+index 1deabbedf3bc78296e2a2de1e4fe3766f4d32891..884375e26d2fecc7187aab6de802316f06774047 100644
+--- a/implicitus-ui/tests/voronoi_canvas.visual.spec.ts
++++ b/implicitus-ui/tests/voronoi_canvas.visual.spec.ts
+@@ -8,28 +8,30 @@ import { fileURLToPath } from 'url';
+ 
+ const __dirname = fileURLToPath(new URL('.', import.meta.url));
+ 
+ let server: ViteDevServer | undefined;
+ 
+ test.beforeAll(async () => {
+   server = await createServer({
+     configFile: path.resolve(__dirname, '../vite.config.ts'),
+     root: path.resolve(__dirname, '..'),
+     server: { port: 3000, strictPort: true },
+   });
+   await server.listen();
+ });
+ 
+ test.afterAll(async () => {
+   await server?.close();
+ });
+ 
+ test('VoronoiCanvas visual regression', async ({ page }) => {
+   page.on('pageerror', err => console.error('pageerror:', err));
+   page.on('console', msg => console.log('console:', msg.text()));
+   await page.addInitScript(() => {
+     (window as any).process = { env: { NODE_ENV: 'test' } };
+   });
+   await page.goto('http://localhost:3000/tests/visual/voronoi_canvas_page.html');
++  const root = page.locator('[data-testid="voronoi-canvas-root"]');
++  await expect(root).toHaveAttribute('data-has-flat-edges', 'false');
+   const canvas = page.locator('canvas');
+   await expect(canvas).toHaveScreenshot('voronoi-canvas-baseline.png');
+ });
+ 
+EOF
+)

@@ -30,6 +30,8 @@ test('VoronoiCanvas visual regression', async ({ page }) => {
     (window as any).process = { env: { NODE_ENV: 'test' } };
   });
   await page.goto('http://localhost:3000/tests/visual/voronoi_canvas_page.html');
+  const root = page.locator('[data-testid="voronoi-canvas-root"]');
+  await expect(root).toHaveAttribute('data-has-flat-edges', 'false');
   const canvas = page.locator('canvas');
   await expect(canvas).toHaveScreenshot('voronoi-canvas-baseline.png');
 });
