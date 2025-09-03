@@ -16,7 +16,7 @@ pub mod voronoi;
 /// Maximum number of seed points to consider when constructing a Voronoi mesh.
 /// Any additional seeds are thinned to this limit to avoid explosive
 /// combinatorial growth in the naive Voronoi implementation.
-pub const MAX_VORONOI_SEEDS: usize = 50;
+pub const MAX_VORONOI_SEEDS: usize = 500;
 
 // A very basic SDF evaluator that handles a few primitive shapes.
 pub fn evaluate_sdf(model: &Model, x: f64, y: f64, z: f64) -> f64 {
