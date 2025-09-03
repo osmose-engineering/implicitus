@@ -140,6 +140,14 @@ def _build_modifier_dict(raw_spec: dict) -> dict:
     # nested infill
     if isinstance(raw_spec.get('infill'), dict):
         infill_data.update(raw_spec['infill'])
+
+    # Allow 'lattice' as an alias for infill specification
+    if 'lattice' in raw_spec:
+        lattice_val = raw_spec.pop('lattice')
+        if isinstance(lattice_val, str):
+            infill_data['pattern'] = lattice_val
+        elif isinstance(lattice_val, dict):
+            infill_data.update(lattice_val)
     # Normalize bounding box keys to snake_case if they slipped through
     if 'bboxMin' in infill_data:
         infill_data['bbox_min'] = infill_data.pop('bboxMin')
