@@ -1,4 +1,6 @@
 use pyo3::prelude::*;
+use rayon::prelude::*;
+use std::sync::{Arc, Mutex};
 
 // Import the generated Protobuf definitions
 pub mod implicitus {
@@ -130,8 +132,9 @@ pub fn voronoi_mesh(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
     };
 
     let n = seeds.len();
-    let mut vertices: Vec<(f64, f64, f64)> = Vec::new();
-    let mut quad_to_vertex: HashMap<[usize; 4], usize> = HashMap::new();
+    let vertices: Arc<Mutex<Vec<(f64, f64, f64)>>> = Arc::new(Mutex::new(Vec::new()));
+    let quad_to_vertex: Arc<Mutex<HashMap<[usize; 4], usize>>> =
+        Arc::new(Mutex::new(HashMap::new()));
 
     // Estimate an average spacing to drive the grid adjacency pruning.
     let (mut xmin, mut ymin, mut zmin) = (f64::INFINITY, f64::INFINITY, f64::INFINITY);
@@ -148,8 +151,8 @@ pub fn voronoi_mesh(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
     let spacing = 1.5 * (volume / n as f64).cbrt();
 
     // Derive candidate neighbor pairs via spatial hashing.
-    let pairs = voronoi::sampling::prune_adjacency_via_grid(seeds.clone(), spacing)
-        .unwrap_or_default();
+    let pairs =
+        voronoi::sampling::prune_adjacency_via_grid(seeds.clone(), spacing).unwrap_or_default();
     let mut adjacency: Vec<HashSet<usize>> = vec![HashSet::new(); n];
     for (a, b) in pairs {
         adjacency[a].insert(b);
@@ -157,7 +160,7 @@ pub fn voronoi_mesh(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
     }
 
     // For each seed, form tetrahedra from localized neighbor sets.
-    for i in 0..n {
+    (0..n).into_par_iter().for_each(|i| {
         let mut neighbors: Vec<usize> = adjacency[i].iter().cloned().filter(|&j| j > i).collect();
         neighbors.sort();
         for a in 0..neighbors.len() {
@@ -189,17 +192,25 @@ pub fn voronoi_mesh(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
                         if valid {
                             let mut key = [i, j, k, l];
                             key.sort();
-                            if !quad_to_vertex.contains_key(&key) {
-                                let idx = vertices.len();
-                                vertices.push(center);
-                                quad_to_vertex.insert(key, idx);
+                            let mut qtv = quad_to_vertex.lock().unwrap();
+                            if !qtv.contains_key(&key) {
+                                let mut verts = vertices.lock().unwrap();
+                                let idx = verts.len();
+                                verts.push(center);
+                                qtv.insert(key, idx);
                             }
                         }
                     }
                 }
             }
         }
-    }
+    });
+
+    let vertices = Arc::try_unwrap(vertices).unwrap().into_inner().unwrap();
+    let quad_to_vertex = Arc::try_unwrap(quad_to_vertex)
+        .unwrap()
+        .into_inner()
+        .unwrap();
 
     // Build adjacency edges between Voronoi vertices sharing a triangle of seeds
     let mut triple_map: HashMap<[usize; 3], Vec<usize>> = HashMap::new();
@@ -212,21 +223,26 @@ pub fn voronoi_mesh(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
         }
     }
 
-    let mut edge_set: HashSet<(usize, usize)> = HashSet::new();
-    for verts in triple_map.values() {
+    let edge_set: Arc<Mutex<HashSet<(usize, usize)>>> = Arc::new(Mutex::new(HashSet::new()));
+    triple_map.par_iter().for_each(|(_, verts)| {
         if verts.len() >= 2 {
             for i in 0..verts.len() {
                 for j in (i + 1)..verts.len() {
                     let a = verts[i];
                     let b = verts[j];
                     let e = if a < b { (a, b) } else { (b, a) };
-                    edge_set.insert(e);
+                    edge_set.lock().unwrap().insert(e);
                 }
             }
         }
-    }
+    });
 
-    let mut edges: Vec<(usize, usize)> = edge_set.into_iter().collect();
+    let mut edges: Vec<(usize, usize)> = Arc::try_unwrap(edge_set)
+        .unwrap()
+        .into_inner()
+        .unwrap()
+        .into_iter()
+        .collect();
     edges.sort();
 
     VoronoiMesh { vertices, edges }
