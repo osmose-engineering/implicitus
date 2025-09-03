@@ -14,9 +14,9 @@ pub mod uniform;
 pub mod voronoi;
 
 /// Maximum number of seed points to consider when constructing a Voronoi mesh.
-/// Any additional seeds are thinned to this limit to avoid explosive
-/// combinatorial growth in the naive Voronoi implementation.
-pub const MAX_VORONOI_SEEDS: usize = 500;
+/// With adjacency pruning the algorithm scales to thousands of points, so this
+/// limit is mostly a safeguard against extreme inputs.
+pub const MAX_VORONOI_SEEDS: usize = 10_000;
 
 // A very basic SDF evaluator that handles a few primitive shapes.
 pub fn evaluate_sdf(model: &Model, x: f64, y: f64, z: f64) -> f64 {
@@ -122,9 +122,7 @@ fn circumcenter(
 pub fn voronoi_mesh(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
     use std::collections::{HashMap, HashSet};
 
-    // Limit the number of seeds to avoid explosive growth in the naive
-    // tetrahedral enumeration. When the input exceeds the limit we apply a
-    // simple Poisson-disk thinning.
+    // Limit seed count via thinning when the input exceeds a reasonable cap.
     let seeds: Vec<(f64, f64, f64)> = if seeds.len() > MAX_VORONOI_SEEDS {
         voronoi::sampling::thin_points(seeds, MAX_VORONOI_SEEDS)
     } else {
@@ -135,30 +133,67 @@ pub fn voronoi_mesh(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
     let mut vertices: Vec<(f64, f64, f64)> = Vec::new();
     let mut quad_to_vertex: HashMap<[usize; 4], usize> = HashMap::new();
 
-    // Enumerate all tetrahedra and collect valid circumcenters as Voronoi vertices
+    // Estimate an average spacing to drive the grid adjacency pruning.
+    let (mut xmin, mut ymin, mut zmin) = (f64::INFINITY, f64::INFINITY, f64::INFINITY);
+    let (mut xmax, mut ymax, mut zmax) = (f64::NEG_INFINITY, f64::NEG_INFINITY, f64::NEG_INFINITY);
+    for &(x, y, z) in &seeds {
+        xmin = xmin.min(x);
+        ymin = ymin.min(y);
+        zmin = zmin.min(z);
+        xmax = xmax.max(x);
+        ymax = ymax.max(y);
+        zmax = zmax.max(z);
+    }
+    let volume = ((xmax - xmin) * (ymax - ymin) * (zmax - zmin)).max(1e-9);
+    let spacing = 1.5 * (volume / n as f64).cbrt();
+
+    // Derive candidate neighbor pairs via spatial hashing.
+    let pairs = voronoi::sampling::prune_adjacency_via_grid(seeds.clone(), spacing)
+        .unwrap_or_default();
+    let mut adjacency: Vec<HashSet<usize>> = vec![HashSet::new(); n];
+    for (a, b) in pairs {
+        adjacency[a].insert(b);
+        adjacency[b].insert(a);
+    }
+
+    // For each seed, form tetrahedra from localized neighbor sets.
     for i in 0..n {
-        for j in (i + 1)..n {
-            for k in (j + 1)..n {
-                for l in (k + 1)..n {
+        let mut neighbors: Vec<usize> = adjacency[i].iter().cloned().filter(|&j| j > i).collect();
+        neighbors.sort();
+        for a in 0..neighbors.len() {
+            for b in (a + 1)..neighbors.len() {
+                for c in (b + 1)..neighbors.len() {
+                    let j = neighbors[a];
+                    let k = neighbors[b];
+                    let l = neighbors[c];
+                    // All pairs must be adjacent to approximate Delaunay tetrahedra
+                    if !(adjacency[j].contains(&k)
+                        && adjacency[j].contains(&l)
+                        && adjacency[k].contains(&l))
+                    {
+                        continue;
+                    }
                     if let Some(center) = circumcenter(seeds[i], seeds[j], seeds[k], seeds[l]) {
                         let dist2 = norm_sq(sub(center, seeds[i]));
                         let mut valid = true;
-                        for m in 0..n {
+                        for (m, &p) in seeds.iter().enumerate() {
                             if m == i || m == j || m == k || m == l {
                                 continue;
                             }
-                            let d2 = norm_sq(sub(center, seeds[m]));
+                            let d2 = norm_sq(sub(center, p));
                             if d2 < dist2 - 1e-9 {
                                 valid = false;
                                 break;
                             }
                         }
                         if valid {
-                            let idx = vertices.len();
-                            vertices.push(center);
                             let mut key = [i, j, k, l];
                             key.sort();
-                            quad_to_vertex.insert(key, idx);
+                            if !quad_to_vertex.contains_key(&key) {
+                                let idx = vertices.len();
+                                vertices.push(center);
+                                quad_to_vertex.insert(key, idx);
+                            }
                         }
                     }
                 }
