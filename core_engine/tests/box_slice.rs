@@ -48,4 +48,8 @@ async fn slice_box_model_returns_square_contour() {
     assert!((max_x - 1.0).abs() < 1e-6, "max_x was {}", max_x);
     assert!((min_y + 1.0).abs() < 1e-6, "min_y was {}", min_y);
     assert!((max_y - 1.0).abs() < 1e-6, "max_y was {}", max_y);
+
+    // Debug info should be present with zero seeds and no pattern
+    assert_eq!(resp.debug.seed_count, 0);
+    assert!(resp.debug.infill_pattern.is_none());
 }

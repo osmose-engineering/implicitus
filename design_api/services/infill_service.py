@@ -50,10 +50,14 @@ def generate_voronoi(spec: Dict[str, Any]) -> Dict[str, Any]:
     return {
         "seed_points": pts,
         "vertices": pts,
-        "edges": edge_list,
+        "edge_list": edge_list,
         "cells": spec.get("cells"),
         "bbox_min": spec.get("bbox_min"),
         "bbox_max": spec.get("bbox_max"),
+        "debug": {
+            "seed_count": len(pts),
+            "infill_type": spec.get("pattern", "voronoi"),
+        },
     }
 
 
@@ -189,6 +193,12 @@ def generate_hex_lattice(
         **extra_kwargs,
     )
 
+    debug = {
+        "seed_count": len(seed_pts),
+        "infill_type": spec.get("pattern", "voronoi"),
+        "mode": mode,
+    }
+
     if return_vertices:
         # ``build_hex_lattice`` returns vertices and edges as tuples. Convert them
         # into plain lists so the structure can be serialized directly into
@@ -202,6 +212,7 @@ def generate_hex_lattice(
             "cells": cells,
             "bbox_min": bbox_min,
             "bbox_max": bbox_max,
+            "debug": debug,
         }
 
     adjacency = compute_voronoi_adjacency(seed_pts, spacing=spacing * 0.5)
@@ -213,4 +224,5 @@ def generate_hex_lattice(
         "cells": cells,
         "bbox_min": bbox_min,
         "bbox_max": bbox_max,
+        "debug": debug,
     }
