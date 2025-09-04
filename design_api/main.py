@@ -199,36 +199,37 @@ async def review(req: dict, sid: Optional[str] = None):
                 pattern = inf.get("pattern")
                 logging.debug(f"PATTERN {pattern}")
                 if pattern == "voronoi":
-                    mode = inf.get("mode") or req.get("mode")
-                    if mode is None:
-                        uniform_flag = inf.get("uniform") or req.get("uniform")
-                        if isinstance(uniform_flag, str):
-                            uniform_flag = uniform_flag.lower() == "true"
-                        if uniform_flag:
-                            mode = "uniform"
-                    if mode == "uniform":
-                        primitive = node.get("primitive", {})
+                    seed_pts = None
+                    if stored and (num_pts is None or num_pts == len(stored)):
+                        seed_pts = stored
+                    elif pts is not None:
+                        seed_pts = pts
+                    seed_cfg = resolve_seed_spec(
+                        node.get("primitive", {}),
+                        bbox_min,
+                        bbox_max,
+                        seed_points=seed_pts,
+                        num_points=None if seed_pts is not None else num_pts,
+                        spacing=inf.get("spacing") or inf.get("min_dist"),
+                        mode=inf.get("mode") or req.get("mode"),
+                        uniform=inf.get("uniform") or req.get("uniform"),
+                    )
+                    if seed_cfg["mode"] == "uniform":
                         spec_kwargs = {
                             **inf,
-                            "primitive": primitive,
+                            **seed_cfg,
+                            "primitive": node.get("primitive", {}),
                             "imds_mesh": inf.get("imds_mesh") or req.get("imds_mesh"),
                             "plane_normal": inf.get("plane_normal") or req.get("plane_normal"),
                             "max_distance": inf.get("max_distance") or req.get("max_distance"),
-                            "mode": "uniform",
                             "use_voronoi_edges": inf.get("use_voronoi_edges", False),
                         }
-                        if stored and (num_pts is None or num_pts == len(stored)):
-                            spec_kwargs["seed_points"] = stored
-                        elif pts is not None:
-                            spec_kwargs["seed_points"] = pts
-                        if num_pts is not None and "seed_points" not in spec_kwargs:
-                            spec_kwargs["num_points"] = num_pts
                         res = generate_hex_lattice(spec_kwargs)
                     else:
-                        res = generate_voronoi(inf)
+                        res = generate_voronoi({**inf, **seed_cfg})
                     inf.update(res)
-                    if res.get("seed_points") is not None:
-                        design_states[sid].seed_cache[idx] = res["seed_points"]
+                    if seed_cfg.get("seed_points") is not None:
+                        design_states[sid].seed_cache[idx] = seed_cfg["seed_points"]
                     logging.debug(
                         f"[DEBUG review] produced {len(res.get('edge_list', res.get('edges', [])))} edges"
                     )
@@ -302,41 +303,43 @@ async def update(req: UpdateRequest):
         bbox_min = inf.get("bbox_min")
         bbox_max = inf.get("bbox_max")
         stored = design_states[sid].seed_cache.get(idx)
+
         if (pts or num_pts or stored) and bbox_min and bbox_max:
             pattern = inf.get("pattern")
             if pattern == "voronoi":
-                mode = inf.get("mode")
-                if mode is None:
-                    uniform_flag = inf.get("uniform")
-                    if isinstance(uniform_flag, str):
-                        uniform_flag = uniform_flag.lower() == "true"
-                    if uniform_flag:
-                        mode = "uniform"
-                if mode == "uniform":
-                    primitive = node.get("primitive", {})
+                seed_pts = None
+                if stored and (num_pts is None or num_pts == len(stored)):
+                    seed_pts = stored
+                elif pts is not None:
+                    seed_pts = pts
+                seed_cfg = resolve_seed_spec(
+                    node.get("primitive", {}),
+                    bbox_min,
+                    bbox_max,
+                    seed_points=seed_pts,
+                    num_points=None if seed_pts is not None else num_pts,
+                    spacing=inf.get("spacing") or inf.get("min_dist"),
+                    mode=inf.get("mode"),
+                    uniform=inf.get("uniform"),
+                )
+                if seed_cfg["mode"] == "uniform":
                     spec_kwargs = {
                         **inf,
-                        "primitive": primitive,
+                        **seed_cfg,
+                        "primitive": node.get("primitive", {}),
                         "imds_mesh": inf.get("imds_mesh") or req.imds_mesh,
                         "plane_normal": inf.get("plane_normal") or req.plane_normal,
                         "max_distance": inf.get("max_distance") or req.max_distance,
-                        "mode": "uniform",
                         "use_voronoi_edges": inf.get("use_voronoi_edges", False),
                     }
-                    if stored and (num_pts is None or num_pts == len(stored)):
-                        spec_kwargs["seed_points"] = stored
-                    elif pts is not None:
-                        spec_kwargs["seed_points"] = pts
-                    if num_pts is not None and "seed_points" not in spec_kwargs:
-                        spec_kwargs["num_points"] = num_pts
                     res = generate_hex_lattice(spec_kwargs)
                 else:
-                    res = generate_voronoi(inf)
+                    res = generate_voronoi({**inf, **seed_cfg})
                 inf.update(res)
-                if res.get("seed_points") is not None:
-                    design_states[sid].seed_cache[idx] = res["seed_points"]
+                if seed_cfg.get("seed_points") is not None:
+                    design_states[sid].seed_cache[idx] = seed_cfg["seed_points"]
                 logging.debug(
-                    f"[DEBUG update] produced {len(res.get('edge_list', res.get('edges', [])))} edges"
+                    f"[DEBUG update] produced {len(res.get('edge_list', res.get('edges', [])))} edges",
                 )
 
 
@@ -388,37 +391,37 @@ async def submit(req: dict, sid: str):
         if (pts or num_pts or stored) and bbox_min and bbox_max:
             pattern = inf.get("pattern")
             if pattern == "voronoi":
-                mode = inf.get("mode")
-                if mode is None:
-                    uniform_flag = inf.get("uniform")
-                    if isinstance(uniform_flag, str):
-                        uniform_flag = uniform_flag.lower() == "true"
-                    if uniform_flag:
-                        mode = "uniform"
-                if mode == "uniform":
-                    primitive = node.get("primitive", {})
+                seed_pts = None
+                if stored and (num_pts is None or num_pts == len(stored)):
+                    seed_pts = stored
+                elif pts is not None:
+                    seed_pts = pts
+                seed_cfg = resolve_seed_spec(
+                    node.get("primitive", {}),
+                    bbox_min,
+                    bbox_max,
+                    seed_points=seed_pts,
+                    num_points=None if seed_pts is not None else num_pts,
+                    spacing=inf.get("spacing") or inf.get("min_dist"),
+                    mode=inf.get("mode"),
+                    uniform=inf.get("uniform"),
+                )
+                if seed_cfg["mode"] == "uniform":
                     spec_kwargs = {
                         **inf,
-                        "primitive": primitive,
+                        **seed_cfg,
+                        "primitive": node.get("primitive", {}),
                         "imds_mesh": inf.get("imds_mesh"),
                         "plane_normal": inf.get("plane_normal"),
                         "max_distance": inf.get("max_distance"),
-                        "mode": "uniform",
                         "use_voronoi_edges": inf.get("use_voronoi_edges", False),
                     }
-                    if stored and (num_pts is None or num_pts == len(stored)):
-                        spec_kwargs["seed_points"] = stored
-                    elif pts is not None:
-                        spec_kwargs["seed_points"] = pts
-                    if num_pts is not None and "seed_points" not in spec_kwargs:
-                        spec_kwargs["num_points"] = num_pts
                     res = generate_hex_lattice(spec_kwargs)
                 else:
-                    res = generate_voronoi(inf)
+                    res = generate_voronoi({**inf, **seed_cfg})
                 inf.update(res)
-                if res.get("seed_points") is not None:
-                    design_states[sid].seed_cache[idx] = res["seed_points"]
-    # Normalize entries: if they look like proto Nodes, use as-is; else map primitives
+                if seed_cfg.get("seed_points") is not None:
+                    design_states[sid].seed_cache[idx] = seed_cfg["seed_points"]
     entries = nodes
     def is_proto_node(e):
         return isinstance(e, dict) and any(k in e for k in ['primitive','booleanOp','infill','shell','shellFill','children'])
