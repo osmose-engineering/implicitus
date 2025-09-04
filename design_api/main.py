@@ -172,11 +172,14 @@ async def review(req: dict, sid: Optional[str] = None):
         for node in spec:
             inf = node.get("modifiers", {}).get("infill", {})
             pts = inf.get("seed_points")
+            num_pts = inf.get("num_points")
             bbox_min = inf.get("bbox_min")
             bbox_max = inf.get("bbox_max")
-            logging.debug(f"pts {pts} bbox_min {bbox_min} bbox_max {bbox_max}")
+            logging.debug(
+                f"pts {pts} num_pts {num_pts} bbox_min {bbox_min} bbox_max {bbox_max}"
+            )
 
-            if pts and bbox_min and bbox_max:
+            if (pts or num_pts) and bbox_min and bbox_max:
                 pattern = inf.get("pattern")
                 logging.debug(f"PATTERN {pattern}")
                 if pattern == "voronoi":
@@ -189,17 +192,18 @@ async def review(req: dict, sid: Optional[str] = None):
                             mode = "uniform"
                     if mode == "uniform":
                         primitive = node.get("primitive", {})
-                        res = generate_hex_lattice(
-                            {
-                                **inf,
-                                "primitive": primitive,
-                                "imds_mesh": inf.get("imds_mesh") or req.get("imds_mesh"),
-                                "plane_normal": inf.get("plane_normal") or req.get("plane_normal"),
-                                "max_distance": inf.get("max_distance") or req.get("max_distance"),
-                                "mode": "uniform",
-                                "use_voronoi_edges": inf.get("use_voronoi_edges", False),
-                            }
-                        )
+                        spec_kwargs = {
+                            **inf,
+                            "primitive": primitive,
+                            "imds_mesh": inf.get("imds_mesh") or req.get("imds_mesh"),
+                            "plane_normal": inf.get("plane_normal") or req.get("plane_normal"),
+                            "max_distance": inf.get("max_distance") or req.get("max_distance"),
+                            "mode": "uniform",
+                            "use_voronoi_edges": inf.get("use_voronoi_edges", False),
+                        }
+                        if num_pts is not None:
+                            spec_kwargs["num_points"] = num_pts
+                        res = generate_hex_lattice(spec_kwargs)
                     else:
                         res = generate_voronoi(inf)
                     inf.update(res)
@@ -287,17 +291,18 @@ async def update(req: UpdateRequest):
                         mode = "uniform"
                 if mode == "uniform":
                     primitive = node.get("primitive", {})
-                    res = generate_hex_lattice(
-                        {
-                            **inf,
-                            "primitive": primitive,
-                            "imds_mesh": inf.get("imds_mesh") or req.imds_mesh,
-                            "plane_normal": inf.get("plane_normal") or req.plane_normal,
-                            "max_distance": inf.get("max_distance") or req.max_distance,
-                            "mode": "uniform",
-                            "use_voronoi_edges": inf.get("use_voronoi_edges", False),
-                        }
-                    )
+                    spec_kwargs = {
+                        **inf,
+                        "primitive": primitive,
+                        "imds_mesh": inf.get("imds_mesh") or req.imds_mesh,
+                        "plane_normal": inf.get("plane_normal") or req.plane_normal,
+                        "max_distance": inf.get("max_distance") or req.max_distance,
+                        "mode": "uniform",
+                        "use_voronoi_edges": inf.get("use_voronoi_edges", False),
+                    }
+                    if num_pts is not None:
+                        spec_kwargs["num_points"] = num_pts
+                    res = generate_hex_lattice(spec_kwargs)
                 else:
                     res = generate_voronoi(inf)
                 inf.update(res)
