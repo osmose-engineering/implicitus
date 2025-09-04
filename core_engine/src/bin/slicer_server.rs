@@ -23,9 +23,16 @@ pub struct SliceRequest {
     pub ny: Option<usize>,
 }
 
+#[derive(Serialize, Deserialize, Debug)]
+pub struct DebugInfo {
+    pub seed_count: usize,
+    pub infill_pattern: Option<String>,
+}
+
 #[derive(Serialize, Deserialize)]
 pub struct SliceResponse {
     pub contours: Vec<Vec<(f64, f64)>>,
+    pub debug: DebugInfo,
 }
 
 #[derive(Deserialize)]
@@ -80,14 +87,9 @@ async fn main() {
     warp::serve(routes).run(([127, 0, 0, 1], 4000)).await;
 }
 
-#[derive(Debug)]
-struct InvalidModel;
-impl warp::reject::Reject for InvalidModel {}
-
 pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::Rejection> {
-    // Deserialize the incoming model description.
-    let model: Model = serde_json::from_value(req._model)
-        .map_err(|_| warp::reject::custom(InvalidModel))?;
+    // Extract debug info before consuming the model value
+    let debug = extract_debug_info(&req._model);
 
     let config = SliceConfig {
         z: req.layer,
@@ -99,8 +101,12 @@ pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::R
         ny: req.ny.unwrap_or(50),
     };
 
-    let contours = slice_model(&model, &config);
-    Ok(warp::reply::json(&SliceResponse { contours }))
+    let contours = match serde_json::from_value::<Model>(req._model) {
+        Ok(model) => slice_model(&model, &config),
+        Err(_) => Vec::new(),
+    };
+
+    Ok(warp::reply::json(&SliceResponse { contours, debug }))
 }
 
 async fn handle_voronoi(
@@ -145,4 +151,46 @@ async fn handle_voronoi_status(
 #[derive(Serialize)]
 struct StatusResponse {
     status: &'static str,
+}
+
+fn extract_debug_info(value: &Value) -> DebugInfo {
+    fn find_infill(v: &Value) -> Option<&Value> {
+        if let Some(obj) = v.as_object() {
+            if let Some(infill) = obj.get("infill") {
+                return Some(infill);
+            }
+            for val in obj.values() {
+                if let Some(found) = find_infill(val) {
+                    return Some(found);
+                }
+            }
+        } else if let Some(arr) = v.as_array() {
+            for val in arr {
+                if let Some(found) = find_infill(val) {
+                    return Some(found);
+                }
+            }
+        }
+        None
+    }
+
+    if let Some(infill) = find_infill(value) {
+        let seed_count = infill
+            .get("seed_points")
+            .and_then(|sp| sp.as_array().map(|a| a.len()))
+            .unwrap_or(0);
+        let infill_pattern = infill
+            .get("pattern")
+            .and_then(|p| p.as_str())
+            .map(|s| s.to_string());
+        DebugInfo {
+            seed_count,
+            infill_pattern,
+        }
+    } else {
+        DebugInfo {
+            seed_count: 0,
+            infill_pattern: None,
+        }
+    }
 }

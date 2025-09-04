@@ -117,6 +117,24 @@ function App() {
     }
   };
 
+  const fetchSlice = async (model: any) => {
+    if (!model) return;
+    try {
+      const resp = await fetch('http://localhost:4000/slice', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ model, layer: 0 }),
+      });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      if (data.debug) {
+        console.log('[slicer_server] debug info:', data.debug);
+      }
+    } catch (err) {
+      console.error('[UI] slice fetch error:', err);
+    }
+  };
+
   const handleValidate = async () => {
     setError(null);
     setLoading(true);
@@ -222,11 +240,15 @@ function App() {
           edges: infill?.edges?.length,
           sampleEdges: infill?.edges?.slice(0, 5),
         });
+        if (infill?.debug) {
+          console.log('[design_api] debug info:', infill.debug);
+        }
         setSpec(data.spec);
         setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
         if (infill?.seed_points) {
           fetchVoronoiMesh(infill.seed_points);
         }
+        fetchSlice({ id: 'preview', root: { children: data.spec } });
         if (data.summary) {
           setSummary(data.summary);
           setMessages(prev => [...prev, { speaker: 'assistant', text: data.summary }]);
@@ -307,7 +329,13 @@ function App() {
       const data = await response.json();
       console.log('API spec:', data.spec);
       console.log('[UI] Confirm response data:', data);
+      if (data.debug) {
+        console.log('[design_api] debug info:', data.debug);
+      }
       setModelProto(data);
+      if (data.locked_model) {
+        fetchSlice(data.locked_model);
+      }
     } catch (err: any) {
       setError(err.message || 'An error occurred during confirm');
     } finally {
@@ -350,6 +378,9 @@ function App() {
         setSpec(data.spec);
         setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
         const infill = data.spec[0]?.modifiers?.infill;
+        if (infill?.debug) {
+          console.log('[design_api] debug info:', infill.debug);
+        }
         if (infill?.seed_points) {
           fetchVoronoiMesh(infill.seed_points);
         }
@@ -396,6 +427,9 @@ function App() {
         setSpec(data.spec);
         setSpecText(JSON.stringify(data.spec, null, 2));
         const infill = data.spec[0]?.modifiers?.infill;
+        if (infill?.debug) {
+          console.log('[design_api] debug info:', infill.debug);
+        }
         if (infill?.seed_points) {
           fetchVoronoiMesh(infill.seed_points);
         }
