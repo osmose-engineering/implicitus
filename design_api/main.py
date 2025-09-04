@@ -27,7 +27,7 @@ from json.decoder import JSONDecodeError
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, Any, Dict, List
+from typing import Optional, Any, Dict, List, Literal
 from dataclasses import dataclass, field
 from design_api.services.json_cleaner import clean_llm_output
 from design_api.services.llm_service import generate_design_spec
@@ -38,6 +38,7 @@ from design_api.services.infill_service import (
     generate_hex_lattice,
     generate_voronoi,
 )
+from design_api.services.seed_utils import resolve_seed_spec
 
 @dataclass
 class DesignState:
@@ -93,12 +94,24 @@ class DesignRequest(BaseModel):
 class MeshRequest(BaseModel):
     seed_points: list[list[float]] = Field(default_factory=list)
     spacing: Optional[float] = None
+    num_points: Optional[int] = None
+    mode: Optional[Literal["uniform", "organic"]] = None
 
 
 @app.post("/design/mesh", response_model=dict)
 async def voronoi_mesh_endpoint(req: MeshRequest):
     """Generate a Voronoi mesh from seed points."""
-    pts = [tuple(p) for p in req.seed_points]
+    seed_cfg = resolve_seed_spec(
+        {},
+        None,
+        None,
+        seed_points=req.seed_points or None,
+        num_points=req.num_points,
+        spacing=req.spacing,
+        mode=req.mode,
+    )
+    pts = [tuple(p) for p in seed_cfg.get("seed_points") or []]
+    spacing = seed_cfg["spacing"]
     try:
         import core_engine as _core  # type: ignore
 
@@ -112,7 +125,7 @@ async def voronoi_mesh_endpoint(req: MeshRequest):
             compute_voronoi_adjacency,
         )
 
-        adjacency = compute_voronoi_adjacency(pts, spacing=req.spacing)
+        adjacency = compute_voronoi_adjacency(pts, spacing=spacing)
         seen = set()
         edges = []
         for i, j in adjacency:
