@@ -27,8 +27,8 @@ from json.decoder import JSONDecodeError
 from fastapi import FastAPI, HTTPException
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
-from typing import Optional, Any
-from dataclasses import dataclass
+from typing import Optional, Any, Dict, List
+from dataclasses import dataclass, field
 from design_api.services.json_cleaner import clean_llm_output
 from design_api.services.llm_service import generate_design_spec
 from design_api.services.mapping import map_primitive as map_to_proto_dict
@@ -43,6 +43,7 @@ from design_api.services.infill_service import (
 class DesignState:
     draft_spec: list
     locked_model: Optional[dict] = None
+    seed_cache: Dict[int, List[List[float]]] = field(default_factory=dict)
 
 # session store: session_id -> DesignState
 design_states: dict[str, DesignState] = {}
@@ -169,7 +170,7 @@ async def review(req: dict, sid: Optional[str] = None):
         spec, summary = result
 
         # Compute adjacency and edges for any infill
-        for node in spec:
+        for idx, node in enumerate(spec):
             inf = node.get("modifiers", {}).get("infill", {})
             pts = inf.get("seed_points")
             num_pts = inf.get("num_points")
@@ -179,7 +180,9 @@ async def review(req: dict, sid: Optional[str] = None):
                 f"pts {pts} num_pts {num_pts} bbox_min {bbox_min} bbox_max {bbox_max}"
             )
 
-            if (pts or num_pts) and bbox_min and bbox_max:
+            stored = design_states[sid].seed_cache.get(idx)
+
+            if (pts or num_pts or stored) and bbox_min and bbox_max:
                 pattern = inf.get("pattern")
                 logging.debug(f"PATTERN {pattern}")
                 if pattern == "voronoi":
@@ -201,12 +204,18 @@ async def review(req: dict, sid: Optional[str] = None):
                             "mode": "uniform",
                             "use_voronoi_edges": inf.get("use_voronoi_edges", False),
                         }
-                        if num_pts is not None:
+                        if stored and (num_pts is None or num_pts == len(stored)):
+                            spec_kwargs["seed_points"] = stored
+                        elif pts is not None:
+                            spec_kwargs["seed_points"] = pts
+                        if num_pts is not None and "seed_points" not in spec_kwargs:
                             spec_kwargs["num_points"] = num_pts
                         res = generate_hex_lattice(spec_kwargs)
                     else:
                         res = generate_voronoi(inf)
                     inf.update(res)
+                    if res.get("seed_points") is not None:
+                        design_states[sid].seed_cache[idx] = res["seed_points"]
                     logging.debug(
                         f"[DEBUG review] produced {len(res.get('edge_list', res.get('edges', [])))} edges"
                     )
@@ -273,13 +282,14 @@ async def update(req: UpdateRequest):
     new_spec, new_summary = result
 
     # Compute adjacency and edges for any infill
-    for node in new_spec:
+    for idx, node in enumerate(new_spec):
         inf = node.get("modifiers", {}).get("infill", {})
         pts = inf.get("seed_points")
         num_pts = inf.get("num_points")
         bbox_min = inf.get("bbox_min")
         bbox_max = inf.get("bbox_max")
-        if (pts or num_pts) and bbox_min and bbox_max:
+        stored = design_states[sid].seed_cache.get(idx)
+        if (pts or num_pts or stored) and bbox_min and bbox_max:
             pattern = inf.get("pattern")
             if pattern == "voronoi":
                 mode = inf.get("mode")
@@ -300,15 +310,21 @@ async def update(req: UpdateRequest):
                         "mode": "uniform",
                         "use_voronoi_edges": inf.get("use_voronoi_edges", False),
                     }
-                    if num_pts is not None:
+                    if stored and (num_pts is None or num_pts == len(stored)):
+                        spec_kwargs["seed_points"] = stored
+                    elif pts is not None:
+                        spec_kwargs["seed_points"] = pts
+                    if num_pts is not None and "seed_points" not in spec_kwargs:
                         spec_kwargs["num_points"] = num_pts
                     res = generate_hex_lattice(spec_kwargs)
                 else:
                     res = generate_voronoi(inf)
                 inf.update(res)
+                if res.get("seed_points") is not None:
+                    design_states[sid].seed_cache[idx] = res["seed_points"]
                 logging.debug(
                     f"[DEBUG update] produced {len(res.get('edge_list', res.get('edges', [])))} edges"
-                    )
+                )
 
 
     # sanitize new_spec to convert numpy arrays into lists for JSON serialization
@@ -347,8 +363,50 @@ async def submit(req: dict, sid: str):
     # Retrieve the draft spec
     spec_dict = design_states[sid].draft_spec
     logging.debug(f"Draft spec for submission: {spec_dict}")
+    # Recompute infill using stored seeds so final output matches previews
+    nodes = spec_dict if isinstance(spec_dict, list) else spec_dict.get("primitives", [])
+    for idx, node in enumerate(nodes):
+        inf = node.get("modifiers", {}).get("infill", {})
+        pts = inf.get("seed_points")
+        num_pts = inf.get("num_points")
+        bbox_min = inf.get("bbox_min")
+        bbox_max = inf.get("bbox_max")
+        stored = design_states[sid].seed_cache.get(idx)
+        if (pts or num_pts or stored) and bbox_min and bbox_max:
+            pattern = inf.get("pattern")
+            if pattern == "voronoi":
+                mode = inf.get("mode")
+                if mode is None:
+                    uniform_flag = inf.get("uniform")
+                    if isinstance(uniform_flag, str):
+                        uniform_flag = uniform_flag.lower() == "true"
+                    if uniform_flag:
+                        mode = "uniform"
+                if mode == "uniform":
+                    primitive = node.get("primitive", {})
+                    spec_kwargs = {
+                        **inf,
+                        "primitive": primitive,
+                        "imds_mesh": inf.get("imds_mesh"),
+                        "plane_normal": inf.get("plane_normal"),
+                        "max_distance": inf.get("max_distance"),
+                        "mode": "uniform",
+                        "use_voronoi_edges": inf.get("use_voronoi_edges", False),
+                    }
+                    if stored and (num_pts is None or num_pts == len(stored)):
+                        spec_kwargs["seed_points"] = stored
+                    elif pts is not None:
+                        spec_kwargs["seed_points"] = pts
+                    if num_pts is not None and "seed_points" not in spec_kwargs:
+                        spec_kwargs["num_points"] = num_pts
+                    res = generate_hex_lattice(spec_kwargs)
+                else:
+                    res = generate_voronoi(inf)
+                inf.update(res)
+                if res.get("seed_points") is not None:
+                    design_states[sid].seed_cache[idx] = res["seed_points"]
     # Normalize entries: if they look like proto Nodes, use as-is; else map primitives
-    entries = spec_dict if isinstance(spec_dict, list) else spec_dict.get('primitives', [])
+    entries = nodes
     def is_proto_node(e):
         return isinstance(e, dict) and any(k in e for k in ['primitive','booleanOp','infill','shell','shellFill','children'])
     if all(is_proto_node(e) for e in entries):

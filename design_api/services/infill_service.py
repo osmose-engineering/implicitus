@@ -69,6 +69,13 @@ def generate_hex_lattice(
         When ``True`` (default), forward ``cell_vertices`` and ``edge_list`` from
         :func:`build_hex_lattice` directly instead of computing a separate
         adjacency via :func:`compute_voronoi_adjacency`.
+
+    Notes
+    -----
+    Supplying ``seed_points`` in ``spec`` uses those points verbatim and skips
+    the random sampling step normally performed when only ``num_points`` is
+    provided. This allows callers to reuse the same seeds for both preview and
+    final slicer renders to ensure consistent output.
     """
 
     bbox_min = spec.get("bbox_min")
