@@ -272,9 +272,10 @@ async def update(req: UpdateRequest):
     for node in new_spec:
         inf = node.get("modifiers", {}).get("infill", {})
         pts = inf.get("seed_points")
+        num_pts = inf.get("num_points")
         bbox_min = inf.get("bbox_min")
         bbox_max = inf.get("bbox_max")
-        if pts and bbox_min and bbox_max:
+        if (pts or num_pts) and bbox_min and bbox_max:
             pattern = inf.get("pattern")
             if pattern == "voronoi":
                 mode = inf.get("mode")
