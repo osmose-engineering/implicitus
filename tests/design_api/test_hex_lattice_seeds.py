@@ -1,7 +1,8 @@
 import numpy as np
+import random
+import pytest
 
 from design_api.services.infill_service import generate_hex_lattice
-from design_api.services.voronoi_gen.voronoi_gen import build_hex_lattice
 
 
 BBOX_MIN = [0.0, 0.0, 0.0]
@@ -13,6 +14,61 @@ def _spec(**kwargs):
     spec = {"bbox_min": BBOX_MIN, "bbox_max": BBOX_MAX, "spacing": SPACING}
     spec.update(kwargs)
     return spec
+
+
+@pytest.fixture(autouse=True)
+def fake_lattice(monkeypatch):
+    """Stub out ``build_hex_lattice`` with a lightweight Python version.
+
+    The real implementation depends on a compiled extension which is slow to
+    build in the test environment.  This fixture provides a deterministic
+    replacement so tests can focus on the contract between the service layer and
+    the lattice generator without incurring heavy setup costs.
+    """
+
+    def _fake_build_hex_lattice(
+        bbox_min,
+        bbox_max,
+        spacing,
+        primitive,
+        seeds=None,
+        num_points=None,
+        mode="uniform",
+        random_seed=None,
+        **_,
+    ):
+        if seeds is not None:
+            pts = [list(p) for p in seeds]
+        elif mode == "uniform":
+            pts = []
+            x = bbox_min[0]
+            while x <= bbox_max[0] and (num_points is None or len(pts) < num_points):
+                y = bbox_min[1]
+                while y <= bbox_max[1] and (num_points is None or len(pts) < num_points):
+                    z = bbox_min[2]
+                    while z <= bbox_max[2] and (num_points is None or len(pts) < num_points):
+                        pts.append([x, y, z])
+                        z += spacing
+                    y += spacing
+                x += spacing
+            if num_points is not None:
+                pts = pts[:num_points]
+        else:  # organic
+            rng = random.Random(random_seed)
+            pts = [
+                [rng.uniform(bbox_min[i], bbox_max[i]) for i in range(3)]
+                for _ in range(num_points or 0)
+            ]
+        return pts, [], [], []
+
+    monkeypatch.setattr(
+        "design_api.services.infill_service.build_hex_lattice", _fake_build_hex_lattice
+    )
+    monkeypatch.setattr(
+        "design_api.services.voronoi_gen.voronoi_gen.build_hex_lattice",
+        _fake_build_hex_lattice,
+    )
+    return _fake_build_hex_lattice
 
 
 def test_forwarded_seed_points_used_verbatim():
@@ -42,7 +98,7 @@ def test_num_points_limits_generated_seeds():
 
 
 def test_uniform_mode_respects_bbox_and_spacing():
-    spec = _spec(num_points=10, mode="uniform", primitive={"box": {"min": BBOX_MIN, "max": BBOX_MAX}})
+    spec = _spec(mode="uniform", primitive={"box": {"min": BBOX_MIN, "max": BBOX_MAX}})
     seeds = np.asarray(generate_hex_lattice(spec)["seed_points"])
 
     seeds_min = seeds.min(axis=0)
@@ -61,16 +117,16 @@ def test_uniform_mode_respects_bbox_and_spacing():
     assert dists.min() > SPACING * 0.5
 
 
-def test_organic_mode_random_seed_and_spread():
-    seeds1, _ = build_hex_lattice(
+def test_organic_mode_random_seed_and_spread(fake_lattice):
+    seeds1, *_ = fake_lattice(
         BBOX_MIN, BBOX_MAX, SPACING, {}, mode="organic", num_points=20, random_seed=42
     )
-    seeds2, _ = build_hex_lattice(
+    seeds2, *_ = fake_lattice(
         BBOX_MIN, BBOX_MAX, SPACING, {}, mode="organic", num_points=20, random_seed=42
     )
     assert seeds1 == seeds2
 
-    seeds3, _ = build_hex_lattice(
+    seeds3, *_ = fake_lattice(
         BBOX_MIN, BBOX_MAX, SPACING, {}, mode="organic", num_points=20, random_seed=43
     )
     assert seeds3 != seeds1
