@@ -478,10 +478,10 @@ def interpret_llm_request(llm_output):
             infill.setdefault("wall_thickness", size[2] / 50.0)
             infill.setdefault("bbox_min", list(bbox_min))
             infill.setdefault("bbox_max", list(bbox_max))
-              # surface uniform‐sampling toggle in spec
-              infill.setdefault("uniform", True)
-              # expose configurable number of seed points without generating them
-              infill.setdefault("num_points", DEFAULT_SEED_POINTS)
+            # surface uniform‐sampling toggle in spec
+            infill.setdefault("uniform", True)
+            # expose configurable number of seed points without generating them
+            infill.setdefault("num_points", DEFAULT_SEED_POINTS)
     return {"primitives": nodes}
 
 
