@@ -6,3 +6,4 @@ with _constants_path.open(encoding="utf-8") as f:
     _cfg = json.load(f)
 
 MAX_VORONOI_SEEDS: int = int(_cfg["MAX_VORONOI_SEEDS"])
+DEFAULT_VORONOI_SEEDS: int = int(_cfg["DEFAULT_VORONOI_SEEDS"])

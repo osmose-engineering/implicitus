@@ -1,6 +1,7 @@
 import pytest
 
 from ai_adapter import csg_adapter
+from constants import DEFAULT_VORONOI_SEEDS
 
 
 def test_interpret_llm_request_sets_default_num_points(monkeypatch):
@@ -9,7 +10,7 @@ def test_interpret_llm_request_sets_default_num_points(monkeypatch):
     result = csg_adapter.interpret_llm_request(spec)
     infill = result["primitives"][0]["modifiers"]["infill"]
 
-    assert infill["num_points"] == csg_adapter.DEFAULT_SEED_POINTS
+    assert infill["num_points"] == DEFAULT_VORONOI_SEEDS
     assert "seed_points" not in infill
 
 
@@ -25,5 +26,5 @@ def test_update_request_sets_default_num_points(monkeypatch):
     new_spec, _ = csg_adapter.update_request("sid", spec, "raw")
     infill = new_spec[0]["modifiers"]["infill"]
 
-    assert infill["num_points"] == csg_adapter.DEFAULT_SEED_POINTS
+    assert infill["num_points"] == DEFAULT_VORONOI_SEEDS
     assert "seed_points" not in infill
