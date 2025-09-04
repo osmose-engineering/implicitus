@@ -13,6 +13,9 @@ both primitive solids and infill structures.
 ## Infills
 
 * Accept seed points and bounds describing the infill region.
+* When only a seed count is provided, the lattice spacing is estimated from the
+  bounding‑box volume so that fewer seeds produce a coarser pattern. Explicit
+  `spacing` or `min_dist` values override this behavior.
 * Construct Voronoi or lattice cells, yielding explicit vertex coordinates.
 * Produce edge connectivity so downstream tools can build struts or surfaces.
 

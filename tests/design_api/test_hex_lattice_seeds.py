@@ -97,6 +97,26 @@ def test_num_points_limits_generated_seeds():
     assert len(seeds) == 5
 
 
+def test_spacing_inferred_from_num_points(monkeypatch):
+    captured = {}
+
+    def _capture_spacing(bbox_min, bbox_max, spacing, primitive, **_):
+        captured["spacing"] = spacing
+        return [], [], [], []
+
+    monkeypatch.setattr(
+        "design_api.services.infill_service.build_hex_lattice", _capture_spacing
+    )
+
+    spec = {"bbox_min": BBOX_MIN, "bbox_max": BBOX_MAX, "num_points": 8}
+    generate_hex_lattice(spec)
+
+    vol = np.prod(np.subtract(BBOX_MAX, BBOX_MIN))
+    vol_per_seed = vol / 8.0
+    expected = 2.0 * (vol_per_seed / (4.0 * np.sqrt(2.0))) ** (1.0 / 3.0)
+    assert np.isclose(captured["spacing"], expected)
+
+
 def test_uniform_mode_respects_bbox_and_spacing():
     spec = _spec(mode="uniform", primitive={"box": {"min": BBOX_MIN, "max": BBOX_MAX}})
     seeds = np.asarray(generate_hex_lattice(spec)["seed_points"])
