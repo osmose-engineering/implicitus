@@ -76,11 +76,34 @@ def generate_hex_lattice(
     the random sampling step normally performed when only ``num_points`` is
     provided. This allows callers to reuse the same seeds for both preview and
     final slicer renders to ensure consistent output.
+
+    When ``num_points`` is given without ``spacing`` (or ``min_dist``), an
+    approximate spacing is inferred from the bounding-box volume assuming a
+    hexagonal close packing.  Fewer seeds therefore generate a coarser lattice.
+    Explicit ``spacing`` or ``min_dist`` values override this computation.
     """
 
     bbox_min = spec.get("bbox_min")
     bbox_max = spec.get("bbox_max")
-    spacing = spec.get("spacing") or spec.get("min_dist") or 2.0
+    num_points = spec.get("num_points")
+    spacing = spec.get("spacing") or spec.get("min_dist")
+
+    if spacing is None and num_points is not None and bbox_min and bbox_max:
+        # Derive an approximate spacing from the bounding-box volume by
+        # inverting the volume per point of a hexagonal close packing.  This
+        # ensures that providing fewer seeds automatically yields a coarser
+        # lattice when ``spacing`` is omitted.
+        bbox_min_arr = np.asarray(bbox_min)
+        bbox_max_arr = np.asarray(bbox_max)
+        vol = float(np.prod(bbox_max_arr - bbox_min_arr))
+        if vol > 0 and num_points > 0:
+            vol_per_seed = vol / float(num_points)
+            spacing = float(
+                2.0
+                * (vol_per_seed / (4.0 * np.sqrt(2.0))) ** (1.0 / 3.0)
+            )
+
+    spacing = spacing or 2.0
     primitive = spec.get("primitive", {})
     mode = spec.get("mode", "uniform")
 
@@ -143,7 +166,6 @@ def generate_hex_lattice(
     max_distance = spec.get("max_distance")
 
     seeds = spec.get("seed_points")
-    num_points = spec.get("num_points")
 
     lattice_kwargs = {
         "return_cells": True,
