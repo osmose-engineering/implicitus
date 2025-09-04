@@ -15,8 +15,8 @@ def test_voronoi_edges_do_not_include_seeds():
     }
     res = generate_hex_lattice(spec)
 
-    vertices = res.get("vertices", [])
-    edges = res.get("edges", [])
+    vertices = res.get("cell_vertices", [])
+    edges = res.get("edge_list", [])
     seeds = np.asarray(res.get("seed_points", []))
 
     assert vertices, "Expected non-empty vertex list"
@@ -44,8 +44,8 @@ def test_voronoi_edges_have_nonzero_length():
     }
     res = generate_hex_lattice(spec)
 
-    vertices = np.asarray(res.get("vertices", []))
-    edges = res.get("edges", [])
+    vertices = np.asarray(res.get("cell_vertices", []))
+    edges = res.get("edge_list", [])
 
     lengths = [np.linalg.norm(vertices[i] - vertices[j]) for i, j in edges]
     assert lengths, "Expected non-empty edge list"
@@ -63,8 +63,8 @@ def test_voronoi_edges_have_z_variation():
     }
     res = generate_hex_lattice(spec)
 
-    vertices = np.asarray(res.get("vertices", []))
-    edges = res.get("edges", [])
+    vertices = np.asarray(res.get("cell_vertices", []))
+    edges = res.get("edge_list", [])
 
     z_diffs = [abs(vertices[i][2] - vertices[j][2]) for i, j in edges]
     assert z_diffs, "Expected non-empty edge list"
@@ -83,8 +83,8 @@ def test_bounding_box_fallback_yields_flat_edges(caplog):
         res = generate_hex_lattice(spec)
     assert any("bounding-box fallback" in r.message for r in caplog.records)
 
-    vertices = np.asarray(res.get("vertices", []))
-    edges = res.get("edges", [])
+    vertices = np.asarray(res.get("cell_vertices", []))
+    edges = res.get("edge_list", [])
     z_diffs = [abs(vertices[i][2] - vertices[j][2]) for i, j in edges]
     assert z_diffs, "Expected non-empty edge list"
     flat_ratio = sum(z < 1e-5 for z in z_diffs) / len(z_diffs)

@@ -54,6 +54,7 @@ def log_turn(session_id: str, turn_type: str, raw: str, spec: list, summary: Opt
         if mods and isinstance(mods.get("infill"), dict):
             mods["infill"].pop("seed_points", None)
             mods["infill"].pop("cell_vertices", None)
+            mods["infill"].pop("edge_list", None)
             mods["infill"].pop("vertices", None)
         scrubbed_spec.append(node_copy)
     entry["spec"] = scrubbed_spec
@@ -158,7 +159,7 @@ async def review(req: dict, sid: Optional[str] = None):
                         res = generate_voronoi(inf)
                     inf.update(res)
                     logging.debug(
-                        f"[DEBUG review] produced {len(res.get('edges', []))} edges"
+                        f"[DEBUG review] produced {len(res.get('edge_list', res.get('edges', [])))} edges"
                     )
 
 
@@ -255,8 +256,8 @@ async def update(req: UpdateRequest):
                     res = generate_voronoi(inf)
                 inf.update(res)
                 logging.debug(
-                    f"[DEBUG update] produced {len(res.get('edges', []))} edges"
-                )
+                    f"[DEBUG update] produced {len(res.get('edge_list', res.get('edges', [])))} edges"
+                    )
 
 
     # sanitize new_spec to convert numpy arrays into lists for JSON serialization

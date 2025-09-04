@@ -56,8 +56,20 @@ def generate_voronoi(spec: Dict[str, Any]) -> Dict[str, Any]:
     }
 
 
-def generate_hex_lattice(spec: Dict[str, Any]) -> Dict[str, Any]:
-    """Generate a hexagonal lattice for the given spec and return adjacency."""
+def generate_hex_lattice(
+    spec: Dict[str, Any], return_vertices: bool = True
+) -> Dict[str, Any]:
+    """Generate a hexagonal lattice for the given spec.
+
+    Parameters
+    ----------
+    spec:
+        Infill specification dictionary.
+    return_vertices:
+        When ``True`` (default), forward ``cell_vertices`` and ``edge_list`` from
+        :func:`build_hex_lattice` directly instead of computing a separate
+        adjacency via :func:`compute_voronoi_adjacency`.
+    """
 
     bbox_min = spec.get("bbox_min")
     bbox_max = spec.get("bbox_max")
@@ -155,7 +167,7 @@ def generate_hex_lattice(spec: Dict[str, Any]) -> Dict[str, Any]:
         **extra_kwargs,
     )
 
-    if use_voronoi_edges:
+    if return_vertices:
         # ``build_hex_lattice`` returns vertices and edges as tuples. Convert them
         # into plain lists so the structure can be serialized directly into
         # JSON without relying on the caller's sanitization step.
@@ -163,8 +175,8 @@ def generate_hex_lattice(spec: Dict[str, Any]) -> Dict[str, Any]:
         edges = [list(e) for e in edge_list]
         return {
             "seed_points": seed_pts,
-            "vertices": verts,
-            "edges": edges,
+            "cell_vertices": verts,
+            "edge_list": edges,
             "cells": cells,
             "bbox_min": bbox_min,
             "bbox_max": bbox_max,
@@ -175,7 +187,7 @@ def generate_hex_lattice(spec: Dict[str, Any]) -> Dict[str, Any]:
 
     return {
         "seed_points": seed_pts,
-        "edges": edge_list,
+        "edge_list": edge_list,
         "cells": cells,
         "bbox_min": bbox_min,
         "bbox_max": bbox_max,

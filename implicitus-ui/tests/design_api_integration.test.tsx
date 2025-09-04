@@ -34,13 +34,13 @@ const mockHandlers = [
                 [0, 1, 0],
                 [0, 0, 1],
               ],
-              edges: [
+              edge_list: [
                 [0, 1],
                 [1, 2],
                 [2, 3],
                 [3, 0],
               ],
-              vertices: [
+              cell_vertices: [
                 [0, 0, 0],
                 [1, 0, 0],
                 [0, 1, 0],
@@ -91,13 +91,14 @@ const testBody = async () => {
   expect(resp.ok).toBe(true);
   const body = await resp.json();
   const infill = body.spec[0].modifiers.infill;
-  expect(infill.edges.length).toBeGreaterThan(0);
-  expect(infill.vertices.length).toBeGreaterThan(0);
+  expect(infill.edge_list.length).toBeGreaterThan(0);
+  expect(infill.cell_vertices.length).toBeGreaterThan(0);
 
   render(
     <VoronoiCanvas
       seedPoints={infill.seed_points}
-      edges={infill.edges}
+      edges={infill.edge_list}
+      vertices={infill.cell_vertices}
       bbox={[0, 0, 0, 1, 1, 1]}
     />
   );
