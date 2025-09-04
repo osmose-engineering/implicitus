@@ -1,8 +1,9 @@
 import * as THREE from 'three';
 import { shaderMaterial } from '@react-three/drei';
 import { extend } from '@react-three/fiber';
+import config from '../constants.json';
 
-const MAX_SEEDS = 512;
+const MAX_SEEDS = config.MAX_VORONOI_SEEDS;
 const texSize = Math.ceil(Math.sqrt(MAX_SEEDS));
 const GRID_CELL_CAPACITY = 8;
 const GRID_TEX_HEIGHT = Math.ceil(GRID_CELL_CAPACITY / 4);

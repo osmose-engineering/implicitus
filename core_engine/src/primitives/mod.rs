@@ -3,8 +3,6 @@
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyDictMethods};
 
-const MAX_SEED_POINTS: usize = 7500;
-
 fn get_f64(dict: &Bound<PyDict>, key: &str) -> Option<f64> {
     dict
         .get_item(key)
@@ -104,7 +102,7 @@ pub fn sample_inside(shape_spec: &Bound<PyDict>, spacing: f64) -> PyResult<Vec<(
                 let z = bbox_min.2 + iz as f64 * spacing;
                 if point_inside(&shape, &params, x, y, z) {
                     seeds.push((x, y, z));
-                    if seeds.len() >= MAX_SEED_POINTS {
+                    if seeds.len() >= crate::MAX_VORONOI_SEEDS {
                         return Ok(seeds);
                     }
                 }

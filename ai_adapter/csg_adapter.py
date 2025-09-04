@@ -6,11 +6,10 @@ from ai_adapter.schema.implicitus_pb2 import Model
 import uuid
 from google.protobuf import json_format
 from ai_adapter import rust_primitives
+from implicitus.constants import MAX_VORONOI_SEEDS
 
-# Maximum number of voronoi seed points to avoid huge arrays
-MAX_SEED_POINTS = 7500
 # Default number of voronoi seed points when unspecified
-DEFAULT_SEED_POINTS = 1000
+DEFAULT_SEED_POINTS = MAX_VORONOI_SEEDS // 10
 
 # --- Helper functions for voronoi seed generation ---
 import random
@@ -437,8 +436,8 @@ def interpret_llm_request(llm_output):
                     seeds = rust_primitives.sample_inside(
                         node["primitive"], infill["min_dist"]
                     )
-                    if len(seeds) > MAX_SEED_POINTS:
-                        seeds = seeds[:MAX_SEED_POINTS]
+                    if len(seeds) > MAX_VORONOI_SEEDS:
+                        seeds = seeds[:MAX_VORONOI_SEEDS]
                     infill.setdefault(
                         "num_points", min(len(seeds), DEFAULT_SEED_POINTS)
                     )
@@ -527,8 +526,8 @@ def interpret_llm_request(llm_output):
                 seeds = rust_primitives.sample_inside(
                     node["primitive"], infill["min_dist"]
                 )
-                if len(seeds) > MAX_SEED_POINTS:
-                    seeds = seeds[:MAX_SEED_POINTS]
+                if len(seeds) > MAX_VORONOI_SEEDS:
+                    seeds = seeds[:MAX_VORONOI_SEEDS]
                 infill.setdefault("num_points", min(len(seeds), DEFAULT_SEED_POINTS))
                 if "num_points" in infill:
                     import random
@@ -772,8 +771,8 @@ def update_request(sid: str, spec: list, raw: str):
             uniform = _parse_bool(infill.get("uniform", True))
             infill["uniform"] = uniform
             seeds = rust_primitives.sample_inside(node["primitive"], infill["min_dist"])
-            if len(seeds) > MAX_SEED_POINTS:
-                seeds = seeds[:MAX_SEED_POINTS]
+            if len(seeds) > MAX_VORONOI_SEEDS:
+                seeds = seeds[:MAX_VORONOI_SEEDS]
             # expose a tunable count parameter for seed generation
             infill.setdefault("num_points", min(len(seeds), DEFAULT_SEED_POINTS))
             if "num_points" in infill:

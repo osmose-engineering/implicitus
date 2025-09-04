@@ -1,4 +1,5 @@
 use std::path::PathBuf;
+use std::fs;
 
 fn main() {
     pyo3_build_config::use_pyo3_cfgs();
@@ -29,4 +30,14 @@ fn main() {
     config
         .compile_protos(&[proto_file], &[proto_dir])
         .expect("Failed to compile protobufs");
+
+    // Generate Rust constants from shared configuration
+    let constants_path = manifest_dir.parent().unwrap().join("constants.json");
+    let out_dir = PathBuf::from(std::env::var("OUT_DIR").unwrap());
+    let dest = out_dir.join("constants.rs");
+    let data = fs::read_to_string(constants_path).expect("read constants.json");
+    let value: serde_json::Value = serde_json::from_str(&data).expect("parse constants.json");
+    let max = value["MAX_VORONOI_SEEDS"].as_u64().expect("MAX_VORONOI_SEEDS");
+    fs::write(dest, format!("pub const MAX_VORONOI_SEEDS: usize = {};", max))
+        .expect("write constants.rs");
 }

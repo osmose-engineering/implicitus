@@ -17,10 +17,9 @@ pub mod spatial;
 pub mod uniform;
 pub mod voronoi;
 
-/// Maximum number of seed points to consider when constructing a Voronoi mesh.
-/// With adjacency pruning the algorithm scales to thousands of points, so this
-/// limit is mostly a safeguard against extreme inputs.
-pub const MAX_VORONOI_SEEDS: usize = 10_000;
+// This constant is generated at build time from `constants.json` to ensure
+// that all language layers share the same value.
+include!(concat!(env!("OUT_DIR"), "/constants.rs"));
 
 // A very basic SDF evaluator that handles a few primitive shapes.
 pub fn evaluate_sdf(model: &Model, x: f64, y: f64, z: f64) -> f64 {
