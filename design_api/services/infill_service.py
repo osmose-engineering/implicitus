@@ -89,13 +89,6 @@ def generate_hex_lattice(
     """
 
     primitive = spec.get("primitive", {})
-    mode = spec.get("mode")
-    if mode is None:
-        uniform_flag = spec.get("uniform")
-        if isinstance(uniform_flag, str):
-            uniform_flag = uniform_flag.lower() == "true"
-        if uniform_flag is not None:
-            mode = "uniform" if uniform_flag else "organic"
 
     seed_cfg = resolve_seed_spec(
         primitive,
@@ -104,7 +97,8 @@ def generate_hex_lattice(
         seed_points=spec.get("seed_points"),
         num_points=spec.get("num_points"),
         spacing=spec.get("spacing") or spec.get("min_dist"),
-        mode=mode,
+        mode=spec.get("mode"),
+        uniform=spec.get("uniform"),
     )
 
     bbox_min = seed_cfg["bbox_min"]

@@ -177,15 +177,22 @@ def _build_modifier_dict(raw_spec: dict) -> dict:
         infill_data["density"] = infill_data.pop("thickness_mm")
 
     pattern = infill_data.get("pattern")
+    # Map deprecated ``uniform`` flag into ``mode``
+    if "mode" not in infill_data and "uniform" in infill_data:
+        uniform_flag = infill_data.pop("uniform")
+        if isinstance(uniform_flag, str):
+            uniform_flag = uniform_flag.lower() == "true"
+        infill_data["mode"] = "uniform" if uniform_flag else "organic"
+
     # Mark Voronoi infill specially
     if pattern == "voronoi":
         infill_data["_is_voronoi"] = True
-        infill_data.setdefault("uniform", True)
+        infill_data.setdefault("mode", "uniform")
     if pattern == "honeycomb":
         # Treat honeycomb as a voronoi lattice with uniform sampling
         infill_data["_is_voronoi"] = True
         infill_data["pattern"] = "voronoi"
-        infill_data.setdefault("uniform", True)
+        infill_data.setdefault("mode", "uniform")
     density = infill_data.get("density")
     if pattern is not None and density is not None:
         return {
@@ -407,8 +414,13 @@ def interpret_llm_request(llm_output):
                 infill.setdefault("wall_thickness", size[2] / 50.0)
                 infill.setdefault("bbox_min", list(bbox_min))
                 infill.setdefault("bbox_max", list(bbox_max))
-                # surface uniform‐sampling toggle in spec
-                infill.setdefault("uniform", True)
+                # surface sampling mode in spec
+                if "mode" not in infill and "uniform" in infill:
+                    uniform_flag = infill.pop("uniform")
+                    if isinstance(uniform_flag, str):
+                        uniform_flag = uniform_flag.lower() == "true"
+                    infill["mode"] = "uniform" if uniform_flag else "organic"
+                infill.setdefault("mode", "uniform")
                 # expose configurable number of seed points without generating them
                 infill.setdefault("num_points", DEFAULT_VORONOI_SEEDS)
         return {"primitives": nodes}
@@ -474,8 +486,13 @@ def interpret_llm_request(llm_output):
             infill.setdefault("wall_thickness", size[2] / 50.0)
             infill.setdefault("bbox_min", list(bbox_min))
             infill.setdefault("bbox_max", list(bbox_max))
-            # surface uniform‐sampling toggle in spec
-            infill.setdefault("uniform", True)
+            # surface sampling mode in spec
+            if "mode" not in infill and "uniform" in infill:
+                uniform_flag = infill.pop("uniform")
+                if isinstance(uniform_flag, str):
+                    uniform_flag = uniform_flag.lower() == "true"
+                infill["mode"] = "uniform" if uniform_flag else "organic"
+            infill.setdefault("mode", "uniform")
             # expose configurable number of seed points without generating them
             infill.setdefault("num_points", DEFAULT_VORONOI_SEEDS)
     return {"primitives": nodes}
@@ -616,7 +633,12 @@ def review_request(request_data):
                 infill.setdefault("wall_thickness", size[2] / 50.0)
                 infill.setdefault("bbox_min", list(bbox_min))
                 infill.setdefault("bbox_max", list(bbox_max))
-                infill.setdefault("uniform", True)
+                if "mode" not in infill and "uniform" in infill:
+                    uniform_flag = infill.pop("uniform")
+                    if isinstance(uniform_flag, str):
+                        uniform_flag = uniform_flag.lower() == "true"
+                    infill["mode"] = "uniform" if uniform_flag else "organic"
+                infill.setdefault("mode", "uniform")
         _ensure_vertices_for_edges(nodes)
         summary = generate_summary(nodes)
         return nodes, summary
@@ -700,7 +722,12 @@ def update_request(sid: str, spec: list, raw: str):
             infill.setdefault("wall_thickness", size[2] / 50.0)
             infill.setdefault("bbox_min", list(bbox_min))
             infill.setdefault("bbox_max", list(bbox_max))
-            infill.setdefault("uniform", True)
+            if "mode" not in infill and "uniform" in infill:
+                uniform_flag = infill.pop("uniform")
+                if isinstance(uniform_flag, str):
+                    uniform_flag = uniform_flag.lower() == "true"
+                infill["mode"] = "uniform" if uniform_flag else "organic"
+            infill.setdefault("mode", "uniform")
             infill.setdefault("adaptive", True)
             infill.setdefault("max_depth", 3)
             infill.setdefault("threshold", 0.1)

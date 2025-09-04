@@ -15,6 +15,7 @@ def resolve_seed_spec(
     num_points: Optional[int] = None,
     spacing: Optional[float] = None,
     mode: Optional[str] = None,
+    uniform: Optional[Any] = None,
 ) -> Dict[str, Any]:
     """Normalize seed generation parameters for lattice construction.
 
@@ -38,6 +39,9 @@ def resolve_seed_spec(
     mode:
         Sampling mode, either ``"organic"`` or ``"uniform"``. Defaults to
         ``"uniform"``.
+    uniform:
+        Deprecated boolean flag for uniform sampling. When supplied, ``mode`` is
+        derived from its value.
     """
 
     # Derive bounding box from the primitive when needed
@@ -49,6 +53,10 @@ def resolve_seed_spec(
             if bbox_max is None:
                 bbox_max = list(derived_max)
 
+    if mode is None and uniform is not None:
+        if isinstance(uniform, str):
+            uniform = uniform.lower() == "true"
+        mode = "uniform" if uniform else "organic"
     mode = mode or "uniform"
 
     if seed_points is not None:
