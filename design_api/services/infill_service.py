@@ -11,6 +11,7 @@ from .voronoi_gen.voronoi_gen import (
     build_hex_lattice,
     primitive_to_imds_mesh,
 )
+from .seed_utils import resolve_seed_spec
 
 
 def _edge_list_from_adjacency(adjacency: Any) -> List[List[int]]:
@@ -83,36 +84,31 @@ def generate_hex_lattice(
     Explicit ``spacing`` or ``min_dist`` values override this computation.
     """
 
-    bbox_min = spec.get("bbox_min")
-    bbox_max = spec.get("bbox_max")
-    num_points = spec.get("num_points")
-    spacing = spec.get("spacing") or spec.get("min_dist")
-
-    if spacing is None and num_points is not None and bbox_min and bbox_max:
-        # Derive an approximate spacing from the bounding-box volume by
-        # inverting the volume per point of a hexagonal close packing.  This
-        # ensures that providing fewer seeds automatically yields a coarser
-        # lattice when ``spacing`` is omitted.
-        bbox_min_arr = np.asarray(bbox_min)
-        bbox_max_arr = np.asarray(bbox_max)
-        vol = float(np.prod(bbox_max_arr - bbox_min_arr))
-        if vol > 0 and num_points > 0:
-            vol_per_seed = vol / float(num_points)
-            spacing = float(
-                2.0
-                * (vol_per_seed / (4.0 * np.sqrt(2.0))) ** (1.0 / 3.0)
-            )
-
-    spacing = spacing or 2.0
     primitive = spec.get("primitive", {})
-    mode = spec.get("mode", "uniform")
-
-    if "mode" not in spec:
+    mode = spec.get("mode")
+    if mode is None:
         uniform_flag = spec.get("uniform")
         if isinstance(uniform_flag, str):
             uniform_flag = uniform_flag.lower() == "true"
         if uniform_flag is not None:
             mode = "uniform" if uniform_flag else "organic"
+
+    seed_cfg = resolve_seed_spec(
+        primitive,
+        spec.get("bbox_min"),
+        spec.get("bbox_max"),
+        seed_points=spec.get("seed_points"),
+        num_points=spec.get("num_points"),
+        spacing=spec.get("spacing") or spec.get("min_dist"),
+        mode=mode,
+    )
+
+    bbox_min = seed_cfg["bbox_min"]
+    bbox_max = seed_cfg["bbox_max"]
+    spacing = seed_cfg["spacing"]
+    mode = seed_cfg["mode"]
+    seeds = seed_cfg["seed_points"]
+    num_points = seed_cfg["num_points"]
 
     use_voronoi_edges = spec.get("use_voronoi_edges", False)
 
@@ -165,8 +161,6 @@ def generate_hex_lattice(
     plane_normal = spec.get("plane_normal") or [0.0, 0.0, 1.0]
     max_distance = spec.get("max_distance")
 
-    seeds = spec.get("seed_points")
-
     lattice_kwargs = {
         "return_cells": True,
         "use_voronoi_edges": use_voronoi_edges,
@@ -183,7 +177,6 @@ def generate_hex_lattice(
 
     if seeds is not None:
         lattice_kwargs["seeds"] = seeds
-        num_points = num_points or len(seeds)
     if num_points is not None:
         lattice_kwargs["num_points"] = int(num_points)
 
