@@ -256,6 +256,14 @@ pub fn voronoi_mesh(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
     VoronoiMesh { vertices, edges }
 }
 
+#[pyfunction]
+fn voronoi_mesh_py(
+    seeds: Vec<(f64, f64, f64)>,
+) -> PyResult<(Vec<(f64, f64, f64)>, Vec<(usize, usize)>)> {
+    let mesh = voronoi_mesh(&seeds);
+    Ok((mesh.vertices, mesh.edges))
+}
+
 pub mod slice;
 
 #[pymodule]
@@ -275,6 +283,7 @@ pub fn core_engine(m: &Bound<'_, PyModule>) -> PyResult<()> {
     )?)?;
     m.add_function(wrap_pyfunction!(uniform::hex::compute_uniform_cells, m)?)?;
     m.add_function(wrap_pyfunction!(primitives::sample_inside, m)?)?;
+    m.add_function(wrap_pyfunction!(voronoi_mesh_py, m)?)?;
     m.add_class::<spatial::octree::OctreeNode>()?;
     m.add_function(wrap_pyfunction!(
         spatial::octree::generate_adaptive_grid,

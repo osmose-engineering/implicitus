@@ -344,9 +344,25 @@ def build_hex_lattice(
                         verts.append(get_vertex(p))
                 edge_list.append((vertex_map[v0], vertex_map[v1]))
         except Exception:
-            # Fall back to seed adjacency when SciPy is unavailable
-            verts = list(pts)
-            edge_list = adjacency
+            try:
+                verts, edge_list = _core.voronoi_mesh_py(pts)
+                if primitive:
+                    valid_map = {}
+                    filtered_verts = []
+                    for idx, v in enumerate(verts):
+                        if point_in_primitive(v, primitive):
+                            valid_map[idx] = len(filtered_verts)
+                            filtered_verts.append(v)
+                    verts = filtered_verts
+                    edge_list = [
+                        (valid_map[i], valid_map[j])
+                        for i, j in edge_list
+                        if i in valid_map and j in valid_map
+                    ]
+            except Exception:
+                # Fall back to seed adjacency when no Voronoi backend is available
+                verts = list(pts)
+                edge_list = adjacency
     else:
         # Approximate edges using midpoints of adjacent seed pairs
         verts = []

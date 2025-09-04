@@ -3,10 +3,6 @@ import pytest
 
 from design_api.services.infill_service import generate_hex_lattice
 
-# Skip test if SciPy is not available, since Voronoi edge generation
-# relies on it for vertex construction.
-pytest.importorskip("scipy")
-
 
 def test_voronoi_edges_do_not_include_seeds():
     spec = {
