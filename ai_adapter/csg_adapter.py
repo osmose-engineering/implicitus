@@ -6,7 +6,7 @@ from ai_adapter.schema.implicitus_pb2 import Model
 import uuid
 from google.protobuf import json_format
 from ai_adapter import rust_primitives
-from implicitus.constants import MAX_VORONOI_SEEDS
+from constants import MAX_VORONOI_SEEDS
 
 # Default number of voronoi seed points when unspecified
 DEFAULT_SEED_POINTS = MAX_VORONOI_SEEDS // 10
