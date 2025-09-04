@@ -101,10 +101,12 @@ pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::R
         ny: req.ny.unwrap_or(50),
     };
 
+
     let contours = match serde_json::from_value::<Model>(req._model) {
         Ok(model) => slice_model(&model, &config),
         Err(_) => Vec::new(),
     };
+
 
     Ok(warp::reply::json(&SliceResponse { contours, debug }))
 }

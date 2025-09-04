@@ -52,6 +52,7 @@ async fn slice_box_model_returns_square_contour() {
     // Debug info should be present with zero seeds and no pattern
     assert_eq!(resp.debug.seed_count, 0);
     assert!(resp.debug.infill_pattern.is_none());
+
 }
 
 #[tokio::test]
@@ -77,4 +78,5 @@ async fn slice_returns_debug_for_invalid_model() {
 
     assert_eq!(resp.debug.seed_count, 1);
     assert!(resp.contours.is_empty());
+
 }

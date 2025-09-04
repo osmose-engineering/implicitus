@@ -128,7 +128,9 @@ function App() {
       if (!resp.ok) return;
       const data = await resp.json();
       if (data.debug) {
+
         console.log('[slicer_server] debug info:', data.debug);
+
       }
     } catch (err) {
       console.error('[UI] slice fetch error:', err);
@@ -241,7 +243,9 @@ function App() {
           sampleEdges: infill?.edges?.slice(0, 5),
         });
         if (infill?.debug) {
+
           console.log('[design_api] debug info:', infill.debug);
+
         }
         setSpec(data.spec);
         setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
@@ -330,7 +334,9 @@ function App() {
       console.log('API spec:', data.spec);
       console.log('[UI] Confirm response data:', data);
       if (data.debug) {
+
         console.log('[design_api] debug info:', data.debug);
+
       }
       setModelProto(data);
       if (data.locked_model) {
@@ -379,7 +385,9 @@ function App() {
         setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
         const infill = data.spec[0]?.modifiers?.infill;
         if (infill?.debug) {
+
           console.log('[design_api] debug info:', infill.debug);
+
         }
         if (infill?.seed_points) {
           fetchVoronoiMesh(infill.seed_points);
@@ -428,7 +436,9 @@ function App() {
         setSpecText(JSON.stringify(data.spec, null, 2));
         const infill = data.spec[0]?.modifiers?.infill;
         if (infill?.debug) {
+
           console.log('[design_api] debug info:', infill.debug);
+
         }
         if (infill?.seed_points) {
           fetchVoronoiMesh(infill.seed_points);
