@@ -8,21 +8,9 @@ from google.protobuf import json_format
 from ai_adapter import rust_primitives
 from constants import MAX_VORONOI_SEEDS
 
+
 # Default number of voronoi seed points when unspecified
 DEFAULT_SEED_POINTS = MAX_VORONOI_SEEDS // 10
-
-# --- Helper functions for voronoi seed generation ---
-import random
-
-
-def _parse_bool(value):
-    """Robustly interpret a JSON boolean that may arrive as a string."""
-    if isinstance(value, bool):
-        return value
-    if isinstance(value, str):
-        return value.strip().lower() in {"1", "true", "yes", "on"}
-    return bool(value)
-
 
 import logging
 
@@ -85,7 +73,7 @@ PRIMITIVE_REQUIREMENTS = {
     "cylinder": {"oneOf": [["size_mm"], ["radius_mm", "height_mm"]]},
     # extend with more primitives as needed...
     "voronoi": {
-        "required": ["seed_points", "bbox_min", "bbox_max"],
+        "required": ["bbox_min", "bbox_max"],
         "oneOf": [["min_dist"], ["density_field"], ["scale_field"]],
     },
 }
@@ -425,31 +413,8 @@ def interpret_llm_request(llm_output):
                 infill.setdefault("bbox_max", list(bbox_max))
                 # surface uniform‐sampling toggle in spec
                 infill.setdefault("uniform", True)
-                # Auto-generate seed points inside the primitive if missing
-                shape, _params = next(iter(node["primitive"].items()))
-                if "seed_points" not in infill:
-                    uniform = _parse_bool(infill.get("uniform", True))
-                    infill["uniform"] = uniform
-                    logging.debug(
-                        f"interpret_llm_request update-branch: uniform sampling={uniform}"
-                    )
-                    seeds = rust_primitives.sample_inside(
-                        node["primitive"], infill["min_dist"]
-                    )
-                    if len(seeds) > MAX_VORONOI_SEEDS:
-                        seeds = seeds[:MAX_VORONOI_SEEDS]
-                    infill.setdefault(
-                        "num_points", min(len(seeds), DEFAULT_SEED_POINTS)
-                    )
-                    if "num_points" in infill:
-                        import random
-
-                        random.shuffle(seeds)
-                        seeds = seeds[: int(infill["num_points"])]
-                    infill["seed_points"] = seeds
-                    logging.debug(
-                        f"interpret_llm_request: generated {len(seeds)} seed points for {shape}"
-                    )
+                # expose configurable number of seed points without generating them
+                infill.setdefault("num_points", DEFAULT_SEED_POINTS)
         return {"primitives": nodes}
     else:
         raw = llm_output
@@ -513,31 +478,10 @@ def interpret_llm_request(llm_output):
             infill.setdefault("wall_thickness", size[2] / 50.0)
             infill.setdefault("bbox_min", list(bbox_min))
             infill.setdefault("bbox_max", list(bbox_max))
-            # surface uniform‐sampling toggle in spec
-            infill.setdefault("uniform", True)
-            # Also support uniform/resolution for auto seed generation if seed_points missing
-            if "seed_points" not in infill:
-                shape, _params = next(iter(node["primitive"].items()))
-                uniform = _parse_bool(infill.get("uniform", True))
-                infill["uniform"] = uniform
-                logging.debug(
-                    f"interpret_llm_request update-branch: uniform sampling={uniform}"
-                )
-                seeds = rust_primitives.sample_inside(
-                    node["primitive"], infill["min_dist"]
-                )
-                if len(seeds) > MAX_VORONOI_SEEDS:
-                    seeds = seeds[:MAX_VORONOI_SEEDS]
-                infill.setdefault("num_points", min(len(seeds), DEFAULT_SEED_POINTS))
-                if "num_points" in infill:
-                    import random
-
-                    random.shuffle(seeds)
-                    seeds = seeds[: int(infill["num_points"])]
-                infill["seed_points"] = seeds
-                logging.debug(
-                    f"interpret_llm_request: generated {len(seeds)} seed points for {shape}"
-                )
+              # surface uniform‐sampling toggle in spec
+              infill.setdefault("uniform", True)
+              # expose configurable number of seed points without generating them
+              infill.setdefault("num_points", DEFAULT_SEED_POINTS)
     return {"primitives": nodes}
 
 
@@ -767,23 +711,8 @@ def update_request(sid: str, spec: list, raw: str):
             infill.setdefault("resolution", [32, 32, 32])
             infill.setdefault("shell_offset", 0.0)
             infill.setdefault("auto_cap", False)
-            # always regenerate seed points, and expose num_points parameter
-            uniform = _parse_bool(infill.get("uniform", True))
-            infill["uniform"] = uniform
-            seeds = rust_primitives.sample_inside(node["primitive"], infill["min_dist"])
-            if len(seeds) > MAX_VORONOI_SEEDS:
-                seeds = seeds[:MAX_VORONOI_SEEDS]
-            # expose a tunable count parameter for seed generation
-            infill.setdefault("num_points", min(len(seeds), DEFAULT_SEED_POINTS))
-            if "num_points" in infill:
-                import random
-
-                random.shuffle(seeds)
-                seeds = seeds[: int(infill["num_points"])]
-            infill["seed_points"] = seeds
-            logging.debug(
-                f"update_request: generated {len(infill['seed_points'])} seed points for {shape}"
-            )
+            # expose configurable number of seed points without generating them
+            infill.setdefault("num_points", DEFAULT_SEED_POINTS)
         promoted.append(node)
     new_spec = promoted
     new_summary = generate_summary(new_spec)
