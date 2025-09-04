@@ -6,11 +6,7 @@ from ai_adapter.schema.implicitus_pb2 import Model
 import uuid
 from google.protobuf import json_format
 from ai_adapter import rust_primitives
-from constants import MAX_VORONOI_SEEDS
-
-
-# Default number of voronoi seed points when unspecified
-DEFAULT_SEED_POINTS = MAX_VORONOI_SEEDS // 10
+from constants import DEFAULT_VORONOI_SEEDS
 
 import logging
 
@@ -414,7 +410,7 @@ def interpret_llm_request(llm_output):
                 # surface uniform‐sampling toggle in spec
                 infill.setdefault("uniform", True)
                 # expose configurable number of seed points without generating them
-                infill.setdefault("num_points", DEFAULT_SEED_POINTS)
+                infill.setdefault("num_points", DEFAULT_VORONOI_SEEDS)
         return {"primitives": nodes}
     else:
         raw = llm_output
@@ -481,7 +477,7 @@ def interpret_llm_request(llm_output):
             # surface uniform‐sampling toggle in spec
             infill.setdefault("uniform", True)
             # expose configurable number of seed points without generating them
-            infill.setdefault("num_points", DEFAULT_SEED_POINTS)
+            infill.setdefault("num_points", DEFAULT_VORONOI_SEEDS)
     return {"primitives": nodes}
 
 
@@ -712,7 +708,7 @@ def update_request(sid: str, spec: list, raw: str):
             infill.setdefault("shell_offset", 0.0)
             infill.setdefault("auto_cap", False)
             # expose configurable number of seed points without generating them
-            infill.setdefault("num_points", DEFAULT_SEED_POINTS)
+            infill.setdefault("num_points", DEFAULT_VORONOI_SEEDS)
         promoted.append(node)
     new_spec = promoted
     new_summary = generate_summary(new_spec)

@@ -4,10 +4,8 @@ from typing import Any, Dict, List, Optional, Tuple
 
 import numpy as np
 
-from constants import MAX_VORONOI_SEEDS
+from constants import DEFAULT_VORONOI_SEEDS
 from .voronoi_gen.voronoi_gen import derive_bbox_from_primitive
-
-DEFAULT_VORONOI_SEEDS: int = MAX_VORONOI_SEEDS // 10
 
 def resolve_seed_spec(
     primitive: Dict[str, Any],
