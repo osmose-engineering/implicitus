@@ -25,7 +25,8 @@ def _load_core_engine() -> ModuleType:
     if spec and spec.loader:
         module = importlib.util.module_from_spec(spec)
         spec.loader.exec_module(module)
-        return module
+        if hasattr(module, "sample_inside"):
+            return module
 
     crate_dir = pathlib.Path(__file__).resolve().parents[1] / "core_engine"
     env = os.environ.copy()
