@@ -235,6 +235,7 @@ def build_hex_lattice(
     mode: Literal["organic", "uniform"] = "organic",
     seeds: Optional[List[Tuple[float, float, float]]] = None,
     num_points: Optional[int] = None,
+    random_seed: Optional[int] = None,
     **cell_kwargs: Any,
 ) -> Union[
     Tuple[List[Tuple[float, float, float]], List[Tuple[int, int]]],
@@ -262,7 +263,14 @@ def build_hex_lattice(
     return signature is ``(pts, cell_vertices, edges, cells)`` where ``pts`` are
     the seed coordinates and ``cell_vertices`` is the vertex list referenced by
     ``edges``.
+
+    ``num_points`` limits the number of seed points generated. When specified,
+    points are downsampled differently depending on ``mode``: ``"organic"``
+    randomly samples seeds using ``random.sample`` (controlled via
+    ``random_seed``), while ``"uniform"`` evenly subsamples the underlying hex
+    grid.
     """
+    coords: Optional[List[Tuple[int, int, int]]] = None
     if seeds is not None:
         pts = [tuple(map(float, p)) for p in seeds]
     else:
@@ -308,7 +316,18 @@ def build_hex_lattice(
                 coords, pts = [], []
 
     if num_points is not None and len(pts) > num_points:
-        pts = list(pts[:num_points])
+        if mode == "organic":
+            rng = random.Random(random_seed)
+            pts = rng.sample(list(pts), num_points)
+        else:  # uniform subsampling
+            if coords is not None:
+                paired = list(zip(coords, pts))
+                paired.sort()
+                indices = np.linspace(0, len(paired) - 1, num_points, dtype=int)
+                pts = [paired[i][1] for i in indices]
+            else:
+                indices = np.linspace(0, len(pts) - 1, num_points, dtype=int)
+                pts = [pts[i] for i in indices]
 
     adjacency = prune_adjacency_via_grid(pts, spacing * 0.5)
     if use_voronoi_edges:
