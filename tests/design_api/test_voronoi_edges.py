@@ -90,3 +90,21 @@ def test_bounding_box_fallback_yields_flat_edges(caplog):
     flat_ratio = sum(z < 1e-5 for z in z_diffs) / len(z_diffs)
     assert flat_ratio > 0.9
 
+
+def test_edges_generated_when_only_num_points_supplied():
+    """Ensure edges are created when providing ``num_points`` without seeds."""
+    spec = {
+        "bbox_min": [-1.0, -1.0, -1.0],
+        "bbox_max": [1.0, 1.0, 1.0],
+        "num_points": 8,
+        "primitive": {"sphere": {"radius": 1.0}},
+        "use_voronoi_edges": True,
+    }
+    res = generate_hex_lattice(spec)
+
+    seeds = res.get("seed_points", [])
+    edges = res.get("edge_list", [])
+
+    assert seeds, "Expected seed points to be generated"
+    assert edges, "Expected non-empty edge list"
+
