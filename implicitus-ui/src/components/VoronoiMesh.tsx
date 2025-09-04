@@ -2,10 +2,11 @@ import React, { useMemo, useEffect } from 'react';
 import * as THREE from 'three';
 import { useFrame, useThree } from '@react-three/fiber';
 import { VoronoiMaterial } from './VoronoiMaterial';
+import config from '../constants.json';
 
 const DEBUG = false;
 
-const MAX_SEEDS = 512;
+const MAX_VORONOI_SEEDS = config.MAX_VORONOI_SEEDS;
 const GRID_CELL_CAPACITY = 8;
 const GRID_TEX_HEIGHT = Math.ceil(GRID_CELL_CAPACITY / 4);
 const CELL_SIZE_FACTOR = 1.5; // Tunable factor balancing lookup vs iteration
@@ -65,7 +66,7 @@ const VoronoiMesh: React.FC<VoronoiMeshProps> = ({
     : Math.min(maxX - minX, maxY - minY, maxZ - minZ) / 2;
 
   const numSeeds = seedPoints.length;
-  const count = Math.min(MAX_SEEDS, numSeeds);
+  const count = Math.min(MAX_VORONOI_SEEDS, numSeeds);
   const texSize = Math.max(1, Math.ceil(Math.sqrt(count)));
   const seedsArray = useMemo(() => new Float32Array(seedPoints.flat()), [seedPoints]);
   const texData = useMemo(() => new Float32Array(texSize * texSize * 4), [texSize]);
