@@ -74,7 +74,7 @@ function App() {
   const seedPoints: [number, number, number][] =
     spec[0]?.modifiers?.infill?.seed_points ?? [];
   const edges = meshEdges;
-  // Use geometry provided directly in the spec.
+  // Reset mesh whenever the spec changes; geometry will be fetched separately.
   useEffect(() => {
     const infill = spec[0]?.modifiers?.infill;
     const verts = infill?.cell_vertices || infill?.vertices;
@@ -99,6 +99,23 @@ function App() {
   const [strutRadius, setStrutRadius]   = useState(0.02);
 
   const [tabIndex, setTabIndex] = useState(1);
+
+  const fetchVoronoiMesh = async (pts: [number, number, number][]) => {
+    if (!pts || pts.length === 0) return;
+    try {
+      const resp = await fetch('http://localhost:8000/design/mesh', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ seed_points: pts }),
+      });
+      if (!resp.ok) return;
+      const data = await resp.json();
+      setMeshVertices(Array.isArray(data.vertices) ? data.vertices : []);
+      setMeshEdges(Array.isArray(data.edges) ? data.edges : []);
+    } catch (err) {
+      console.error('[UI] mesh fetch error:', err);
+    }
+  };
 
   const handleValidate = async () => {
     setError(null);
@@ -207,6 +224,9 @@ function App() {
         });
         setSpec(data.spec);
         setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
+        if (infill?.seed_points) {
+          fetchVoronoiMesh(infill.seed_points);
+        }
         if (data.summary) {
           setSummary(data.summary);
           setMessages(prev => [...prev, { speaker: 'assistant', text: data.summary }]);
@@ -329,6 +349,10 @@ function App() {
       if (data.spec && Array.isArray(data.spec)) {
         setSpec(data.spec);
         setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
+        const infill = data.spec[0]?.modifiers?.infill;
+        if (infill?.seed_points) {
+          fetchVoronoiMesh(infill.seed_points);
+        }
         setIsDirty(false);
         if (data.summary) {
           setSummary(data.summary);
@@ -371,6 +395,10 @@ function App() {
       if (data.spec && Array.isArray(data.spec)) {
         setSpec(data.spec);
         setSpecText(JSON.stringify(data.spec, null, 2));
+        const infill = data.spec[0]?.modifiers?.infill;
+        if (infill?.seed_points) {
+          fetchVoronoiMesh(infill.seed_points);
+        }
         if (data.summary) {
           setSummary(data.summary);
           setMessages(prev => [...prev, { speaker: 'assistant', text: data.summary }]);
