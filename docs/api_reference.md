@@ -1,4 +1,18 @@
 
+## Mesh Generation Fields
+
+The `design/mesh` endpoint exposes several controls for seed sampling:
+
+- `mode` – either `"uniform"` or `"organic"`. Defaults to `"uniform"`.
+- `num_points` – desired number of seed points. Defaults to
+  `DEFAULT_VORONOI_SEEDS` when omitted.
+- `seed_points` – optional explicit coordinates. When provided, these points
+  are used verbatim and returned back to the caller so that previews can reuse
+  them for slicer parity.
+- `spacing` or `min_dist` – override the spacing inference. When both are
+  omitted and only `num_points` is supplied, spacing is estimated from the
+  bounding‑box volume so that fewer points produce a coarser lattice.
+
 ## Voronoi Generation Parameters
 
 `compute_uniform_cells` accepts several optional limits to guard against
