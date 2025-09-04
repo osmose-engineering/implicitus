@@ -30,7 +30,7 @@ pub struct SliceResponse {
 
 #[derive(Deserialize)]
 struct VoronoiRequest {
-    seeds: Vec<(f64, f64, f64)>,
+    _seeds: Vec<(f64, f64, f64)>,
 }
 
 #[derive(Serialize, Clone)]
@@ -38,11 +38,6 @@ struct VoronoiResponse {
     status: &'static str,
     vertices: Vec<(f64, f64, f64)>,
     edges: Vec<(usize, usize)>,
-}
-
-#[derive(Serialize)]
-struct JobResponse {
-    job_id: String,
 }
 
 type JobMap = Arc<Mutex<HashMap<String, Option<VoronoiResponse>>>>;
