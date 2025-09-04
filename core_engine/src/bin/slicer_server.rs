@@ -87,16 +87,9 @@ async fn main() {
     warp::serve(routes).run(([127, 0, 0, 1], 4000)).await;
 }
 
-#[derive(Debug)]
-struct InvalidModel;
-impl warp::reject::Reject for InvalidModel {}
-
 pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::Rejection> {
     // Extract debug info before consuming the model value
     let debug = extract_debug_info(&req._model);
-    // Deserialize the incoming model description.
-    let model: Model = serde_json::from_value(req._model)
-        .map_err(|_| warp::reject::custom(InvalidModel))?;
 
     let config = SliceConfig {
         z: req.layer,
@@ -108,7 +101,13 @@ pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::R
         ny: req.ny.unwrap_or(50),
     };
 
-    let contours = slice_model(&model, &config);
+
+    let contours = match serde_json::from_value::<Model>(req._model) {
+        Ok(model) => slice_model(&model, &config),
+        Err(_) => Vec::new(),
+    };
+
+
     Ok(warp::reply::json(&SliceResponse { contours, debug }))
 }
 

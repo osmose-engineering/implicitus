@@ -252,6 +252,7 @@ function App() {
         if (infill?.seed_points) {
           fetchVoronoiMesh(infill.seed_points);
         }
+        fetchSlice({ id: 'preview', root: { children: data.spec } });
         if (data.summary) {
           setSummary(data.summary);
           setMessages(prev => [...prev, { speaker: 'assistant', text: data.summary }]);

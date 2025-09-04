@@ -3,7 +3,7 @@ mod slicer_server;
 
 use slicer_server::{handle_slice, SliceRequest, SliceResponse};
 use core_engine::implicitus::{Model, Node, Primitive, Vector3, primitive::Shape, node::Body, Box};
-use serde_json::to_value;
+use serde_json::{to_value, json};
 use warp::hyper::body::to_bytes;
 use warp::Reply;
 
@@ -52,4 +52,31 @@ async fn slice_box_model_returns_square_contour() {
     // Debug info should be present with zero seeds and no pattern
     assert_eq!(resp.debug.seed_count, 0);
     assert!(resp.debug.infill_pattern.is_none());
+
+}
+
+#[tokio::test]
+async fn slice_returns_debug_for_invalid_model() {
+    let req = SliceRequest {
+        _model: json!({
+            "primitive": {"sphere": {"radius": 1.0}},
+            "modifiers": {"infill": {"pattern": "voronoi", "seed_points": [[0.0,0.0,0.0]]}}
+        }),
+        layer: 0.0,
+        x_min: None,
+        x_max: None,
+        y_min: None,
+        y_max: None,
+        nx: None,
+        ny: None,
+    };
+
+    let reply = handle_slice(req).await.unwrap();
+    let body = reply.into_response().into_body();
+    let bytes = to_bytes(body).await.unwrap();
+    let resp: SliceResponse = serde_json::from_slice(&bytes).unwrap();
+
+    assert_eq!(resp.debug.seed_count, 1);
+    assert!(resp.contours.is_empty());
+
 }
