@@ -1,5 +1,14 @@
 import os
+import sys
 import logging
+from pathlib import Path
+
+# Ensure repository root and its parent are on PYTHONPATH so sibling packages import cleanly
+ROOT = Path(__file__).resolve().parent.parent
+PARENT = ROOT.parent
+for p in (ROOT, PARENT):
+    if str(p) not in sys.path:
+        sys.path.append(str(p))
 
 LOG_LEVEL_NAME = os.getenv("IMPLICITUS_LOG_LEVEL", "DEBUG").upper()
 LOG_LEVEL = getattr(logging, LOG_LEVEL_NAME, logging.DEBUG)
@@ -78,6 +87,42 @@ app.add_middleware(
 
 class DesignRequest(BaseModel):
     prompt: str
+
+
+class MeshRequest(BaseModel):
+    seed_points: list[list[float]] = Field(default_factory=list)
+    spacing: Optional[float] = None
+
+
+@app.post("/design/mesh", response_model=dict)
+async def voronoi_mesh_endpoint(req: MeshRequest):
+    """Generate a Voronoi mesh from seed points."""
+    pts = [tuple(p) for p in req.seed_points]
+    try:
+        import core_engine as _core  # type: ignore
+
+        verts, edge_list = _core.voronoi_mesh_py(pts)
+        if not verts:
+            raise ValueError("empty mesh")
+        vertices = [list(v) for v in verts]
+        edges = [list(e) for e in edge_list]
+    except Exception:
+        from design_api.services.voronoi_gen.voronoi_gen import (
+            compute_voronoi_adjacency,
+        )
+
+        adjacency = compute_voronoi_adjacency(pts, spacing=req.spacing)
+        seen = set()
+        edges = []
+        for i, j in adjacency:
+            if i > j:
+                i, j = j, i
+            if (i, j) not in seen:
+                seen.add((i, j))
+                edges.append([i, j])
+        vertices = [list(p) for p in pts]
+
+    return {"vertices": vertices, "edges": edges}
 
 @app.post("/design", response_model=dict)
 async def design(req: DesignRequest):
@@ -319,4 +364,4 @@ async def submit(req: dict, sid: str):
 
 if __name__ == "__main__":
     import uvicorn
-    uvicorn.run(app, host="0.0.0.0", port=8000, reload=True)
+    uvicorn.run(app, host="0.0.0.0", port=8000)

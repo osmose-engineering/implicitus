@@ -2,12 +2,10 @@
 
 use core_engine::implicitus::Model;
 use core_engine::slice::{slice_model, SliceConfig};
-use core_engine::voronoi_mesh;
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
-use uuid::Uuid;
 use warp::http::{Method, StatusCode};
 use warp::Filter;
 
@@ -111,40 +109,16 @@ pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::R
 }
 
 async fn handle_voronoi(
-    req: VoronoiRequest,
-    jobs: JobMap,
+    _req: VoronoiRequest,
+    _jobs: JobMap,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    println!(
-        "[slicer_server] /voronoi request: {} seeds",
-        req.seeds.len()
-    );
-    let job_id = Uuid::new_v4().to_string();
-    {
-        let mut map = jobs.lock().unwrap();
-        map.insert(job_id.clone(), None);
-    }
-    let seeds = req.seeds.clone();
-    let jobs_clone = jobs.clone();
-    let job_id_clone = job_id.clone();
-    tokio::spawn(async move {
-        let mesh = voronoi_mesh(&seeds);
-        println!(
-            "[slicer_server] /voronoi job {job_id_clone} response: {} vertices, {} edges",
-            mesh.vertices.len(),
-            mesh.edges.len()
-        );
-        let resp = VoronoiResponse {
-            status: "complete",
-            vertices: mesh.vertices,
-            edges: mesh.edges,
-        };
-        let mut map = jobs_clone.lock().unwrap();
-        map.insert(job_id_clone, Some(resp));
-    });
-    let resp = JobResponse { job_id };
+    println!("[slicer_server] /voronoi route is deprecated; use /design/mesh instead");
+    let resp = StatusResponse {
+        status: "deprecated",
+    };
     Ok(warp::reply::with_status(
         warp::reply::json(&resp),
-        StatusCode::ACCEPTED,
+        StatusCode::GONE,
     ))
 }
 
