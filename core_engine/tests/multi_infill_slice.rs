@@ -15,10 +15,12 @@ fn seeds_from_multiple_blocks_affect_slice() {
     let model_json = json!({
         "infill": {
             "pattern": "voronoi",
+            "mode": "uniform",
             "seed_points": [[0.0,0.0,0.0],[2.0,0.0,0.0]]
         },
         "extra": {
             "lattice": {
+                "mode": "uniform",
                 "seed_points": [
                     [0.0,2.0,0.0],
                     [0.0,0.0,2.0],
@@ -28,9 +30,10 @@ fn seeds_from_multiple_blocks_affect_slice() {
         }
     });
 
-    let (seeds, pattern, _, _) = slicer_server::parse_infill(&model_json);
+    let (seeds, pattern, _, mode) = slicer_server::parse_infill(&model_json);
     assert_eq!(seeds.len(), 5);
     assert_eq!(pattern.as_deref(), Some("voronoi"));
+    assert_eq!(mode.as_deref(), Some("uniform"));
 
     // Basic spherical model
     let mut model = Model::default();
