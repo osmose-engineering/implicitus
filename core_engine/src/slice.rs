@@ -51,7 +51,14 @@ fn interp(p0: (f64, f64), p1: (f64, f64), v0: f64, v1: f64) -> (f64, f64) {
 }
 
 /// Compute the corner point coordinates given cell indices, edge index, and grid spacing.
-fn corner_point(i: usize, j: usize, edge: usize, dx: f64, dy: f64, config: &SliceConfig) -> (f64, f64) {
+fn corner_point(
+    i: usize,
+    j: usize,
+    edge: usize,
+    dx: f64,
+    dy: f64,
+    config: &SliceConfig,
+) -> (f64, f64) {
     let x0 = config.x_min + i as f64 * dx;
     let y0 = config.y_min + j as f64 * dy;
     match edge {
@@ -107,7 +114,14 @@ pub fn slice_model(model: &Model, config: &SliceConfig) -> Vec<Contour> {
         for j in 0..config.ny {
             let x = config.x_min + i as f64 * dx;
             let y = config.y_min + j as f64 * dy;
-            grid[i][j] = evaluate_sdf(model, x, y, config.z);
+            grid[i][j] = evaluate_sdf(
+                model,
+                x,
+                y,
+                config.z,
+                config.infill_pattern.as_deref(),
+                &config.seed_points,
+            );
         }
     }
 
@@ -121,10 +135,18 @@ pub fn slice_model(model: &Model, config: &SliceConfig) -> Vec<Contour> {
             let v11 = grid[i + 1][j + 1];
             let v01 = grid[i][j + 1];
             let mut case_index = 0;
-            if v00 < 0.0 { case_index |= 1; }
-            if v10 < 0.0 { case_index |= 2; }
-            if v11 < 0.0 { case_index |= 4; }
-            if v01 < 0.0 { case_index |= 8; }
+            if v00 < 0.0 {
+                case_index |= 1;
+            }
+            if v10 < 0.0 {
+                case_index |= 2;
+            }
+            if v11 < 0.0 {
+                case_index |= 4;
+            }
+            if v01 < 0.0 {
+                case_index |= 8;
+            }
             // Lookup edges for this case (placeholder)
             for &(e0, e1) in MARCHING_SQUARES_EDGES[case_index].iter() {
                 let p0 = corner_point(i, j, e0, dx, dy, config);
@@ -132,7 +154,7 @@ pub fn slice_model(model: &Model, config: &SliceConfig) -> Vec<Contour> {
                 let v0 = corner_value(v00, v10, v11, v01, e0);
                 let v1 = corner_value(v00, v10, v11, v01, e1);
                 let p_start = interp(p0, p1, v0, v1);
-                let p_end   = interp(p1, p0, v1, v0);
+                let p_end = interp(p1, p0, v1, v0);
                 segments.push(p_start);
                 segments.push(p_end);
             }

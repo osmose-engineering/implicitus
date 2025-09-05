@@ -1,9 +1,7 @@
-
-
 // core_engine/tests/sphere_sdf.rs
 
 use core_engine::evaluate_sdf;
-use core_engine::implicitus::{Model, Node, Primitive, Sphere, primitive::Shape, node::Body};
+use core_engine::implicitus::{node::Body, primitive::Shape, Model, Node, Primitive, Sphere};
 
 #[test]
 fn sphere_sdf() {
@@ -22,10 +20,18 @@ fn sphere_sdf() {
     model.root = Some(node);
 
     // At the center, SDF = -radius
-    let val = evaluate_sdf(&model, 0.0, 0.0, 0.0);
-    assert!((val + 2.0).abs() < 1e-6, "Expected SDF at center to be -2.0, got {}", val);
+    let val = evaluate_sdf(&model, 0.0, 0.0, 0.0, None, &[]);
+    assert!(
+        (val + 2.0).abs() < 1e-6,
+        "Expected SDF at center to be -2.0, got {}",
+        val
+    );
 
     // On the surface, SDF ~ 0
-    let val2 = evaluate_sdf(&model, 2.0, 0.0, 0.0);
-    assert!(val2.abs() < 1e-6, "Expected SDF at surface to be ~0, got {}", val2);
+    let val2 = evaluate_sdf(&model, 2.0, 0.0, 0.0, None, &[]);
+    assert!(
+        val2.abs() < 1e-6,
+        "Expected SDF at surface to be ~0, got {}",
+        val2
+    );
 }
