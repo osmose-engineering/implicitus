@@ -6,7 +6,12 @@
 use crate::evaluate_sdf;
 use crate::hex_lattice;
 use crate::implicitus::Model;
+use crate::uniform::hex::compute_uniform_cells;
 use crate::voronoi_mesh;
+
+use numpy::{PyArray1, PyArray2, PyArrayMethods};
+use pyo3::prelude::*;
+use pyo3::types::PyDict;
 
 /// A single contour loop: a series of (x, y) points.
 pub type Contour = Vec<(f64, f64)>;
@@ -101,18 +106,93 @@ pub fn slice_model(model: &Model, config: &SliceConfig) -> SliceResult {
     if !config.seed_points.is_empty() {
         match config.infill_pattern.as_deref() {
             Some("voronoi") => {
-                let mesh = voronoi_mesh(&config.seed_points);
-                for (a, b) in mesh.edges {
-                    let p0 = mesh.vertices[a];
-                    let p1 = mesh.vertices[b];
-                    let z0 = p0.2;
-                    let z1 = p1.2;
-                    if (z0 - config.z) * (z1 - config.z) <= 0.0 && (z1 - z0).abs() > 1e-9 {
-                        let t = (config.z - z0) / (z1 - z0);
-                        if (0.0..=1.0).contains(&t) {
-                            let x = p0.0 + t * (p1.0 - p0.0);
-                            let y = p0.1 + t * (p1.1 - p0.1);
-                            segments.push(((x, y), (x, y)));
+                if config.mode.as_deref() == Some("uniform") {
+                    let uniform_cells =
+                        Python::with_gil(|py| -> PyResult<Vec<Vec<(f64, f64, f64)>>> {
+                            let seed_rows: Vec<Vec<f64>> = config
+                                .seed_points
+                                .iter()
+                                .map(|&(x, y, z)| vec![x, y, z])
+                                .collect();
+                            let seeds = PyArray2::from_vec2_bound(py, &seed_rows)?;
+                            let plane = PyArray1::from_vec_bound(py, vec![0.0f64, 0.0, 1.0]);
+                            let obj = compute_uniform_cells(
+                                py,
+                                seeds.readonly(),
+                                py.None(),
+                                plane.readonly(),
+                                None,
+                                1e-5,
+                                false,
+                                false,
+                            )?;
+                            let dict = obj.downcast_bound::<PyDict>(py)?;
+                            let mut cells = Vec::new();
+                            for idx in 0..seed_rows.len() {
+                                if let Some(arr_obj) = dict.get_item(idx)? {
+                                    let arr = arr_obj.downcast::<PyArray2<f64>>()?;
+                                    let arr_ro = arr.readonly();
+                                    let mut verts = Vec::new();
+                                    for row in arr_ro.as_array().outer_iter() {
+                                        verts.push((row[0], row[1], row[2]));
+                                    }
+                                    cells.push(verts);
+                                }
+                            }
+                            Ok(cells)
+                        });
+
+                    if let Ok(cells) = uniform_cells {
+                        for verts in cells {
+                            let m = verts.len();
+                            for i in 0..m {
+                                let p0 = verts[i];
+                                let p1 = verts[(i + 1) % m];
+                                let z0 = p0.2;
+                                let z1 = p1.2;
+                                if (z0 - config.z) * (z1 - config.z) <= 0.0
+                                    && (z1 - z0).abs() > 1e-9
+                                {
+                                    let t = (config.z - z0) / (z1 - z0);
+                                    if (0.0..=1.0).contains(&t) {
+                                        let x = p0.0 + t * (p1.0 - p0.0);
+                                        let y = p0.1 + t * (p1.1 - p0.1);
+                                        segments.push(((x, y), (x, y)));
+                                    }
+                                }
+                            }
+                        }
+                    } else {
+                        let mesh = voronoi_mesh(&config.seed_points);
+                        for (a, b) in mesh.edges {
+                            let p0 = mesh.vertices[a];
+                            let p1 = mesh.vertices[b];
+                            let z0 = p0.2;
+                            let z1 = p1.2;
+                            if (z0 - config.z) * (z1 - config.z) <= 0.0 && (z1 - z0).abs() > 1e-9 {
+                                let t = (config.z - z0) / (z1 - z0);
+                                if (0.0..=1.0).contains(&t) {
+                                    let x = p0.0 + t * (p1.0 - p0.0);
+                                    let y = p0.1 + t * (p1.1 - p0.1);
+                                    segments.push(((x, y), (x, y)));
+                                }
+                            }
+                        }
+                    }
+                } else {
+                    let mesh = voronoi_mesh(&config.seed_points);
+                    for (a, b) in mesh.edges {
+                        let p0 = mesh.vertices[a];
+                        let p1 = mesh.vertices[b];
+                        let z0 = p0.2;
+                        let z1 = p1.2;
+                        if (z0 - config.z) * (z1 - config.z) <= 0.0 && (z1 - z0).abs() > 1e-9 {
+                            let t = (config.z - z0) / (z1 - z0);
+                            if (0.0..=1.0).contains(&t) {
+                                let x = p0.0 + t * (p1.0 - p0.0);
+                                let y = p0.1 + t * (p1.1 - p0.1);
+                                segments.push(((x, y), (x, y)));
+                            }
                         }
                     }
                 }
