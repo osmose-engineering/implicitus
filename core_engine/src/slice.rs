@@ -121,6 +121,7 @@ pub fn slice_model(model: &Model, config: &SliceConfig) -> Vec<Contour> {
                 config.z,
                 config.infill_pattern.as_deref(),
                 &config.seed_points,
+                config.wall_thickness,
             );
         }
     }
