@@ -248,6 +248,12 @@ def test_review_request_with_voronoi_infill():
     assert isinstance(summary, str)
     assert 'voronoi' in summary.lower()
 
+
+def test_parse_voronoi_infill_mode_uniform():
+    raw = '{"shape":"box","size_mm":10,"infill":{"pattern":"voronoi","mode":"uniform"}}'
+    spec = parse_raw_spec(raw)
+    assert spec[0]['modifiers']['infill'].get('uniform') is True
+
 def test_update_request_seed_generation_count():
     # Ensure update_request caps seed points to MAX_SEED_POINTS
     raw = '{"shape":"sphere","size_mm":10}'

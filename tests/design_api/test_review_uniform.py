@@ -40,7 +40,7 @@ async def test_review_generates_uniform_cells(monkeypatch):
         "modifiers": {
             "infill": {
                 "pattern": "voronoi",
-                "uniform": True,
+                "mode": "uniform",
                 "seed_points": [[0, 0, 0], [1, 0, 0], [0, 1, 0]],
                 "bbox_min": [-1, -1, -1],
                 "bbox_max": [1, 1, 1]
@@ -61,3 +61,5 @@ async def test_review_generates_uniform_cells(monkeypatch):
     for poly in cells:
         assert len(poly) == 6
         assert np.isfinite(poly).all()
+    # ensure uniform flag propagated from mode
+    assert infill.get("uniform") is True
