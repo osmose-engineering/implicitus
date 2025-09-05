@@ -128,3 +128,14 @@ export IMPLICITUS_LOG_LEVEL=INFO
 
 Run with `IMPLICITUS_LOG_LEVEL=DEBUG` to diagnose Voronoi cell generation and
 record the uniform cell dump for inspection.
+
+To trace how seed data flows through the system, enable seed debug logging:
+
+```bash
+export IMPLICITUS_DEBUG_SEEDS=1
+```
+
+With the flag set, the Design API will write unsanitized turn entries to
+`design_api/seed_debug.log` alongside `conversation_log.jsonl`. These JSON lines
+preserve `seed_points`, `vertices`, and related fields that are otherwise
+scrubbed from the main conversation log.

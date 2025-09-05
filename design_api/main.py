@@ -40,6 +40,11 @@ from design_api.services.infill_service import (
 )
 from design_api.services.seed_utils import resolve_seed_spec
 
+DEBUG_SEEDS = bool(os.getenv("IMPLICITUS_DEBUG_SEEDS"))
+LOG_DIR = Path(__file__).parent
+CONVERSATION_LOG = LOG_DIR / "conversation_log.jsonl"
+SEED_DEBUG_LOG = LOG_DIR / "seed_debug.log"
+
 @dataclass
 class DesignState:
     draft_spec: list
@@ -57,6 +62,11 @@ def log_turn(session_id: str, turn_type: str, raw: str, spec: list, summary: Opt
         "raw": raw,
         "spec": spec,
     }
+
+    debug_entry = None
+    if DEBUG_SEEDS:
+        debug_entry = copy.deepcopy(entry)
+
     # remove large fields from infill modifiers to keep logs small
     scrubbed_spec = []
     for node in entry["spec"]:
@@ -73,8 +83,25 @@ def log_turn(session_id: str, turn_type: str, raw: str, spec: list, summary: Opt
         entry["summary"] = summary
     if question is not None:
         entry["question"] = question
-    with open("conversation_log.jsonl", "a") as f:
-        f.write(json.dumps(entry, default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o)) + "\n")
+
+    with open(CONVERSATION_LOG, "a") as f:
+        f.write(
+            json.dumps(
+                entry,
+                default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o),
+            )
+            + "\n"
+        )
+
+    if debug_entry is not None:
+        with open(SEED_DEBUG_LOG, "a") as f:
+            f.write(
+                json.dumps(
+                    debug_entry,
+                    default=lambda o: o.tolist() if hasattr(o, "tolist") else str(o),
+                )
+                + "\n"
+            )
 
 app = FastAPI(title="Implicitus Design API", debug=True)
 
