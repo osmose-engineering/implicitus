@@ -30,6 +30,7 @@ pub fn evaluate_sdf(
     z: f64,
     infill_pattern: Option<&str>,
     seeds: &[(f64, f64, f64)],
+    wall_thickness: f64,
 ) -> f64 {
     let mut base_sdf = f64::MAX;
 
@@ -70,7 +71,7 @@ pub fn evaluate_sdf(
 
     if infill_pattern == Some("voronoi") && !seeds.is_empty() {
         let infill_sdf = voronoi_sdf((x, y, z), seeds);
-        base_sdf = base_sdf.max(infill_sdf);
+        base_sdf = base_sdf.max(infill_sdf - wall_thickness);
     }
 
     base_sdf
