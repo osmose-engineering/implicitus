@@ -72,6 +72,9 @@ pub fn evaluate_sdf(
     if infill_pattern == Some("voronoi") && !seeds.is_empty() {
         let infill_sdf = voronoi_sdf((x, y, z), seeds);
         base_sdf = base_sdf.max(infill_sdf - wall_thickness);
+    } else if infill_pattern == Some("hex") && !seeds.is_empty() {
+        let infill_sdf = hex_sdf((x, y, z), seeds);
+        base_sdf = base_sdf.max(infill_sdf - wall_thickness);
     }
 
     base_sdf
@@ -81,6 +84,35 @@ pub fn evaluate_sdf(
 pub struct VoronoiMesh {
     pub vertices: Vec<(f64, f64, f64)>,
     pub edges: Vec<(usize, usize)>,
+}
+
+/// Simple SDF for a hexagonal infill pattern approximated by vertical cylinders
+/// centered at the provided seed points.  The cylinder radius is fixed at 0.5.
+fn hex_sdf(point: (f64, f64, f64), seeds: &[(f64, f64, f64)]) -> f64 {
+    if seeds.is_empty() {
+        return f64::INFINITY;
+    }
+    let mut best = f64::INFINITY;
+    for &(sx, sy, _sz) in seeds {
+        let dx = point.0 - sx;
+        let dy = point.1 - sy;
+        let dist = (dx * dx + dy * dy).sqrt();
+        best = best.min(dist - 0.5);
+    }
+    best
+}
+
+/// Generate a very simple hex lattice: one vertical edge per seed point.
+pub fn hex_lattice(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
+    let mut vertices = Vec::new();
+    let mut edges = Vec::new();
+    for &(x, y, z) in seeds {
+        let base = vertices.len();
+        vertices.push((x, y, z - 1.0));
+        vertices.push((x, y, z + 1.0));
+        edges.push((base, base + 1));
+    }
+    VoronoiMesh { vertices, edges }
 }
 
 fn sub(a: (f64, f64, f64), b: (f64, f64, f64)) -> (f64, f64, f64) {
