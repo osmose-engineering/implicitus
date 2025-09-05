@@ -115,12 +115,17 @@ pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::R
         warn!("No seed points found for model ID {}", model_id);
     }
 
-    let debug_enabled = std::env::var("SLICER_DEBUG").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false);
+    // Include seed points in the debug response by default. This can be disabled
+    // by setting the `IMPLICITUS_DEBUG_SEEDS` environment variable to `0` or
+    // `false`.
+    let include_seed_points = std::env::var("IMPLICITUS_DEBUG_SEEDS")
+        .map(|v| v == "1" || v.eq_ignore_ascii_case("true"))
+        .unwrap_or(true);
 
     let debug = DebugInfo {
         seed_count: seed_points.len(),
         infill_pattern: infill_pattern.clone(),
-        seed_points: if debug_enabled {
+        seed_points: if include_seed_points {
             Some(seed_points.clone())
         } else {
             None

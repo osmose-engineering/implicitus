@@ -65,7 +65,7 @@ async fn slice_box_model_returns_square_contour() {
     // Debug info should be present with zero seeds and no pattern
     assert_eq!(resp.debug.seed_count, 0);
     assert!(resp.debug.infill_pattern.is_none());
-    assert!(resp.debug.seed_points.is_none());
+    assert_eq!(resp.debug.seed_points.unwrap().len(), 0);
 }
 
 #[tokio::test]
@@ -90,7 +90,7 @@ async fn slice_returns_debug_for_invalid_model() {
     let resp: SliceResponse = serde_json::from_slice(&bytes).unwrap();
 
     assert_eq!(resp.debug.seed_count, 1);
-    assert!(resp.debug.seed_points.is_none());
+    assert_eq!(resp.debug.seed_points.unwrap().len(), 1);
     assert!(resp.contours.is_empty());
     assert!(resp.segments.is_empty());
 }
@@ -120,7 +120,7 @@ async fn slice_returns_debug_for_lattice_primitive() {
     let resp: SliceResponse = serde_json::from_slice(&bytes).unwrap();
 
     assert_eq!(resp.debug.seed_count, 2);
-    assert!(resp.debug.seed_points.is_none());
+    assert_eq!(resp.debug.seed_points.unwrap().len(), 2);
     assert!(resp.contours.is_empty());
     assert!(resp.segments.is_empty());
 }
