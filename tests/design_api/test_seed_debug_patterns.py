@@ -41,6 +41,7 @@ def test_seed_debug_log_records_seeds(monkeypatch):
                     "seed_points": seeds,
                     "bbox_min": [0, 0, 0],
                     "bbox_max": [1, 1, 1],
+                    "mode": "organic",
                 }
             },
         }
