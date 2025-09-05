@@ -32,6 +32,7 @@ fn wall_thickness_shifts_contours() {
         seed_points: seeds,
         infill_pattern: Some("voronoi".into()),
         wall_thickness: 0.5,
+        mode: None,
     };
 
     let thin = slice_model(&model, &config);

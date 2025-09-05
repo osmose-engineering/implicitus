@@ -39,6 +39,7 @@ fn voronoi_infill_slice_matches_expected() {
         seed_points: seeds,
         infill_pattern: Some("voronoi".into()),
         wall_thickness: 0.0,
+        mode: None,
     };
 
     let result = slice_model(&model, &config);

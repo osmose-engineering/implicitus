@@ -41,6 +41,7 @@ fn voronoi_custom_seeds_modify_segments() {
         seed_points: seeds,
         infill_pattern: Some("voronoi".into()),
         wall_thickness: 0.0,
+        mode: None,
     };
 
     let r1 = slice_model(&model, &cfg(seeds_a));
@@ -68,6 +69,7 @@ fn hex_custom_seeds_modify_segments() {
         seed_points: seeds,
         infill_pattern: Some("hex".into()),
         wall_thickness: 0.0,
+        mode: None,
     };
 
     let r1 = slice_model(&model, &cfg(seeds_a));
