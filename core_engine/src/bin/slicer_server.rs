@@ -2,6 +2,7 @@
 
 use core_engine::implicitus::Model;
 use core_engine::slice::{slice_model, SliceConfig, SliceResult};
+use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -53,6 +54,7 @@ type JobMap = Arc<Mutex<HashMap<String, Option<VoronoiResponse>>>>;
 #[tokio::main]
 async fn main() {
     pyo3::prepare_freethreaded_python();
+    env_logger::init();
     // shared job state
     let jobs: JobMap = Arc::new(Mutex::new(HashMap::new()));
     let with_jobs = warp::any().map(move || jobs.clone());
@@ -83,17 +85,39 @@ async fn main() {
         .allow_methods(vec![Method::POST, Method::GET])
         .allow_header("content-type");
 
-    println!("Slicer server listening on 127.0.0.1:4000");
+    info!("Slicer server listening on 127.0.0.1:4000");
     let routes = slice_route.or(voronoi_route).or(status_route).with(cors);
     warp::serve(routes).run(([127, 0, 0, 1], 4000)).await;
 }
 
 pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::Rejection> {
-    // Extract debug info before consuming the model value
-    let debug = extract_debug_info(&req._model);
-
     // Pull out infill or lattice data to forward to the slice configuration
     let (seed_points, infill_pattern, wall_thickness) = parse_infill(&req._model);
+
+    let model_id = req
+        ._model
+        .get("id")
+        .and_then(|v| v.as_str())
+        .unwrap_or("unknown")
+        .to_string();
+
+    info!("Slice request for model ID: {}", model_id);
+    info!(
+        "parse_infill -> seed_count: {}, first_seeds: {:?}, pattern: {:?}, wall_thickness: {}",
+        seed_points.len(),
+        seed_points.iter().take(3).collect::<Vec<_>>(),
+        infill_pattern,
+        wall_thickness
+    );
+
+    if seed_points.is_empty() {
+        warn!("No seed points found for model ID {}", model_id);
+    }
+
+    let debug = DebugInfo {
+        seed_count: seed_points.len(),
+        infill_pattern: infill_pattern.clone(),
+    };
 
     let config = SliceConfig {
         z: req.layer,
@@ -111,10 +135,16 @@ pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::R
 
     let result = match serde_json::from_value::<Model>(req._model) {
         Ok(model) => slice_model(&model, &config),
-        Err(_) => SliceResult {
-            contours: Vec::new(),
-            segments: Vec::new(),
-        },
+        Err(e) => {
+            warn!(
+                "Failed to deserialize model {}: {}. Returning empty slice.",
+                model_id, e
+            );
+            SliceResult {
+                contours: Vec::new(),
+                segments: Vec::new(),
+            }
+        }
     };
 
     Ok(warp::reply::json(&SliceResponse {
@@ -128,7 +158,7 @@ async fn handle_voronoi(
     _req: VoronoiRequest,
     _jobs: JobMap,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    println!("[slicer_server] /voronoi route is deprecated; use /design/mesh instead");
+    warn!("/voronoi route is deprecated; use /design/mesh instead");
     let resp = StatusResponse {
         status: "deprecated",
     };
@@ -166,14 +196,6 @@ async fn handle_voronoi_status(
 #[derive(Serialize)]
 struct StatusResponse {
     status: &'static str,
-}
-
-fn extract_debug_info(value: &Value) -> DebugInfo {
-    let (seeds, infill_pattern, _) = parse_infill(value);
-    DebugInfo {
-        seed_count: seeds.len(),
-        infill_pattern,
-    }
 }
 
 pub fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>, f64) {

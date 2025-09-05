@@ -23,6 +23,8 @@ ndarray = "0.16"
 
 pyo3 = { version = "0.22", features = ["abi3-py39"] }
 kiddo = "5.2"
+log = "0.4"
+env_logger = "0.11"
 
 [features]
 default = []
