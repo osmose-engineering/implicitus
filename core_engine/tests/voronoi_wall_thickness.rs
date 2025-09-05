@@ -25,6 +25,7 @@ fn sphere_boundary_intact_with_voronoi_walls() {
         Some("voronoi"),
         &seeds,
         wall_thickness,
+        None,
     );
     assert!(
         surface.abs() < 1e-6,
@@ -41,6 +42,7 @@ fn sphere_boundary_intact_with_voronoi_walls() {
         Some("voronoi"),
         &seeds,
         wall_thickness,
+        None,
     );
     assert!(
         wall > 0.0,

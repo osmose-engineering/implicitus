@@ -1,8 +1,12 @@
 use crate::voronoi::sdf::voronoi_sdf;
 use kiddo::float::kdtree::KdTree;
 use kiddo::SquaredEuclidean;
+use numpy::{PyArray1, PyArray2, PyArrayMethods};
+use once_cell::sync::Lazy;
 use pyo3::prelude::*;
+use pyo3::types::PyDict;
 use rayon::prelude::*;
+use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 
 // Import the generated Protobuf definitions
@@ -31,6 +35,7 @@ pub fn evaluate_sdf(
     infill_pattern: Option<&str>,
     seeds: &[(f64, f64, f64)],
     wall_thickness: f64,
+    mode: Option<&str>,
 ) -> f64 {
     let mut base_sdf = f64::MAX;
 
@@ -69,7 +74,13 @@ pub fn evaluate_sdf(
         }
     }
 
-    if infill_pattern == Some("voronoi") && !seeds.is_empty() {
+    if infill_pattern == Some("voronoi") && mode == Some("uniform") && !seeds.is_empty() {
+        let cells = get_uniform_hex_cells(seeds);
+        if !cells.is_empty() {
+            let infill_sdf = uniform_hex_sdf((x, y, z), &cells);
+            base_sdf = base_sdf.max(infill_sdf - wall_thickness);
+        }
+    } else if infill_pattern == Some("voronoi") && !seeds.is_empty() {
         let infill_sdf = voronoi_sdf((x, y, z), seeds);
         base_sdf = base_sdf.max(infill_sdf - wall_thickness);
     } else if infill_pattern == Some("hex") && !seeds.is_empty() {
@@ -113,6 +124,78 @@ pub fn hex_lattice(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
         edges.push((base, base + 1));
     }
     VoronoiMesh { vertices, edges }
+}
+
+static UNIFORM_CELL_CACHE: Lazy<Mutex<HashMap<String, Vec<Vec<(f64, f64, f64)>>>>> =
+    Lazy::new(|| Mutex::new(HashMap::new()));
+
+fn get_uniform_hex_cells(seeds: &[(f64, f64, f64)]) -> Vec<Vec<(f64, f64, f64)>> {
+    let key = format!("{:?}", seeds);
+    let mut cache = UNIFORM_CELL_CACHE.lock().unwrap();
+    if let Some(cells) = cache.get(&key) {
+        return cells.clone();
+    }
+    let cells = Python::with_gil(|py| -> PyResult<Vec<Vec<(f64, f64, f64)>>> {
+        let seed_rows: Vec<Vec<f64>> = seeds.iter().map(|&(x, y, z)| vec![x, y, z]).collect();
+        let seeds_arr = PyArray2::from_vec2_bound(py, &seed_rows)?;
+        let plane = PyArray1::from_vec_bound(py, vec![0.0f64, 0.0, 1.0]);
+        let obj = uniform::hex::compute_uniform_cells(
+            py,
+            seeds_arr.readonly(),
+            py.None(),
+            plane.readonly(),
+            None,
+            1e-5,
+            false,
+            false,
+        )?;
+        let dict = obj.downcast_bound::<PyDict>(py)?;
+        let mut cells = Vec::new();
+        for idx in 0..seed_rows.len() {
+            if let Some(arr_obj) = dict.get_item(idx)? {
+                let arr = arr_obj.downcast::<PyArray2<f64>>()?;
+                let arr_ro = arr.readonly();
+                let mut verts = Vec::new();
+                for row in arr_ro.as_array().outer_iter() {
+                    verts.push((row[0], row[1], row[2]));
+                }
+                cells.push(verts);
+            }
+        }
+        Ok(cells)
+    })
+    .unwrap_or_default();
+    cache.insert(key, cells.clone());
+    cells
+}
+
+fn uniform_hex_sdf(point: (f64, f64, f64), cells: &[Vec<(f64, f64, f64)>]) -> f64 {
+    let mut best = f64::INFINITY;
+    for verts in cells {
+        let m = verts.len();
+        for i in 0..m {
+            let a = verts[i];
+            let b = verts[(i + 1) % m];
+            let v = sub(b, a);
+            let w = sub(point, a);
+            let c1 = dot(w, v);
+            let c2 = dot(v, v);
+            let t = if c1 <= 0.0 {
+                0.0
+            } else if c1 >= c2 {
+                1.0
+            } else {
+                c1 / c2
+            };
+            let proj = add(a, scale(v, t));
+            let diff = sub(point, proj);
+            let dist = (diff.0 * diff.0 + diff.1 * diff.1 + diff.2 * diff.2).sqrt();
+            if dist < best {
+                best = dist;
+            }
+        }
+    }
+    best
 }
 
 fn sub(a: (f64, f64, f64), b: (f64, f64, f64)) -> (f64, f64, f64) {
