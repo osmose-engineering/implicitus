@@ -92,7 +92,7 @@ pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::R
     // Extract debug info before consuming the model value
     let debug = extract_debug_info(&req._model);
 
-    // Pull out infill data to forward to the slice configuration
+    // Pull out infill or lattice data to forward to the slice configuration
     let (seed_points, infill_pattern, wall_thickness) = parse_infill(&req._model);
 
     let config = SliceConfig {
@@ -181,6 +181,9 @@ fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>, f64) {
         if let Some(obj) = v.as_object() {
             if let Some(infill) = obj.get("infill") {
                 return Some(infill);
+            }
+            if let Some(lattice) = obj.get("lattice") {
+                return Some(lattice);
             }
             for val in obj.values() {
                 if let Some(found) = find_infill(val) {
