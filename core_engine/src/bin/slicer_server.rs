@@ -1,7 +1,7 @@
 // core_engine/src/bin/slicer_server.rs
 
 use core_engine::implicitus::Model;
-use core_engine::slice::{slice_model, SliceConfig};
+use core_engine::slice::{slice_model, SliceConfig, SliceResult};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::HashMap;
@@ -32,6 +32,7 @@ pub struct DebugInfo {
 #[derive(Serialize, Deserialize)]
 pub struct SliceResponse {
     pub contours: Vec<Vec<(f64, f64)>>,
+    pub segments: Vec<((f64, f64), (f64, f64))>,
     pub debug: DebugInfo,
 }
 
@@ -107,12 +108,19 @@ pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::R
         wall_thickness,
     };
 
-    let contours = match serde_json::from_value::<Model>(req._model) {
+    let result = match serde_json::from_value::<Model>(req._model) {
         Ok(model) => slice_model(&model, &config),
-        Err(_) => Vec::new(),
+        Err(_) => SliceResult {
+            contours: Vec::new(),
+            segments: Vec::new(),
+        },
     };
 
-    Ok(warp::reply::json(&SliceResponse { contours, debug }))
+    Ok(warp::reply::json(&SliceResponse {
+        contours: result.contours,
+        segments: result.segments,
+        debug,
+    }))
 }
 
 async fn handle_voronoi(

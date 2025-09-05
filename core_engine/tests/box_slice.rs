@@ -37,6 +37,7 @@ async fn slice_box_model_returns_square_contour() {
     let bytes = to_bytes(body).await.unwrap();
     let resp: SliceResponse = serde_json::from_slice(&bytes).unwrap();
     let contour = &resp.contours[0];
+    assert!(resp.segments.is_empty());
 
     // Verify contour bounds match the box dimensions
     let min_x = contour.iter().map(|p| p.0).fold(f64::INFINITY, f64::min);
@@ -78,5 +79,6 @@ async fn slice_returns_debug_for_invalid_model() {
 
     assert_eq!(resp.debug.seed_count, 1);
     assert!(resp.contours.is_empty());
+    assert!(resp.segments.is_empty());
 
 }

@@ -31,8 +31,21 @@ fn slice_model_produces_segments() {
         wall_thickness: 0.0,
     };
 
-    // Call the slice and verify it returns non-empty contours
-    let contours = slice_model(&model, &config);
-    assert!(!contours.is_empty(), "Expected non-empty contours from slice_model, got {:?}", contours);
-    assert!(contours[0].len() >= 2, "Expected at least two points in a contour, got {:?}", contours[0]);
+    // Call the slice and verify it returns non-empty contours and no segments
+    let result = slice_model(&model, &config);
+    assert!(
+        !result.contours.is_empty(),
+        "Expected non-empty contours from slice_model, got {:?}",
+        result.contours
+    );
+    assert!(
+        result.contours[0].len() >= 2,
+        "Expected at least two points in a contour, got {:?}",
+        result.contours[0]
+    );
+    assert!(
+        result.segments.is_empty(),
+        "Expected no segments for sphere slice, got {:?}",
+        result.segments
+    );
 }
