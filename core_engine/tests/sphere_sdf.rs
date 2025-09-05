@@ -20,7 +20,7 @@ fn sphere_sdf() {
     model.root = Some(node);
 
     // At the center, SDF = -radius
-    let val = evaluate_sdf(&model, 0.0, 0.0, 0.0, None, &[], 0.0);
+    let val = evaluate_sdf(&model, 0.0, 0.0, 0.0, None, &[], 0.0, None);
     assert!(
         (val + 2.0).abs() < 1e-6,
         "Expected SDF at center to be -2.0, got {}",
@@ -28,7 +28,7 @@ fn sphere_sdf() {
     );
 
     // On the surface, SDF ~ 0
-    let val2 = evaluate_sdf(&model, 2.0, 0.0, 0.0, None, &[], 0.0);
+    let val2 = evaluate_sdf(&model, 2.0, 0.0, 0.0, None, &[], 0.0, None);
     assert!(
         val2.abs() < 1e-6,
         "Expected SDF at surface to be ~0, got {}",

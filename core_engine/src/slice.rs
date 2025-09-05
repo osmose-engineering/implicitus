@@ -236,6 +236,7 @@ pub fn slice_model(model: &Model, config: &SliceConfig) -> SliceResult {
                 config.infill_pattern.as_deref(),
                 &config.seed_points,
                 config.wall_thickness,
+                config.mode.as_deref(),
             );
         }
     }

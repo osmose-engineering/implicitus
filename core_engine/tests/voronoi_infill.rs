@@ -14,7 +14,7 @@ fn voronoi_infill_creates_voids() {
     model.root = Some(node);
 
     let seeds = vec![(1.0, 0.0, 0.0), (-1.0, 0.0, 0.0)];
-    let val = evaluate_sdf(&model, 0.25, 0.0, 0.0, Some("voronoi"), &seeds, 0.0);
+    let val = evaluate_sdf(&model, 0.25, 0.0, 0.0, Some("voronoi"), &seeds, 0.0, None);
     assert!(
         val > 0.0,
         "Expected positive SDF inside Voronoi void, got {}",
