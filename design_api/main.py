@@ -125,7 +125,11 @@ async def review(req: dict, sid: Optional[str] = None):
                 if seed_points and bbox_min and bbox_max:
                     pts_arr = np.asarray(seed_points)
                     try:
-                        if inf.get("uniform"):
+                        uniform_flag = inf.get("uniform") or (
+                            isinstance(inf.get("mode"), str) and inf.get("mode").lower() == "uniform"
+                        )
+                        if uniform_flag:
+                            inf["uniform"] = True  # ensure downstream components see flag
                             plane = np.array([0.0, 0.0, 1.0])
                             extent = np.linalg.norm(np.array(bbox_max) - np.array(bbox_min)) * 0.5
                             cells = compute_uniform_cells(

@@ -231,6 +231,12 @@ def _build_modifier_dict(raw_spec: dict) -> dict:
     if 'thickness_mm' in infill_data:
         infill_data['density'] = infill_data.pop('thickness_mm')
 
+    # Translate new "mode" flag into legacy uniform boolean
+    mode = infill_data.get('mode')
+    if mode is not None:
+        # Expose uniform flag for downstream consumers while preserving mode
+        infill_data['uniform'] = str(mode).lower() == 'uniform'
+
     pattern = infill_data.get('pattern')
     # Mark Voronoi infill specially
     if pattern == 'voronoi':
