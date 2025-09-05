@@ -105,6 +105,7 @@ pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::R
         ny: req.ny.unwrap_or(50),
         seed_points,
         infill_pattern,
+        // Forward wall thickness so slice_model can pass it through to evaluate_sdf
         wall_thickness,
     };
 
