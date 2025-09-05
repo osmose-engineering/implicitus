@@ -26,6 +26,8 @@ fn slice_model_produces_segments() {
         y_max: 1.0,
         nx: 3,
         ny: 3,
+        seed_points: Vec::new(),
+        infill_pattern: None,
     };
 
     // Call the slice and verify it returns non-empty contours

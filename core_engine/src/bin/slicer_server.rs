@@ -91,6 +91,9 @@ pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::R
     // Extract debug info before consuming the model value
     let debug = extract_debug_info(&req._model);
 
+    // Pull out infill data to forward to the slice configuration
+    let (seed_points, infill_pattern) = parse_infill(&req._model);
+
     let config = SliceConfig {
         z: req.layer,
         x_min: req.x_min.unwrap_or(-1.0),
@@ -99,14 +102,14 @@ pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::R
         y_max: req.y_max.unwrap_or(1.0),
         nx: req.nx.unwrap_or(50),
         ny: req.ny.unwrap_or(50),
+        seed_points,
+        infill_pattern,
     };
-
 
     let contours = match serde_json::from_value::<Model>(req._model) {
         Ok(model) => slice_model(&model, &config),
         Err(_) => Vec::new(),
     };
-
 
     Ok(warp::reply::json(&SliceResponse { contours, debug }))
 }
@@ -156,6 +159,14 @@ struct StatusResponse {
 }
 
 fn extract_debug_info(value: &Value) -> DebugInfo {
+    let (seeds, infill_pattern) = parse_infill(value);
+    DebugInfo {
+        seed_count: seeds.len(),
+        infill_pattern,
+    }
+}
+
+fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>) {
     fn find_infill(v: &Value) -> Option<&Value> {
         if let Some(obj) = v.as_object() {
             if let Some(infill) = obj.get("infill") {
@@ -177,22 +188,32 @@ fn extract_debug_info(value: &Value) -> DebugInfo {
     }
 
     if let Some(infill) = find_infill(value) {
-        let seed_count = infill
-            .get("seed_points")
-            .and_then(|sp| sp.as_array().map(|a| a.len()))
-            .unwrap_or(0);
-        let infill_pattern = infill
+        let pattern = infill
             .get("pattern")
             .and_then(|p| p.as_str())
             .map(|s| s.to_string());
-        DebugInfo {
-            seed_count,
-            infill_pattern,
-        }
+        let seed_points = infill
+            .get("seed_points")
+            .and_then(|sp| sp.as_array())
+            .map(|arr| {
+                arr.iter()
+                    .filter_map(|pt| {
+                        let coords = pt.as_array()?;
+                        if coords.len() == 3 {
+                            Some((
+                                coords[0].as_f64().unwrap_or(0.0),
+                                coords[1].as_f64().unwrap_or(0.0),
+                                coords[2].as_f64().unwrap_or(0.0),
+                            ))
+                        } else {
+                            None
+                        }
+                    })
+                    .collect::<Vec<_>>()
+            })
+            .unwrap_or_else(Vec::new);
+        (seed_points, pattern)
     } else {
-        DebugInfo {
-            seed_count: 0,
-            infill_pattern: None,
-        }
+        (Vec::new(), None)
     }
 }

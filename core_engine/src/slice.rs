@@ -18,6 +18,8 @@ pub struct SliceConfig {
     pub y_max: f64,
     pub nx: usize,
     pub ny: usize,
+    pub seed_points: Vec<(f64, f64, f64)>,
+    pub infill_pattern: Option<String>,
 }
 
 /// Placeholder marching squares edge table: for each case index, list of edge pairs.
