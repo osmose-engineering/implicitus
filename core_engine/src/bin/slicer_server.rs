@@ -176,61 +176,54 @@ fn extract_debug_info(value: &Value) -> DebugInfo {
     }
 }
 
-fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>, f64) {
-    fn find_infill(v: &Value) -> Option<&Value> {
+pub fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>, f64) {
+    // Recursively walk the JSON tree collecting infill/lattice blocks. Seed points from
+    // all blocks are aggregated, while the first encountered pattern and wall thickness
+    // take precedence.
+    fn collect(
+        v: &Value,
+        seeds: &mut Vec<(f64, f64, f64)>,
+        pattern: &mut Option<String>,
+        wall: &mut Option<f64>,
+    ) {
         if let Some(obj) = v.as_object() {
-            if let Some(infill) = obj.get("infill") {
-                return Some(infill);
-            }
-            if let Some(lattice) = obj.get("lattice") {
-                return Some(lattice);
+            if let Some(infill) = obj.get("infill").or_else(|| obj.get("lattice")) {
+                if pattern.is_none() {
+                    *pattern = infill
+                        .get("pattern")
+                        .and_then(|p| p.as_str())
+                        .map(|s| s.to_string());
+                }
+                if wall.is_none() {
+                    *wall = infill.get("wall_thickness").and_then(|w| w.as_f64());
+                }
+                if let Some(arr) = infill.get("seed_points").and_then(|sp| sp.as_array()) {
+                    for pt in arr {
+                        if let Some(coords) = pt.as_array() {
+                            if coords.len() == 3 {
+                                seeds.push((
+                                    coords[0].as_f64().unwrap_or(0.0),
+                                    coords[1].as_f64().unwrap_or(0.0),
+                                    coords[2].as_f64().unwrap_or(0.0),
+                                ));
+                            }
+                        }
+                    }
+                }
             }
             for val in obj.values() {
-                if let Some(found) = find_infill(val) {
-                    return Some(found);
-                }
+                collect(val, seeds, pattern, wall);
             }
         } else if let Some(arr) = v.as_array() {
             for val in arr {
-                if let Some(found) = find_infill(val) {
-                    return Some(found);
-                }
+                collect(val, seeds, pattern, wall);
             }
         }
-        None
     }
 
-    if let Some(infill) = find_infill(value) {
-        let pattern = infill
-            .get("pattern")
-            .and_then(|p| p.as_str())
-            .map(|s| s.to_string());
-        let wall_thickness = infill
-            .get("wall_thickness")
-            .and_then(|w| w.as_f64())
-            .unwrap_or(0.0);
-        let seed_points = infill
-            .get("seed_points")
-            .and_then(|sp| sp.as_array())
-            .map(|arr| {
-                arr.iter()
-                    .filter_map(|pt| {
-                        let coords = pt.as_array()?;
-                        if coords.len() == 3 {
-                            Some((
-                                coords[0].as_f64().unwrap_or(0.0),
-                                coords[1].as_f64().unwrap_or(0.0),
-                                coords[2].as_f64().unwrap_or(0.0),
-                            ))
-                        } else {
-                            None
-                        }
-                    })
-                    .collect::<Vec<_>>()
-            })
-            .unwrap_or_else(Vec::new);
-        (seed_points, pattern, wall_thickness)
-    } else {
-        (Vec::new(), None, 0.0)
-    }
+    let mut seeds = Vec::new();
+    let mut pattern: Option<String> = None;
+    let mut wall: Option<f64> = None;
+    collect(value, &mut seeds, &mut pattern, &mut wall);
+    (seeds, pattern, wall.unwrap_or(0.0))
 }
