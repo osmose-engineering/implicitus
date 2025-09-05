@@ -92,7 +92,7 @@ pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::R
     let debug = extract_debug_info(&req._model);
 
     // Pull out infill data to forward to the slice configuration
-    let (seed_points, infill_pattern) = parse_infill(&req._model);
+    let (seed_points, infill_pattern, wall_thickness) = parse_infill(&req._model);
 
     let config = SliceConfig {
         z: req.layer,
@@ -104,6 +104,7 @@ pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::R
         ny: req.ny.unwrap_or(50),
         seed_points,
         infill_pattern,
+        wall_thickness,
     };
 
     let contours = match serde_json::from_value::<Model>(req._model) {
@@ -159,14 +160,14 @@ struct StatusResponse {
 }
 
 fn extract_debug_info(value: &Value) -> DebugInfo {
-    let (seeds, infill_pattern) = parse_infill(value);
+    let (seeds, infill_pattern, _) = parse_infill(value);
     DebugInfo {
         seed_count: seeds.len(),
         infill_pattern,
     }
 }
 
-fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>) {
+fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>, f64) {
     fn find_infill(v: &Value) -> Option<&Value> {
         if let Some(obj) = v.as_object() {
             if let Some(infill) = obj.get("infill") {
@@ -192,6 +193,10 @@ fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>) {
             .get("pattern")
             .and_then(|p| p.as_str())
             .map(|s| s.to_string());
+        let wall_thickness = infill
+            .get("wall_thickness")
+            .and_then(|w| w.as_f64())
+            .unwrap_or(0.0);
         let seed_points = infill
             .get("seed_points")
             .and_then(|sp| sp.as_array())
@@ -212,8 +217,8 @@ fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>) {
                     .collect::<Vec<_>>()
             })
             .unwrap_or_else(Vec::new);
-        (seed_points, pattern)
+        (seed_points, pattern, wall_thickness)
     } else {
-        (Vec::new(), None)
+        (Vec::new(), None, 0.0)
     }
 }

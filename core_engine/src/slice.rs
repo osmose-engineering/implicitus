@@ -5,6 +5,7 @@
 
 use crate::evaluate_sdf;
 use crate::implicitus::Model;
+use crate::voronoi_mesh;
 
 /// A single contour loop: a series of (x, y) points.
 pub type Contour = Vec<(f64, f64)>;
@@ -20,6 +21,7 @@ pub struct SliceConfig {
     pub ny: usize,
     pub seed_points: Vec<(f64, f64, f64)>,
     pub infill_pattern: Option<String>,
+    pub wall_thickness: f64,
 }
 
 /// Placeholder marching squares edge table: for each case index, list of edge pairs.
@@ -74,6 +76,27 @@ fn corner_value(v00: f64, v10: f64, v11: f64, v01: f64, corner: usize) -> f64 {
 
 /// Perform a slice at height `config.z` and return contours.
 pub fn slice_model(model: &Model, config: &SliceConfig) -> Vec<Contour> {
+    let mut contours: Vec<Contour> = Vec::new();
+
+    // Optional infill generation via Voronoi edges
+    if config.infill_pattern.as_deref() == Some("voronoi") && !config.seed_points.is_empty() {
+        let mesh = voronoi_mesh(&config.seed_points);
+        for (a, b) in mesh.edges {
+            let p0 = mesh.vertices[a];
+            let p1 = mesh.vertices[b];
+            let z0 = p0.2;
+            let z1 = p1.2;
+            if (z0 - config.z) * (z1 - config.z) <= 0.0 && (z1 - z0).abs() > 1e-9 {
+                let t = (config.z - z0) / (z1 - z0);
+                if t >= 0.0 && t <= 1.0 {
+                    let x = p0.0 + t * (p1.0 - p0.0);
+                    let y = p0.1 + t * (p1.1 - p0.1);
+                    contours.push(vec![(x, y), (x, y)]);
+                }
+            }
+        }
+    }
+
     // Compute grid spacing
     let dx = (config.x_max - config.x_min) / (config.nx - 1) as f64;
     let dy = (config.y_max - config.y_min) / (config.ny - 1) as f64;
@@ -132,5 +155,6 @@ pub fn slice_model(model: &Model, config: &SliceConfig) -> Vec<Contour> {
         sorted.push(first);
     }
 
-    vec![sorted]
+    contours.push(sorted);
+    contours
 }
