@@ -4,6 +4,7 @@
 //! Produces 2D contours (loops) at a given z-plane.
 
 use crate::evaluate_sdf;
+use crate::hex_lattice;
 use crate::implicitus::Model;
 use crate::voronoi_mesh;
 
@@ -95,22 +96,44 @@ pub fn slice_model(model: &Model, config: &SliceConfig) -> SliceResult {
     let mut contours: Vec<Contour> = Vec::new();
     let mut segments: Vec<Segment> = Vec::new();
 
-    // Optional infill generation via Voronoi edges
-    if config.infill_pattern.as_deref() == Some("voronoi") && !config.seed_points.is_empty() {
-        let mesh = voronoi_mesh(&config.seed_points);
-        for (a, b) in mesh.edges {
-            let p0 = mesh.vertices[a];
-            let p1 = mesh.vertices[b];
-            let z0 = p0.2;
-            let z1 = p1.2;
-            if (z0 - config.z) * (z1 - config.z) <= 0.0 && (z1 - z0).abs() > 1e-9 {
-                let t = (config.z - z0) / (z1 - z0);
-                if (0.0..=1.0).contains(&t) {
-                    let x = p0.0 + t * (p1.0 - p0.0);
-                    let y = p0.1 + t * (p1.1 - p0.1);
-                    segments.push(((x, y), (x, y)));
+    // Optional infill generation for supported patterns
+    if !config.seed_points.is_empty() {
+        match config.infill_pattern.as_deref() {
+            Some("voronoi") => {
+                let mesh = voronoi_mesh(&config.seed_points);
+                for (a, b) in mesh.edges {
+                    let p0 = mesh.vertices[a];
+                    let p1 = mesh.vertices[b];
+                    let z0 = p0.2;
+                    let z1 = p1.2;
+                    if (z0 - config.z) * (z1 - config.z) <= 0.0 && (z1 - z0).abs() > 1e-9 {
+                        let t = (config.z - z0) / (z1 - z0);
+                        if (0.0..=1.0).contains(&t) {
+                            let x = p0.0 + t * (p1.0 - p0.0);
+                            let y = p0.1 + t * (p1.1 - p0.1);
+                            segments.push(((x, y), (x, y)));
+                        }
+                    }
                 }
             }
+            Some("hex") => {
+                let mesh = hex_lattice(&config.seed_points);
+                for (a, b) in mesh.edges {
+                    let p0 = mesh.vertices[a];
+                    let p1 = mesh.vertices[b];
+                    let z0 = p0.2;
+                    let z1 = p1.2;
+                    if (z0 - config.z) * (z1 - config.z) <= 0.0 && (z1 - z0).abs() > 1e-9 {
+                        let t = (config.z - z0) / (z1 - z0);
+                        if (0.0..=1.0).contains(&t) {
+                            let x = p0.0 + t * (p1.0 - p0.0);
+                            let y = p0.1 + t * (p1.1 - p0.1);
+                            segments.push(((x, y), (x, y)));
+                        }
+                    }
+                }
+            }
+            _ => {}
         }
     }
 
