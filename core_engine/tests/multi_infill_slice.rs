@@ -28,7 +28,7 @@ fn seeds_from_multiple_blocks_affect_slice() {
         }
     });
 
-    let (seeds, pattern, _) = slicer_server::parse_infill(&model_json);
+    let (seeds, pattern, _, _) = slicer_server::parse_infill(&model_json);
     assert_eq!(seeds.len(), 5);
     assert_eq!(pattern.as_deref(), Some("voronoi"));
 
@@ -53,6 +53,7 @@ fn seeds_from_multiple_blocks_affect_slice() {
         seed_points: seeds,
         infill_pattern: pattern,
         wall_thickness: 0.0,
+        mode: None,
     };
 
     let result = slice_model(&model, &config);

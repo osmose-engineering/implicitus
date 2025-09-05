@@ -32,6 +32,7 @@ pub struct SliceConfig {
     pub seed_points: Vec<(f64, f64, f64)>,
     pub infill_pattern: Option<String>,
     pub wall_thickness: f64,
+    pub mode: Option<String>,
 }
 
 /// Placeholder marching squares edge table: for each case index, list of edge pairs.

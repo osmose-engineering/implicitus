@@ -93,7 +93,7 @@ async fn main() {
 
 pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::Rejection> {
     // Pull out infill or lattice data to forward to the slice configuration
-    let (seed_points, infill_pattern, wall_thickness) = parse_infill(&req._model);
+    let (seed_points, infill_pattern, wall_thickness, mode) = parse_infill(&req._model);
 
     let model_id = req
         ._model
@@ -104,11 +104,12 @@ pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::R
 
     info!("Slice request for model ID: {}", model_id);
     info!(
-        "parse_infill -> seed_count: {}, first_seeds: {:?}, pattern: {:?}, wall_thickness: {}",
+        "parse_infill -> seed_count: {}, first_seeds: {:?}, pattern: {:?}, wall_thickness: {}, mode: {:?}",
         seed_points.len(),
         seed_points.iter().take(3).collect::<Vec<_>>(),
         infill_pattern,
-        wall_thickness
+        wall_thickness,
+        mode
     );
 
     if seed_points.is_empty() {
@@ -144,6 +145,7 @@ pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::R
         infill_pattern,
         // Forward wall thickness so slice_model can pass it through to evaluate_sdf
         wall_thickness,
+        mode,
     };
 
     let result = match serde_json::from_value::<Model>(req._model) {
@@ -211,7 +213,7 @@ struct StatusResponse {
     status: &'static str,
 }
 
-pub fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>, f64) {
+pub fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>, f64, Option<String>) {
     // Recursively walk the JSON tree collecting infill/lattice blocks. Seed points from
     // all blocks are aggregated, while the first encountered pattern and wall thickness
     // take precedence.
@@ -220,6 +222,7 @@ pub fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>, f64
         seeds: &mut Vec<(f64, f64, f64)>,
         pattern: &mut Option<String>,
         wall: &mut Option<f64>,
+        mode: &mut Option<String>,
     ) {
         if let Some(obj) = v.as_object() {
             if let Some(infill) = obj.get("infill").or_else(|| obj.get("lattice")) {
@@ -231,6 +234,12 @@ pub fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>, f64
                 }
                 if wall.is_none() {
                     *wall = infill.get("wall_thickness").and_then(|w| w.as_f64());
+                }
+                if mode.is_none() {
+                    *mode = infill
+                        .get("mode")
+                        .and_then(|m| m.as_str())
+                        .map(|s| s.to_string());
                 }
                 if let Some(arr) = infill.get("seed_points").and_then(|sp| sp.as_array()) {
                     for pt in arr {
@@ -247,11 +256,11 @@ pub fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>, f64
                 }
             }
             for val in obj.values() {
-                collect(val, seeds, pattern, wall);
+                collect(val, seeds, pattern, wall, mode);
             }
         } else if let Some(arr) = v.as_array() {
             for val in arr {
-                collect(val, seeds, pattern, wall);
+                collect(val, seeds, pattern, wall, mode);
             }
         }
     }
@@ -259,6 +268,7 @@ pub fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>, f64
     let mut seeds = Vec::new();
     let mut pattern: Option<String> = None;
     let mut wall: Option<f64> = None;
-    collect(value, &mut seeds, &mut pattern, &mut wall);
-    (seeds, pattern, wall.unwrap_or(0.0))
+    let mut mode: Option<String> = None;
+    collect(value, &mut seeds, &mut pattern, &mut wall, &mut mode);
+    (seeds, pattern, wall.unwrap_or(0.0), mode)
 }

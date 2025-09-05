@@ -1,7 +1,7 @@
 // core_engine/tests/slice_model.rs
 
+use core_engine::implicitus::{node::Body, primitive::Shape, Model, Node, Primitive, Sphere};
 use core_engine::slice::{slice_model, SliceConfig};
-use core_engine::implicitus::{Model, Node, Primitive, Sphere, primitive::Shape, node::Body};
 
 #[test]
 fn slice_model_produces_segments() {
@@ -29,6 +29,7 @@ fn slice_model_produces_segments() {
         seed_points: Vec::new(),
         infill_pattern: None,
         wall_thickness: 0.0,
+        mode: None,
     };
 
     // Call the slice and verify it returns non-empty contours and no segments
