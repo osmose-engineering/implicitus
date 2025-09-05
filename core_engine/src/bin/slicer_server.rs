@@ -28,6 +28,7 @@ pub struct SliceRequest {
 pub struct DebugInfo {
     pub seed_count: usize,
     pub infill_pattern: Option<String>,
+    pub seed_points: Option<Vec<(f64, f64, f64)>>,
 }
 
 #[derive(Serialize, Deserialize)]
@@ -114,9 +115,16 @@ pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::R
         warn!("No seed points found for model ID {}", model_id);
     }
 
+    let debug_enabled = std::env::var("SLICER_DEBUG").map(|v| v == "1" || v.eq_ignore_ascii_case("true")).unwrap_or(false);
+
     let debug = DebugInfo {
         seed_count: seed_points.len(),
         infill_pattern: infill_pattern.clone(),
+        seed_points: if debug_enabled {
+            Some(seed_points.clone())
+        } else {
+            None
+        },
     };
 
     let config = SliceConfig {

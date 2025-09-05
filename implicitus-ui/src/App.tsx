@@ -70,9 +70,12 @@ function App() {
   const [spec, setSpec] = useState<any[]>([]);
   const [meshVertices, setMeshVertices] = useState<[number, number, number][]>([]);
   const [meshEdges, setMeshEdges] = useState<number[][]>([]);
-  // Seed points remain tied to the raw spec definition
+  const [sliceSeedPoints, setSliceSeedPoints] = useState<[number, number, number][]>([]);
+  // Seed points from slicer server take precedence if available
   const seedPoints: [number, number, number][] =
-    spec[0]?.modifiers?.infill?.seed_points ?? [];
+    sliceSeedPoints.length > 0
+      ? sliceSeedPoints
+      : spec[0]?.modifiers?.infill?.seed_points ?? [];
   const edges = meshEdges;
   // Reset mesh whenever the spec changes; geometry will be fetched separately.
   useEffect(() => {
@@ -130,7 +133,10 @@ function App() {
       if (data.debug) {
 
         console.log('[slicer_server] debug info:', data.debug);
-
+        if (Array.isArray(data.debug.seed_points)) {
+          setSliceSeedPoints(data.debug.seed_points);
+          console.log('[slicer_server] seed points:', data.debug.seed_points);
+        }
       }
     } catch (err) {
       console.error('[UI] slice fetch error:', err);
