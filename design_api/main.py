@@ -450,12 +450,18 @@ async def submit(req: dict, sid: str):
                 if seed_cfg.get("seed_points") is not None:
                     design_states[sid].seed_cache[idx] = seed_cfg["seed_points"]
     entries = nodes
+
     def is_proto_node(e):
-        return isinstance(e, dict) and any(k in e for k in ['primitive','booleanOp','infill','shell','shellFill','children'])
-    if all(is_proto_node(e) for e in entries):
-        children = entries
-    else:
-        children = [map_to_proto_dict(e) for e in entries]
+        if not isinstance(e, dict) or 'modifiers' in e:
+            return False
+        if 'booleanOp' in e or 'children' in e:
+            return True
+        prim = e.get('primitive')
+        if isinstance(prim, dict):
+            return any(k in prim for k in ('lattice', 'shell', 'shellFill'))
+        return False
+
+    children = [e if is_proto_node(e) else map_to_proto_dict(e) for e in entries]
     # Build the root model dict
     proto_dict = {
         'id': str(uuid.uuid4()),
