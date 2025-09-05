@@ -28,6 +28,7 @@ fn slice_model_produces_segments() {
         ny: 3,
         seed_points: Vec::new(),
         infill_pattern: None,
+        wall_thickness: 0.0,
     };
 
     // Call the slice and verify it returns non-empty contours
