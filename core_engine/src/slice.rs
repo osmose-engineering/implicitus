@@ -10,6 +10,15 @@ use crate::voronoi_mesh;
 /// A single contour loop: a series of (x, y) points.
 pub type Contour = Vec<(f64, f64)>;
 
+/// A single line segment represented by its start and end points.
+pub type Segment = ((f64, f64), (f64, f64));
+
+/// Output from a slice operation containing outer contours and infill segments.
+pub struct SliceResult {
+    pub contours: Vec<Contour>,
+    pub segments: Vec<Segment>,
+}
+
 /// Slice parameters: bounding box and resolution.
 pub struct SliceConfig {
     pub z: f64,
@@ -81,9 +90,10 @@ fn corner_value(v00: f64, v10: f64, v11: f64, v01: f64, corner: usize) -> f64 {
     }
 }
 
-/// Perform a slice at height `config.z` and return contours.
-pub fn slice_model(model: &Model, config: &SliceConfig) -> Vec<Contour> {
+/// Perform a slice at height `config.z` and return contours and segments.
+pub fn slice_model(model: &Model, config: &SliceConfig) -> SliceResult {
     let mut contours: Vec<Contour> = Vec::new();
+    let mut segments: Vec<Segment> = Vec::new();
 
     // Optional infill generation via Voronoi edges
     if config.infill_pattern.as_deref() == Some("voronoi") && !config.seed_points.is_empty() {
@@ -95,10 +105,10 @@ pub fn slice_model(model: &Model, config: &SliceConfig) -> Vec<Contour> {
             let z1 = p1.2;
             if (z0 - config.z) * (z1 - config.z) <= 0.0 && (z1 - z0).abs() > 1e-9 {
                 let t = (config.z - z0) / (z1 - z0);
-                if t >= 0.0 && t <= 1.0 {
+                if (0.0..=1.0).contains(&t) {
                     let x = p0.0 + t * (p1.0 - p0.0);
                     let y = p0.1 + t * (p1.1 - p0.1);
-                    contours.push(vec![(x, y), (x, y)]);
+                    segments.push(((x, y), (x, y)));
                 }
             }
         }
@@ -127,8 +137,8 @@ pub fn slice_model(model: &Model, config: &SliceConfig) -> Vec<Contour> {
     }
 
     // Marching Squares contour extraction sketch
-    // Precompute line segments
-    let mut segments: Vec<(f64, f64)> = Vec::new();
+    // Precompute line segments for the outer contour
+    let mut contour_segments: Vec<(f64, f64)> = Vec::new();
     for i in 0..config.nx - 1 {
         for j in 0..config.ny - 1 {
             let v00 = grid[i][j];
@@ -156,13 +166,13 @@ pub fn slice_model(model: &Model, config: &SliceConfig) -> Vec<Contour> {
                 let v1 = corner_value(v00, v10, v11, v01, e1);
                 let p_start = interp(p0, p1, v0, v1);
                 let p_end = interp(p1, p0, v1, v0);
-                segments.push(p_start);
-                segments.push(p_end);
+                contour_segments.push(p_start);
+                contour_segments.push(p_end);
             }
         }
     }
     // Each segment was pushed twice (start and end), so take only start points
-    let contour: Vec<(f64, f64)> = segments.into_iter().step_by(2).collect();
+    let contour: Vec<(f64, f64)> = contour_segments.into_iter().step_by(2).collect();
 
     // Compute angle for sorting
     fn point_angle(p: &(f64, f64)) -> f64 {
@@ -179,5 +189,5 @@ pub fn slice_model(model: &Model, config: &SliceConfig) -> Vec<Contour> {
     }
 
     contours.push(sorted);
-    contours
+    SliceResult { contours, segments }
 }
