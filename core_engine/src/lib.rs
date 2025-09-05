@@ -1,8 +1,9 @@
+use crate::voronoi::sdf::voronoi_sdf;
+use kiddo::float::kdtree::KdTree;
+use kiddo::SquaredEuclidean;
 use pyo3::prelude::*;
 use rayon::prelude::*;
 use std::sync::{Arc, Mutex};
-use kiddo::{SquaredEuclidean};
-use kiddo::float::kdtree::KdTree;
 
 // Import the generated Protobuf definitions
 pub mod implicitus {
@@ -21,18 +22,27 @@ pub mod voronoi;
 // that all language layers share the same value.
 include!(concat!(env!("OUT_DIR"), "/constants.rs"));
 
-// A very basic SDF evaluator that handles a few primitive shapes.
-pub fn evaluate_sdf(model: &Model, x: f64, y: f64, z: f64) -> f64 {
+// A very basic SDF evaluator that handles a few primitive shapes and optional infill.
+pub fn evaluate_sdf(
+    model: &Model,
+    x: f64,
+    y: f64,
+    z: f64,
+    infill_pattern: Option<&str>,
+    seeds: &[(f64, f64, f64)],
+) -> f64 {
+    let mut base_sdf = f64::MAX;
+
     // Check for a root node
     if let Some(root_node) = &model.root {
         // Look for a primitive in that node
         if let Some(Body::Primitive(p)) = &root_node.body {
             // Match on the inner shape
             if let Some(shape) = &p.shape {
-                match shape {
+                base_sdf = match shape {
                     Shape::Sphere(s) => {
                         let dist = (x * x + y * y + z * z).sqrt();
-                        return dist - s.radius;
+                        dist - s.radius
                     }
                     Shape::Box(b) => {
                         // Axis-aligned box centered at the origin
@@ -47,16 +57,23 @@ pub fn evaluate_sdf(model: &Model, x: f64, y: f64, z: f64) -> f64 {
                                 (qx.max(0.0).powi(2) + qy.max(0.0).powi(2) + qz.max(0.0).powi(2))
                                     .sqrt();
                             let inside = qx.max(qy.max(qz)).min(0.0);
-                            return outside + inside;
+                            outside + inside
+                        } else {
+                            f64::MAX
                         }
                     }
-                    _ => {}
-                }
+                    _ => f64::MAX,
+                };
             }
         }
     }
-    // If nothing matches, return a large positive value (empty space)
-    f64::MAX
+
+    if infill_pattern == Some("voronoi") && !seeds.is_empty() {
+        let infill_sdf = voronoi_sdf((x, y, z), seeds);
+        base_sdf = base_sdf.max(infill_sdf);
+    }
+
+    base_sdf
 }
 
 /// Simple mesh structure containing explicit vertices and edge indices.
@@ -166,7 +183,6 @@ pub fn voronoi_mesh(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
         tree.add(&[x, y, z], idx as u64);
     }
 
-
     // For each seed, form tetrahedra from localized neighbor sets.
     (0..n).into_par_iter().for_each(|i| {
         let mut neighbors: Vec<usize> = adjacency[i].iter().cloned().filter(|&j| j > i).collect();
@@ -188,7 +204,10 @@ pub fn voronoi_mesh(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
                         let dist2 = norm_sq(sub(center, seeds[i]));
                         let search_radius = (dist2 - 1e-9).max(0.0);
                         let mut valid = true;
-                        for nn in tree.within_unsorted::<SquaredEuclidean>(&[center.0, center.1, center.2], search_radius) {
+                        for nn in tree.within_unsorted::<SquaredEuclidean>(
+                            &[center.0, center.1, center.2],
+                            search_radius,
+                        ) {
                             let m = nn.item as usize;
                             if m == i || m == j || m == k || m == l {
                                 continue;
