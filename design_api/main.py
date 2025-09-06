@@ -54,6 +54,9 @@ class DesignState:
 # session store: session_id -> DesignState
 design_states: dict[str, DesignState] = {}
 
+# in-memory model storage: model_id -> model
+models: dict[str, dict] = {}
+
 def log_turn(session_id: str, turn_type: str, raw: str, spec: list, summary: Optional[str] = None, question: Optional[str] = None):
     entry = {
         "session": session_id,
@@ -113,6 +116,23 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+
+
+@app.post("/models", response_model=dict)
+async def store_model(model: Dict[str, Any]):
+    model_id = model.get("id")
+    if not model_id:
+        raise HTTPException(status_code=400, detail="Missing model.id")
+    models[model_id] = model
+    return {"id": model_id}
+
+
+@app.get("/models/{model_id}", response_model=dict)
+async def get_model(model_id: str):
+    model = models.get(model_id)
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+    return model
 
 class DesignRequest(BaseModel):
     prompt: str
