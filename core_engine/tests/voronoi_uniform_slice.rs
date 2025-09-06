@@ -86,6 +86,8 @@ fn slice_uniform_voronoi_produces_hex_segments() {
         infill_pattern: Some("voronoi".into()),
         wall_thickness: 0.0,
         mode: Some("uniform".into()),
+        bbox_min: None,
+        bbox_max: None,
     };
 
     let result = slice_model(&model, &config);

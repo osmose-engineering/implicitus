@@ -33,6 +33,8 @@ fn wall_thickness_shifts_contours() {
         infill_pattern: Some("voronoi".into()),
         wall_thickness: 0.5,
         mode: None,
+        bbox_min: None,
+        bbox_max: None,
     };
 
     let thin = slice_model(&model, &config);

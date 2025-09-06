@@ -30,6 +30,8 @@ fn slice_model_produces_segments() {
         infill_pattern: None,
         wall_thickness: 0.0,
         mode: None,
+        bbox_min: None,
+        bbox_max: None,
     };
 
     // Call the slice and verify it returns non-empty contours and no segments

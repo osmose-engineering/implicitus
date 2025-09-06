@@ -38,6 +38,8 @@ pub struct SliceConfig {
     pub infill_pattern: Option<String>,
     pub wall_thickness: f64,
     pub mode: Option<String>,
+    pub bbox_min: Option<(f64, f64, f64)>,
+    pub bbox_max: Option<(f64, f64, f64)>,
 }
 
 /// Placeholder marching squares edge table: for each case index, list of edge pairs.
