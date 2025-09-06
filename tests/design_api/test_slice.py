@@ -1,7 +1,4 @@
 import httpx
-import pytest
-from fastapi.testclient import TestClient
-from design_api.main import app, models
 
 
 class DummyResponse:
@@ -34,12 +31,10 @@ class DummyClient:
         return DummyResponse({"ok": True}, self.status_code)
 
 
-def test_slice_forwards_params(monkeypatch):
+def test_slice_forwards_params(client, monkeypatch):
     capture = {}
     monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: DummyClient(capture))
-    models.clear()
-    models["abc"] = {"id": "abc"}
-    client = TestClient(app)
+    client.post("/models", json={"id": "abc"})
     resp = client.get(
         "/models/abc/slices",
         params={
@@ -67,12 +62,10 @@ def test_slice_forwards_params(monkeypatch):
     }
 
 
-def test_slice_uses_defaults(monkeypatch):
+def test_slice_uses_defaults(client, monkeypatch):
     capture = {}
     monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: DummyClient(capture))
-    models.clear()
-    models["abc"] = {"id": "abc"}
-    client = TestClient(app)
+    client.post("/models", json={"id": "abc"})
     resp = client.get("/models/abc/slices?layer=2.0")
     assert resp.status_code == 200
     assert capture["json"] == {
@@ -87,15 +80,24 @@ def test_slice_uses_defaults(monkeypatch):
     }
 
 
-def test_slice_surfaces_errors(monkeypatch):
+def test_slice_surfaces_errors(client, monkeypatch):
     class ErrorClient(DummyClient):
         async def post(self, url, json):
             raise httpx.HTTPError("boom")
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: ErrorClient({}))
-    models.clear()
-    models["abc"] = {"id": "abc"}
-    client = TestClient(app)
+    client.post("/models", json={"id": "abc"})
     resp = client.get("/models/abc/slices?layer=1.0")
     assert resp.status_code == 500
     assert "Slicing service failure" in resp.json()["detail"]
+
+
+def test_slice_missing_model_returns_404(client):
+    resp = client.get("/models/missing/slices?layer=1.0")
+    assert resp.status_code == 404
+
+
+def test_slice_missing_layer_returns_422(client):
+    client.post("/models", json={"id": "abc"})
+    resp = client.get("/models/abc/slices")
+    assert resp.status_code == 422
