@@ -154,11 +154,12 @@ async def slice_model(
         raise HTTPException(status_code=404, detail="Model not found")
 
     def _extract_lattice_data(obj: Any) -> tuple[Optional[list], Optional[list]]:
-        """Recursively search for lattice fields in ``obj``.
+        """Recursively search ``obj`` for lattice-related arrays.
 
-        Returns the first encountered ``cell_vertices`` and ``edge_list`` values
-        if present anywhere within the nested structure.  Either value may be
-        ``None`` if not found.
+        ``cell_vertices`` and ``edge_list`` are extracted and **removed** from the
+        model so they do not interfere with protobuf validation.  Any
+        ``seed_points`` arrays are also stripped since the slicer works solely
+        from the lattice data.
         """
 
         cell_verts: Optional[list] = None
@@ -168,17 +169,15 @@ async def slice_model(
             nonlocal cell_verts, edges
             if isinstance(o, dict):
                 if cell_verts is None and isinstance(o.get("cell_vertices"), list):
-                    cell_verts = o["cell_vertices"]
+                    cell_verts = o.pop("cell_vertices")
                 if edges is None and isinstance(o.get("edge_list"), list):
-                    edges = o["edge_list"]
+                    edges = o.pop("edge_list")
+                if isinstance(o.get("seed_points"), list):
+                    o.pop("seed_points")
                 for v in o.values():
-                    if cell_verts is not None and edges is not None:
-                        break
                     walk(v)
             elif isinstance(o, list):
                 for item in o:
-                    if cell_verts is not None and edges is not None:
-                        break
                     walk(item)
 
         walk(obj)
