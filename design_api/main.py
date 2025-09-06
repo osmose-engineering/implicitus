@@ -183,9 +183,38 @@ async def slice_model(
         walk(obj)
         return cell_verts, edges
 
+    def _extract_bbox(obj: Any) -> tuple[Optional[list], Optional[list]]:
+        """Recursively search for the first ``bbox_min``/``bbox_max`` pair."""
+
+        bbox_min: Optional[list] = None
+        bbox_max: Optional[list] = None
+
+        def walk(o: Any) -> None:
+            nonlocal bbox_min, bbox_max
+            if isinstance(o, dict):
+                if bbox_min is None and isinstance(o.get("bbox_min"), list):
+                    bbox_min = o["bbox_min"]
+                if bbox_max is None and isinstance(o.get("bbox_max"), list):
+                    bbox_max = o["bbox_max"]
+                for v in o.values():
+                    if bbox_min is not None and bbox_max is not None:
+                        break
+                    walk(v)
+            elif isinstance(o, list):
+                for item in o:
+                    if bbox_min is not None and bbox_max is not None:
+                        break
+                    walk(item)
+
+        walk(obj)
+        return bbox_min, bbox_max
+
     cell_vertices, edge_list = _extract_lattice_data(model)
+    bbox_min, bbox_max = _extract_bbox(model)
     logging.debug(
-        "slice_model: cell_vertices[:3]=%s, edge_list[:3]=%s",
+        "slice_model: bbox_min=%s bbox_max=%s cell_vertices[:3]=%s edge_list[:3]=%s",
+        bbox_min,
+        bbox_max,
         cell_vertices[:3] if cell_vertices else None,
         edge_list[:3] if edge_list else None,
     )

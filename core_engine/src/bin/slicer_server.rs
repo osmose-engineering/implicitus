@@ -178,6 +178,27 @@ pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejecti
         bbox_max: req.bbox_max.or(bbox_max),
     };
 
+    info!(
+        "SliceConfig: bbox_min={:?} bbox_max={:?} mode={:?}",
+        config.bbox_min,
+        config.bbox_max,
+        config.mode
+    );
+    if bbox_min.is_some() && config.bbox_min != bbox_min {
+        warn!(
+            "SliceConfig bbox_min {:?} differs from parsed {:?}",
+            config.bbox_min,
+            bbox_min
+        );
+    }
+    if bbox_max.is_some() && config.bbox_max != bbox_max {
+        warn!(
+            "SliceConfig bbox_max {:?} differs from parsed {:?}",
+            config.bbox_max,
+            bbox_max
+        );
+    }
+
     let result = match serde_json::from_value::<Model>(req._model) {
         Ok(model) => slice_model(&model, &config),
         Err(e) => {
@@ -357,8 +378,23 @@ pub fn parse_infill(
         &mut bbox_max,
     );
 
+    if let (Some(bmin), Some(bmax)) = (bbox_min, bbox_max) {
+        let out_of_bounds = seeds.iter().any(|&(x, y, z)| {
+            x < bmin.0 || x > bmax.0 || y < bmin.1 || y > bmax.1 || z < bmin.2 || z > bmax.2
+        });
+        if out_of_bounds {
+            warn!(
+                "parse_infill: seed points outside bbox_min={:?} bbox_max={:?}",
+                bmin, bmax
+            );
+        }
+    }
+
     info!(
-        "parse_infill: first_seeds={:?}",
+        "parse_infill: bbox_min={:?} bbox_max={:?} mode={:?} first_seeds={:?}",
+        bbox_min,
+        bbox_max,
+        mode,
         seeds.iter().take(3).collect::<Vec<_>>()
     );
     (
