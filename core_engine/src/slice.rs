@@ -46,25 +46,29 @@ pub struct SliceConfig {
     pub bbox_max: Option<(f64, f64, f64)>,
 }
 
-/// Placeholder marching squares edge table: for each case index, list of edge pairs.
+/// Marching squares edge table mapping case index to edge pairs.
+/// Edges are ordered: 0 - bottom, 1 - right, 2 - top, 3 - left.
 const MARCHING_SQUARES_EDGES: [&[(usize, usize)]; 16] = [
-    &[], /* cases 0 and 15 produce no edges */
-    /* 1 */ &[(0, 3)],
-    /* 2 */ &[(0, 1)],
-    /* 3 */ &[(1, 3)],
-    /* 4 */ &[(1, 2)],
-    /* 5 */ &[(0, 1), (2, 3)],
-    /* 6 */ &[(0, 2)],
-    /* 7 */ &[(2, 3)],
-    /* 8 */ &[(2, 3)],
-    /* 9 */ &[(0, 2)],
-    /* 10*/ &[(0, 3), (1, 2)],
-    /* 11*/ &[(1, 2)],
-    /* 12*/ &[(1, 3)],
-    /* 13*/ &[(0, 1)],
-    /* 14*/ &[(0, 3)],
+    &[],
+    &[(3, 0)],
+    &[(0, 1)],
+    &[(3, 1)],
+    &[(1, 2)],
+    &[(3, 0), (1, 2)],
+    &[(0, 2)],
+    &[(2, 3)],
+    &[(2, 3)],
+    &[(0, 2)],
+    &[(0, 1), (2, 3)],
+    &[(1, 2)],
+    &[(3, 1)],
+    &[(0, 1)],
+    &[(3, 0)],
     &[],
 ];
+
+/// Mapping from edge index to its two corner indices.
+const EDGE_VERTEX_MAP: [(usize, usize); 4] = [(0, 1), (1, 2), (2, 3), (3, 0)];
 
 /// Linear interpolation between two points given their SDF values.
 fn interp(p0: (f64, f64), p1: (f64, f64), v0: f64, v1: f64) -> (f64, f64) {
@@ -269,9 +273,8 @@ pub fn slice_model(model: &Model, config: &SliceConfig) -> SliceResult {
         }
     }
 
-    // Marching Squares contour extraction sketch
-    // Precompute line segments for the outer contour
-    let mut contour_segments: Vec<(f64, f64)> = Vec::new();
+    // Marching Squares contour extraction
+    let mut contour_segments: Vec<Segment> = Vec::new();
     for i in 0..config.nx - 1 {
         for j in 0..config.ny - 1 {
             let v00 = grid[i][j];
@@ -291,36 +294,67 @@ pub fn slice_model(model: &Model, config: &SliceConfig) -> SliceResult {
             if v01 < 0.0 {
                 case_index |= 8;
             }
-            // Lookup edges for this case (placeholder)
+
+            if MARCHING_SQUARES_EDGES[case_index].is_empty() {
+                continue;
+            }
+
+            let corners = [
+                corner_point(i, j, 0, dx, dy, config),
+                corner_point(i, j, 1, dx, dy, config),
+                corner_point(i, j, 2, dx, dy, config),
+                corner_point(i, j, 3, dx, dy, config),
+            ];
+            let values = [v00, v10, v11, v01];
+
+            // Compute segments for this cell
             for &(e0, e1) in MARCHING_SQUARES_EDGES[case_index].iter() {
-                let p0 = corner_point(i, j, e0, dx, dy, config);
-                let p1 = corner_point(i, j, e1, dx, dy, config);
-                let v0 = corner_value(v00, v10, v11, v01, e0);
-                let v1 = corner_value(v00, v10, v11, v01, e1);
-                let p_start = interp(p0, p1, v0, v1);
-                let p_end = interp(p1, p0, v1, v0);
-                contour_segments.push(p_start);
-                contour_segments.push(p_end);
+                let (c0a, c0b) = EDGE_VERTEX_MAP[e0];
+                let (c1a, c1b) = EDGE_VERTEX_MAP[e1];
+                let p_start = interp(corners[c0a], corners[c0b], values[c0a], values[c0b]);
+                let p_end = interp(corners[c1a], corners[c1b], values[c1a], values[c1b]);
+                contour_segments.push((p_start, p_end));
             }
         }
     }
-    // Each segment was pushed twice (start and end), so take only start points
-    let contour: Vec<(f64, f64)> = contour_segments.into_iter().step_by(2).collect();
 
-    // Compute angle for sorting
-    fn point_angle(p: &(f64, f64)) -> f64 {
-        p.1.atan2(p.0)
+    // Assemble connected contour loops from the generated segments
+    fn nearly_equal(a: (f64, f64), b: (f64, f64)) -> bool {
+        (a.0 - b.0).abs() < 1e-9 && (a.1 - b.1).abs() < 1e-9
     }
 
-    // Sort points by angle around origin
-    let mut sorted = contour.clone();
-    sorted.sort_by(|a, b| point_angle(a).partial_cmp(&point_angle(b)).unwrap());
-
-    // Close the contour loop
-    if let Some(first) = sorted.first().cloned() {
-        sorted.push(first);
+    let mut segments_left = contour_segments.clone();
+    while let Some((start, end)) = segments_left.pop() {
+        let mut loop_points = vec![start, end];
+        let mut extended = true;
+        while extended {
+            extended = false;
+            for idx in (0..segments_left.len()).rev() {
+                let (s, e) = segments_left[idx];
+                if nearly_equal(loop_points[0], e) {
+                    loop_points.insert(0, s);
+                    segments_left.swap_remove(idx);
+                    extended = true;
+                } else if nearly_equal(loop_points[0], s) {
+                    loop_points.insert(0, e);
+                    segments_left.swap_remove(idx);
+                    extended = true;
+                } else if nearly_equal(*loop_points.last().unwrap(), s) {
+                    loop_points.push(e);
+                    segments_left.swap_remove(idx);
+                    extended = true;
+                } else if nearly_equal(*loop_points.last().unwrap(), e) {
+                    loop_points.push(s);
+                    segments_left.swap_remove(idx);
+                    extended = true;
+                }
+            }
+        }
+        if !loop_points.is_empty() && !nearly_equal(loop_points[0], *loop_points.last().unwrap()) {
+            loop_points.push(loop_points[0]);
+        }
+        contours.push(loop_points);
     }
 
-    contours.push(sorted);
     SliceResult { contours, segments }
 }
