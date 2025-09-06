@@ -15,9 +15,10 @@ class DummyResponse:
 
 
 class DummyClient:
-    def __init__(self, capture, status_code=200):
+    def __init__(self, capture, status_code=200, data=None):
         self.capture = capture
         self.status_code = status_code
+        self.data = {"ok": True} if data is None else data
 
     async def __aenter__(self):
         return self
@@ -28,7 +29,7 @@ class DummyClient:
     async def post(self, url, json):
         self.capture["url"] = url
         self.capture["json"] = json
-        return DummyResponse({"ok": True}, self.status_code)
+        return DummyResponse(self.data, self.status_code)
 
 
 def test_slice_forwards_params(client, monkeypatch):
@@ -122,6 +123,46 @@ def test_slice_allows_extra_infill_fields(client, monkeypatch):
 
     resp = client.get("/models/abc/slices?layer=0")
     assert resp.status_code == 200
+
+
+def test_slice_with_full_spec_returns_expected_fields(client, monkeypatch):
+    capture = {}
+    slice_resp = {
+        "contours": [[[0, 0], [1, 0], [1, 1], [0, 1]]],
+        "segments": [],
+        "debug": {"seed_count": 0},
+    }
+    monkeypatch.setattr(
+        httpx,
+        "AsyncClient",
+        lambda *args, **kwargs: DummyClient(capture, data=slice_resp),
+    )
+    full_spec = {
+        "id": "abc",
+        "root": {
+            "children": [
+                {
+                    "primitive": {"sphere": {"radius": 1.0}},
+                    "modifiers": {
+                        "infill": {
+                            "pattern": "hex",
+                            "cell_vertices": [],
+                            "edge_list": [],
+                            "seed_points": [[0, 0, 0]],
+                            "num_points": 5,
+                        }
+                    },
+                }
+            ]
+        },
+    }
+    client.post("/models", json=full_spec)
+    resp = client.get("/models/abc/slices?layer=0")
+    assert resp.status_code == 200
+    body = resp.json()
+    assert body["contours"] == slice_resp["contours"]
+    assert body["segments"] == []
+    assert body["debug"]["seed_count"] == 0
 
 
 def test_slice_missing_model_returns_404(client):
