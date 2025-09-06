@@ -2,8 +2,14 @@ import uuid
 from ai_adapter.schema.implicitus_pb2 import Primitive
 from ai_adapter.schema.implicitus_pb2 import Modifier, Infill, Shell, BooleanOp, VoronoiLattice
 import logging
+
 logger = logging.getLogger(__name__)
-logging.basicConfig(level=logging.DEBUG)
+
+# Logging configuration is handled by the application entry point. Guard the
+# configuration call so importing this module doesn't overwrite global logging
+# settings.
+if __name__ == "__main__":  # pragma: no cover - manual debugging helper
+    logging.basicConfig(level=logging.DEBUG)
 
 class SomeMappingError(Exception):
     """Raised when mapping a primitive spec fails due to unknown shape."""
