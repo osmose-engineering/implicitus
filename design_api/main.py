@@ -124,7 +124,8 @@ app.add_middleware(
 async def store_model(model: Dict[str, Any]):
     model_id = model.get("id")
     if not model_id:
-        raise HTTPException(status_code=400, detail="Missing model.id")
+        model_id = str(uuid.uuid4())
+        model["id"] = model_id
     models[model_id] = model
     return {"id": model_id}
 
