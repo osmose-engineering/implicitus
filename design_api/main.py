@@ -2,6 +2,9 @@ import logging
 from pydantic import Field
 import time
 import numpy as np
+import os
+from pathlib import Path
+import requests
 
 logging.basicConfig(
     level=logging.DEBUG,
@@ -33,6 +36,13 @@ class DesignState:
 
 # session store: session_id -> DesignState
 design_states: dict[str, DesignState] = {}
+
+# persistent model storage directory
+MODEL_DIR = Path(os.environ.get("MODEL_STORE", "models"))
+MODEL_DIR.mkdir(parents=True, exist_ok=True)
+
+# slicer service URL
+SLICER_URL = os.environ.get("SLICER_URL", "http://127.0.0.1:4000/slice")
 
 def log_turn(session_id: str, turn_type: str, raw: str, spec: list, summary: Optional[str] = None, question: Optional[str] = None):
     entry = {
@@ -212,6 +222,65 @@ async def submit(req: dict, sid: str):
     # Store locked model
     design_states[sid].locked_model = proto_dict
     return {"sid": sid, "locked_model": proto_dict}
+
+
+# Model storage and slicing endpoints
+@app.post("/models", response_model=dict)
+async def store_model(model: dict):
+    """Persist a model on disk."""
+    model_id = model.get("id")
+    if not model_id:
+        raise HTTPException(status_code=400, detail="Missing model.id")
+    path = MODEL_DIR / f"{model_id}.json"
+    with open(path, "w") as f:
+        json.dump(model, f)
+    return {"id": model_id}
+
+
+@app.get("/models/{model_id}", response_model=dict)
+async def fetch_model(model_id: str):
+    """Retrieve a stored model by ID."""
+    path = MODEL_DIR / f"{model_id}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Model not found")
+    with open(path) as f:
+        return json.load(f)
+
+
+@app.get("/models/{model_id}/slices", response_model=dict)
+async def slice_model(
+    model_id: str,
+    layer: float,
+    x_min: float = -1.0,
+    x_max: float = 1.0,
+    y_min: float = -1.0,
+    y_max: float = 1.0,
+    nx: int = 50,
+    ny: int = 50,
+):
+    """Slice a stored model at a given layer by proxying to the slicer service."""
+    path = MODEL_DIR / f"{model_id}.json"
+    if not path.exists():
+        raise HTTPException(status_code=404, detail="Model not found")
+    with open(path) as f:
+        model = json.load(f)
+    payload = {
+        "model": model,
+        "layer": layer,
+        "x_min": x_min,
+        "x_max": x_max,
+        "y_min": y_min,
+        "y_max": y_max,
+        "nx": nx,
+        "ny": ny,
+    }
+    try:
+        resp = requests.post(SLICER_URL, json=payload)
+        resp.raise_for_status()
+        return resp.json()
+    except Exception as e:
+        logging.exception("Slicer service error")
+        raise HTTPException(status_code=500, detail=f"Slicing service failure: {e}")
 
 if __name__ == "__main__":
     import uvicorn
