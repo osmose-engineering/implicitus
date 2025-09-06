@@ -35,6 +35,7 @@ from design_api.services.llm_service import generate_design_spec
 from design_api.services.mapping import map_primitive as map_to_proto_dict
 from design_api.services.validator import validate_model_spec as validate_proto
 from google.protobuf.json_format import MessageToDict
+from ai_adapter.schema.implicitus_pb2 import Cell3D
 from ai_adapter.csg_adapter import review_request, generate_summary, update_request
 from design_api.services.infill_service import (
     generate_hex_lattice,
@@ -159,25 +160,51 @@ async def slice_model(
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
 
-    def _extract_lattice_data(obj: Any) -> tuple[Optional[list], Optional[list]]:
+    def _extract_lattice_data(
+        obj: Any,
+    ) -> tuple[Optional[list], Optional[list], Optional[list]]:
         """Recursively search ``obj`` for lattice-related arrays.
 
-        ``cell_vertices`` and ``edge_list`` are extracted and **removed** from the
-        model so they do not interfere with protobuf validation.  Any
-        ``seed_points`` arrays are also stripped since the slicer works solely
-        from the lattice data.
+        ``cell_vertices``, ``edge_list``, and ``cells`` are extracted and
+        **removed** from the model so they do not interfere with protobuf
+        validation. Any ``seed_points`` arrays are also stripped since the slicer
+        works solely from the lattice data.
         """
 
         cell_verts: Optional[list] = None
         edges: Optional[list] = None
+        cells: Optional[list] = None
+
+        def to_proto_cells(raw_cells: list) -> list:
+            proto = []
+            for c in raw_cells:
+                msg = Cell3D()
+                for v in c.get("vertices", []):
+                    vert = msg.vertices.add()
+                    vert.x = float(v[0])
+                    vert.y = float(v[1])
+                    vert.z = float(v[2])
+                for f in c.get("faces", []):
+                    face = msg.faces.add()
+                    face.vertex_indices.extend(int(i) for i in f)
+                proto.append(
+                    MessageToDict(msg, preserving_proto_field_name=True)
+                )
+            return proto
 
         def walk(o: Any) -> None:
-            nonlocal cell_verts, edges
+            nonlocal cell_verts, edges, cells
             if isinstance(o, dict):
                 if cell_verts is None and isinstance(o.get("cell_vertices"), list):
                     cell_verts = o.pop("cell_vertices")
                 if edges is None and isinstance(o.get("edge_list"), list):
                     edges = o.pop("edge_list")
+                if cells is None and isinstance(o.get("cells"), list):
+                    raw = o.pop("cells")
+                    try:
+                        cells = to_proto_cells(raw)
+                    except Exception:
+                        cells = raw
                 if isinstance(o.get("seed_points"), list):
                     o.pop("seed_points")
                 for v in o.values():
@@ -187,7 +214,7 @@ async def slice_model(
                     walk(item)
 
         walk(obj)
-        return cell_verts, edges
+        return cell_verts, edges, cells
 
     def _extract_bbox(obj: Any) -> tuple[Optional[list], Optional[list]]:
         """Recursively search for the first ``bbox_min``/``bbox_max`` pair."""
@@ -217,7 +244,7 @@ async def slice_model(
 
     # Extract auxiliary lattice data before validation so that unknown fields do
     # not cause protobuf parsing to fail.
-    cell_vertices, edge_list = _extract_lattice_data(model)
+    cell_vertices, edge_list, cells = _extract_lattice_data(model)
     bbox_min, bbox_max = _extract_bbox(model)
 
     def _trim_large_arrays(obj: Any, limit: int = 10) -> Any:
@@ -266,11 +293,12 @@ async def slice_model(
         preserving_proto_field_name=True,
     )
     logging.debug(
-        "slice_model: bbox_min=%s bbox_max=%s cell_vertices[:3]=%s edge_list[:3]=%s",
+        "slice_model: bbox_min=%s bbox_max=%s cell_vertices[:3]=%s edge_list[:3]=%s cells_len=%s",
         bbox_min,
         bbox_max,
         cell_vertices[:3] if cell_vertices else None,
         edge_list[:3] if edge_list else None,
+        len(cells) if cells else None,
     )
 
     payload = {
@@ -287,6 +315,8 @@ async def slice_model(
         payload["cell_vertices"] = cell_vertices
     if edge_list is not None:
         payload["edge_list"] = edge_list
+    if cells is not None:
+        payload["cells"] = cells
 
     try:
         async with httpx.AsyncClient() as client:
