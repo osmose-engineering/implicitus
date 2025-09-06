@@ -24,10 +24,11 @@ import copy
 import traceback
 import uuid
 from json.decoder import JSONDecodeError
-from fastapi import FastAPI, HTTPException
+from fastapi import FastAPI, HTTPException, Query
 from fastapi.middleware.cors import CORSMiddleware
 from pydantic import BaseModel
 from typing import Optional, Any, Dict, List, Literal
+import httpx
 from dataclasses import dataclass, field
 from design_api.services.json_cleaner import clean_llm_output
 from design_api.services.llm_service import generate_design_spec
@@ -133,6 +134,43 @@ async def get_model(model_id: str):
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
     return model
+
+
+@app.get("/models/{model_id}/slices", response_model=dict)
+async def slice_model(
+    model_id: str,
+    layer: float = Query(...),
+    x_min: float = -1.0,
+    x_max: float = 1.0,
+    y_min: float = -1.0,
+    y_max: float = 1.0,
+    nx: int = 50,
+    ny: int = 50,
+):
+    """Proxy slice requests to the slicer service."""
+    model = models.get(model_id)
+    if not model:
+        raise HTTPException(status_code=404, detail="Model not found")
+
+    payload = {
+        "model": model,
+        "layer": layer,
+        "x_min": x_min,
+        "x_max": x_max,
+        "y_min": y_min,
+        "y_max": y_max,
+        "nx": nx,
+        "ny": ny,
+    }
+
+    try:
+        async with httpx.AsyncClient() as client:
+            resp = await client.post("http://127.0.0.1:4000/slice", json=payload)
+            resp.raise_for_status()
+    except httpx.HTTPError as exc:
+        raise HTTPException(status_code=500, detail=f"Slicing service failure: {exc}")
+
+    return resp.json()
 
 class DesignRequest(BaseModel):
     prompt: str
