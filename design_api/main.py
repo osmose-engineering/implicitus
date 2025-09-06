@@ -149,7 +149,12 @@ async def slice_model(
     nx: int = 50,
     ny: int = 50,
 ):
-    """Proxy slice requests to the slicer service."""
+    """Proxy slice requests to the slicer service.
+
+    Validation of the stored model can fail if it does not conform to the
+    protobuf schema.  In that case a ``400`` response is returned with the
+    offending field names or tips on how to correct the model.
+    """
     model = models.get(model_id)
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
@@ -232,7 +237,22 @@ async def slice_model(
             _trim_large_arrays(copy.deepcopy(model)),
             exc,
         )
-        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
+        # Surface offending fields or recovery tips when provided by the
+        # validator so callers can correct their models.
+        detail = exc.detail
+        if isinstance(detail, dict):
+            msg = detail.get("detail") or detail.get("message") or ""
+            offending = detail.get("offending_fields") or detail.get("fields")
+            tip = detail.get("tip") or detail.get("tips")
+            pieces = [msg]
+            if offending:
+                pieces.append("Offending fields: " + ", ".join(map(str, offending)))
+            if tip:
+                pieces.append("Tip: " + str(tip))
+            detail_msg = " ".join(p for p in pieces if p)
+        else:
+            detail_msg = str(detail)
+        raise HTTPException(status_code=exc.status_code, detail=detail_msg)
     except Exception as exc:
         logging.exception(
             "Invalid model %s: %s",
