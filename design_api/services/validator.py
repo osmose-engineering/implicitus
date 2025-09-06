@@ -1,6 +1,8 @@
 from ai_adapter.schema.implicitus_pb2 import Model
 from google.protobuf.json_format import ParseDict, MessageToDict, ParseError
 from google.protobuf.message import DecodeError
+import logging
+import reprlib
 import re
 
 class ValidationError(Exception):
@@ -63,6 +65,8 @@ def validate_model_spec(spec_dict: dict, ignore_unknown_fields: bool = False) ->
 
     _normalize_modifiers(spec_dict)
     _ensure_snake_case(spec_dict)
+
+    logging.debug("Normalized spec: %s", reprlib.repr(spec_dict))
 
     model = Model()
     try:
