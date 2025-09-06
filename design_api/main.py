@@ -153,13 +153,6 @@ async def slice_model(
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
 
-    try:
-        model = MessageToDict(
-            validate_proto(model), preserving_proto_field_name=True
-        )
-    except Exception as exc:
-        raise HTTPException(status_code=400, detail=f"Invalid model: {exc}")
-
     def _extract_lattice_data(obj: Any) -> tuple[Optional[list], Optional[list]]:
         """Recursively search for lattice fields in ``obj``.
 
@@ -217,8 +210,18 @@ async def slice_model(
         walk(obj)
         return bbox_min, bbox_max
 
+    # Extract auxiliary lattice data before validation so that unknown fields do
+    # not cause protobuf parsing to fail.
     cell_vertices, edge_list = _extract_lattice_data(model)
     bbox_min, bbox_max = _extract_bbox(model)
+
+    try:
+        model = MessageToDict(
+            validate_proto(model, ignore_unknown_fields=True),
+            preserving_proto_field_name=True,
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid model: {exc}")
     logging.debug(
         "slice_model: bbox_min=%s bbox_max=%s cell_vertices[:3]=%s edge_list[:3]=%s",
         bbox_min,
