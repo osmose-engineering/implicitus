@@ -104,8 +104,18 @@ struct InvalidBody;
 impl Reject for InvalidBody {}
 
 pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejection> {
-    let raw = String::from_utf8_lossy(&body);
-    info!("Raw slice request body: {}", raw);
+    // Log a truncated preview of the body to avoid dumping large or sensitive data.
+    let raw_len = body.len();
+    let preview_len = raw_len.min(1024);
+    let preview = String::from_utf8_lossy(&body[..preview_len]);
+    if raw_len > preview_len {
+        info!(
+            "Slice request body ({} bytes, first {} shown): {}...",
+            raw_len, preview_len, preview
+        );
+    } else {
+        info!("Slice request body ({} bytes): {}", raw_len, preview);
+    }
 
     let req: SliceRequest = serde_json::from_slice(&body).map_err(|e| {
         warn!("Failed to deserialize slice request: {}", e);
