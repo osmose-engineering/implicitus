@@ -53,6 +53,7 @@ import { Checkbox } from './components/UI';
 import { Tabs, TabList, Tab, TabPanel } from 'react-tabs';
 import 'react-tabs/style/react-tabs.css';
 
+const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 // Simple debounce helper
 function debounce<T extends (...args: any[]) => void>(fn: T, delay: number) {
   let timeout: ReturnType<typeof setTimeout> | null;
@@ -106,7 +107,7 @@ function App() {
   const fetchVoronoiMesh = async (pts: [number, number, number][]) => {
     if (!pts || pts.length === 0) return;
     try {
-      const resp = await fetch('http://localhost:8000/design/mesh', {
+      const resp = await fetch(`${API_BASE}/design/mesh`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ seed_points: pts }),
@@ -121,21 +122,21 @@ function App() {
   };
 
   const fetchSlice = async (model: any) => {
-    if (!model) return;
+    if (!model?.id) return;
     try {
-      const resp = await fetch('http://localhost:4000/slice', {
+      await fetch(`${API_BASE}/models`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ model, layer: 0 }),
+        body: JSON.stringify(model),
       });
+      const resp = await fetch(`${API_BASE}/models/${model.id}/slices?layer=0`);
       if (!resp.ok) return;
       const data = await resp.json();
       if (data.debug) {
-
-        console.log('[slicer_server] debug info:', data.debug);
+        console.log('[design_api] debug info:', data.debug);
         if (Array.isArray(data.debug.seed_points)) {
           setSliceSeedPoints(data.debug.seed_points);
-          console.log('[slicer_server] seed points:', data.debug.seed_points);
+          console.log('[design_api] seed points:', data.debug.seed_points);
         }
       }
     } catch (err) {
@@ -151,7 +152,7 @@ function App() {
       // include sessionId if available
       const validateBody: any = { spec: parsed };
       if (sessionId) validateBody.sid = sessionId;
-      const response = await fetch('http://localhost:8000/design/review', {
+      const response = await fetch(`${API_BASE}/design/review`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(validateBody),
@@ -219,7 +220,7 @@ function App() {
       const isUpdate = Boolean(sessionId) || (spec.length > 0 && prompt.trim().length > 0);
       const endpoint = isUpdate ? '/design/update' : '/design/review';
       console.log('[UI] using endpoint →', endpoint);
-      const response = await fetch(`http://localhost:8000${endpoint}`, {
+      const response = await fetch(`${API_BASE}${endpoint}`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -325,7 +326,7 @@ function App() {
     setLoading(true);
     try {
       const parsed = JSON.parse(specText);
-      const response = await fetch('http://localhost:8000/design/submit', {
+      const response = await fetch(`${API_BASE}/design/submit`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -374,7 +375,7 @@ function App() {
         }
         return node;
       });
-      const response = await fetch('http://localhost:8000/design/update', {
+      const response = await fetch(`${API_BASE}/design/update`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -429,7 +430,7 @@ function App() {
     });
     setLoading(true);
     try {
-      const response = await fetch(`http://localhost:8000/design/update`, {
+      const response = await fetch(`${API_BASE}/design/update`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({ spec: specToSend, sid: sessionId, raw: "" }),

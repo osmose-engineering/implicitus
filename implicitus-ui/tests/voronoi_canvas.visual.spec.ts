@@ -9,6 +9,7 @@ import { fileURLToPath } from 'url';
 const __dirname = fileURLToPath(new URL('.', import.meta.url));
 
 let server: ViteDevServer | undefined;
+let serverUrl: string;
 
 test.beforeAll(async () => {
   server = await createServer({
@@ -17,6 +18,7 @@ test.beforeAll(async () => {
     server: { port: 3000, strictPort: true },
   });
   await server.listen();
+  serverUrl = server.resolvedUrls?.local[0] ?? 'http://localhost:3000/';
 });
 
 test.afterAll(async () => {
@@ -38,7 +40,7 @@ test('VoronoiCanvas visual regression', async ({ page }) => {
       env: { NODE_ENV: 'test', VORONOI_ASSERT_Z: 'true' }
     };
   });
-  await page.goto('http://localhost:3000/tests/visual/voronoi_canvas_page.html');
+  await page.goto(`${serverUrl}tests/visual/voronoi_canvas_page.html`);
   const root = page.locator('[data-testid="voronoi-canvas-root"]');
   await expect(root).toHaveAttribute('data-has-flat-edges', 'false');
   const canvas = page.locator('canvas');
