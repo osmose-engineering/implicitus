@@ -34,6 +34,7 @@ from design_api.services.json_cleaner import clean_llm_output
 from design_api.services.llm_service import generate_design_spec
 from design_api.services.mapping import map_primitive as map_to_proto_dict
 from design_api.services.validator import validate_model_spec as validate_proto
+from google.protobuf.json_format import MessageToDict
 from ai_adapter.csg_adapter import review_request, generate_summary, update_request
 from design_api.services.infill_service import (
     generate_hex_lattice,
@@ -151,6 +152,13 @@ async def slice_model(
     model = models.get(model_id)
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
+
+    try:
+        model = MessageToDict(
+            validate_proto(model), preserving_proto_field_name=True
+        )
+    except Exception as exc:
+        raise HTTPException(status_code=400, detail=f"Invalid model: {exc}")
 
     def _extract_lattice_data(obj: Any) -> tuple[Optional[list], Optional[list]]:
         """Recursively search for lattice fields in ``obj``.

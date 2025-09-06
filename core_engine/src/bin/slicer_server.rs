@@ -14,9 +14,8 @@ use warp::Filter;
 
 #[derive(Deserialize, Serialize)]
 pub struct SliceRequest {
-    // TODO: replace Value with actual Model once JSON <-> Protobuf integration is set up
     #[serde(rename = "model")]
-    pub _model: Value,
+    pub _model: Model,
     pub layer: f64,
     pub x_min: Option<f64>,
     pub x_max: Option<f64>,
@@ -137,12 +136,11 @@ pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejecti
             req.edge_list.as_deref(),
         );
 
-    let model_id = req
-        ._model
-        .get("id")
-        .and_then(|v| v.as_str())
-        .unwrap_or("unknown")
-        .to_string();
+    let model_id = if req._model.id.is_empty() {
+        "unknown".to_string()
+    } else {
+        req._model.id.clone()
+    };
 
     info!("Slice request for model ID: {}", model_id);
     info!(
@@ -213,17 +211,7 @@ pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejecti
         );
     }
 
-    let model = match serde_json::from_value::<Model>(req._model) {
-        Ok(model) => model,
-        Err(e) => {
-            let msg = format!("Failed to deserialize model {}: {}", model_id, e);
-            warn!("{}", msg);
-            let body = warp::reply::json(&serde_json::json!({"error": msg}));
-            return Ok(warp::reply::with_status(body, StatusCode::BAD_REQUEST));
-        }
-    };
-
-    let result = slice_model(&model, &config);
+    let result = slice_model(&req._model, &config);
 
     Ok(warp::reply::with_status(
         warp::reply::json(&SliceResponse {
@@ -280,7 +268,7 @@ struct StatusResponse {
 }
 
 pub fn parse_infill(
-    value: &Value,
+    model: &Model,
     cell_vertices: Option<&[(f64, f64, f64)]>,
     edge_list: Option<&[(usize, usize)]>,
 ) -> (
@@ -378,6 +366,8 @@ pub fn parse_infill(
         }
     }
 
+    let value = serde_json::to_value(model).unwrap_or_else(|_| Value::Null);
+
     let mut seeds = Vec::new();
     let mut pattern: Option<String> = None;
     let mut wall: Option<f64> = None;
@@ -386,7 +376,7 @@ pub fn parse_infill(
     let mut bbox_min: Option<(f64, f64, f64)> = None;
     let mut bbox_max: Option<(f64, f64, f64)> = None;
     collect(
-        value,
+        &value,
         &mut seeds,
         &mut pattern,
         &mut wall,
