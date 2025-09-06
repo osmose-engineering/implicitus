@@ -40,7 +40,6 @@ def test_ignore_unknown_fields_allows_unknown_keys():
     msg = validate_model_spec(spec, ignore_unknown_fields=True)
     assert hasattr(msg, "root")
 
-
 def test_wrapped_modifier_dict():
     spec = {
         "root": {
@@ -56,3 +55,4 @@ def test_wrapped_modifier_dict():
     child = msg.root.children[0]
     assert len(child.modifiers) == 1
     assert child.modifiers[0].infill.pattern == "hex"
+

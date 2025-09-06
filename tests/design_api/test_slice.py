@@ -103,6 +103,7 @@ def test_slice_allows_extra_infill_fields(client, monkeypatch):
                 "children": [
                     {
                         "primitive": {"sphere": {"radius": 1.0}},
+
                           "modifiers": {
                               "infill": {
                                   "pattern": "hex",
@@ -117,6 +118,7 @@ def test_slice_allows_extra_infill_fields(client, monkeypatch):
               },
           },
       )
+
 
     resp = client.get("/models/abc/slices?layer=0")
     assert resp.status_code == 200
