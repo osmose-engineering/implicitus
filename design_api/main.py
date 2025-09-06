@@ -184,6 +184,11 @@ async def slice_model(
         return cell_verts, edges
 
     cell_vertices, edge_list = _extract_lattice_data(model)
+    logging.debug(
+        "slice_model: cell_vertices[:3]=%s, edge_list[:3]=%s",
+        cell_vertices[:3] if cell_vertices else None,
+        edge_list[:3] if edge_list else None,
+    )
 
     payload = {
         "model": model,
