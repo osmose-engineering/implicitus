@@ -113,15 +113,26 @@ fn hex_sdf(point: (f64, f64, f64), seeds: &[(f64, f64, f64)]) -> f64 {
     best
 }
 
-/// Generate a very simple hex lattice: one vertical edge per seed point.
+/// Generate a hexagonal lattice using explicit cell vertices with vertical
+/// edges suitable for slicing.
+///
+/// Each seed point defines the center of a regular hexagon in the X-Y plane.
+/// For every vertex of that hexagon a vertical edge is emitted, represented by
+/// two vertices at ``z-1`` and ``z+1``.  The returned mesh therefore contains
+/// six vertical struts per seed point.
 pub fn hex_lattice(seeds: &[(f64, f64, f64)]) -> VoronoiMesh {
     let mut vertices = Vec::new();
     let mut edges = Vec::new();
-    for &(x, y, z) in seeds {
-        let base = vertices.len();
-        vertices.push((x, y, z - 1.0));
-        vertices.push((x, y, z + 1.0));
-        edges.push((base, base + 1));
+    for &(cx, cy, cz) in seeds {
+        for i in 0..6 {
+            let angle = std::f64::consts::FRAC_PI_2 + i as f64 * std::f64::consts::PI / 3.0;
+            let x = cx + angle.cos();
+            let y = cy + angle.sin();
+            let base = vertices.len();
+            vertices.push((x, y, cz - 1.0));
+            vertices.push((x, y, cz + 1.0));
+            edges.push((base, base + 1));
+        }
     }
     VoronoiMesh { vertices, edges }
 }
