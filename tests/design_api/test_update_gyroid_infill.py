@@ -18,7 +18,8 @@ def test_update_infill_nested_under_modifiers(client, monkeypatch):
 
     resp = client.post(
         "/design/update",
-        json={"sid": sid, "spec": [node], "raw": "add gyroid infill"},
+        params={"sid": sid},
+        json={"spec": [node], "raw": "add gyroid infill"},
     )
     assert resp.status_code == 200
     spec = resp.json()["spec"]

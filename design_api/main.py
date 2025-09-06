@@ -356,7 +356,7 @@ async def design(req: DesignRequest):
 
 
 @app.post("/design/review", response_model=dict)
-async def review(req: dict, sid: Optional[str] = None):
+async def review(req: dict, sid: Optional[str] = Query(None)):
     try:
         if sid is None or sid not in design_states:
             sid = str(uuid.uuid4())
@@ -461,7 +461,6 @@ async def review(req: dict, sid: Optional[str] = None):
 
 # New update endpoint: expects session and spec in body, returns summary
 class UpdateRequest(BaseModel):
-    sid: str
     raw: str
     spec: list
     imds_mesh: Optional[Any] = None
@@ -469,21 +468,22 @@ class UpdateRequest(BaseModel):
     max_distance: Optional[float] = None
 
 @app.post("/design/update", response_model=dict)
-async def update(req: UpdateRequest):
+async def update(req: UpdateRequest, sid: str = Query(...)):
     """
     Update the design spec for a session, returning a summary.
     """
-    logging.debug(f"Received /design/update request for session {req.sid}: spec={req.spec}, raw={req.raw}")
-    sid = req.sid
+    logging.debug(
+        f"Received /design/update request for session {sid}: spec={req.spec}, raw={req.raw}"
+    )
     if sid not in design_states:
         raise HTTPException(status_code=400, detail=f"Unknown session id {sid}")
     # Call the adapter to update the spec
-    result = update_request(req.sid, req.spec, req.raw)
+    result = update_request(sid, req.spec, req.raw)
     # If adapter returned a clarification question, forward it
     if isinstance(result, dict) and "question" in result:
         question = result["question"]
-        log_turn(req.sid, "clarify", req.raw, design_states[req.sid].draft_spec, question=question)
-        return {"sid": req.sid, "question": question}
+        log_turn(sid, "clarify", req.raw, design_states[sid].draft_spec, question=question)
+        return {"sid": sid, "question": question}
     # Unpack updated spec and summary
     new_spec, new_summary = result
     # Normalize any top-level infill into node['modifiers']['infill']
@@ -561,14 +561,14 @@ async def update(req: UpdateRequest):
         return o
 
     new_spec = _sanitize(new_spec)
-    design_states[req.sid].draft_spec = new_spec
-    log_turn(req.sid, "update", req.raw, new_spec)
-    return {"sid": req.sid, "spec": new_spec, "summary": new_summary}
+    design_states[sid].draft_spec = new_spec
+    log_turn(sid, "update", req.raw, new_spec)
+    return {"sid": sid, "spec": new_spec, "summary": new_summary}
 
 
 # New endpoint: submit final model
 @app.post("/design/submit", response_model=dict)
-async def submit(req: dict, sid: str):
+async def submit(req: dict, sid: str = Query(...)):
     """
     Finalize and lock in the current draft spec for the given session.
     """
