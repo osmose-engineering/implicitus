@@ -1,6 +1,7 @@
 #[path = "../src/bin/slicer_server.rs"]
 mod slicer_server;
 
+use bytes::Bytes;
 use core_engine::implicitus::{node::Body, primitive::Shape, Box, Model, Node, Primitive, Vector3};
 use serde_json::{json, to_value};
 use slicer_server::{handle_slice, SliceRequest, SliceResponse};
@@ -39,10 +40,12 @@ async fn slice_box_model_returns_square_contour() {
 
         bbox_min: None,
         bbox_max: None,
-
+        cell_vertices: None,
+        edge_list: None,
     };
 
-    let reply = handle_slice(req).await.unwrap();
+    let body = serde_json::to_vec(&req).unwrap();
+    let reply = handle_slice(Bytes::from(body)).await.unwrap();
     let body = reply.into_response().into_body();
     let bytes = to_bytes(body).await.unwrap();
     let resp: SliceResponse = serde_json::from_slice(&bytes).unwrap();
@@ -89,10 +92,12 @@ async fn slice_returns_debug_for_invalid_model() {
 
         bbox_min: None,
         bbox_max: None,
-
+        cell_vertices: None,
+        edge_list: None,
     };
 
-    let reply = handle_slice(req).await.unwrap();
+    let body = serde_json::to_vec(&req).unwrap();
+    let reply = handle_slice(Bytes::from(body)).await.unwrap();
     let body = reply.into_response().into_body();
     let bytes = to_bytes(body).await.unwrap();
     let resp: SliceResponse = serde_json::from_slice(&bytes).unwrap();
@@ -123,10 +128,12 @@ async fn slice_returns_debug_for_lattice_primitive() {
 
         bbox_min: None,
         bbox_max: None,
-
+        cell_vertices: None,
+        edge_list: None,
     };
 
-    let reply = handle_slice(req).await.unwrap();
+    let body = serde_json::to_vec(&req).unwrap();
+    let reply = handle_slice(Bytes::from(body)).await.unwrap();
     let body = reply.into_response().into_body();
     let bytes = to_bytes(body).await.unwrap();
     let resp: SliceResponse = serde_json::from_slice(&bytes).unwrap();

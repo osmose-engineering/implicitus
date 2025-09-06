@@ -1,5 +1,6 @@
 // core_engine/src/bin/slicer_server.rs
 
+use bytes::Bytes;
 use core_engine::implicitus::Model;
 use core_engine::slice::{slice_model, SliceConfig, SliceResult};
 use log::{info, warn};
@@ -8,9 +9,10 @@ use serde_json::Value;
 use std::collections::HashMap;
 use std::sync::{Arc, Mutex};
 use warp::http::{Method, StatusCode};
+use warp::reject::Reject;
 use warp::Filter;
 
-#[derive(Deserialize)]
+#[derive(Deserialize, Serialize)]
 pub struct SliceRequest {
     // TODO: replace Value with actual Model once JSON <-> Protobuf integration is set up
     #[serde(rename = "model")]
@@ -26,6 +28,8 @@ pub struct SliceRequest {
     pub bbox_min: Option<(f64, f64, f64)>,
     pub bbox_max: Option<(f64, f64, f64)>,
 
+    pub cell_vertices: Option<Vec<(f64, f64, f64)>>,
+    pub edge_list: Option<Vec<(usize, usize)>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -67,7 +71,7 @@ async fn main() {
     // POST /slice  with JSON body to perform slicing
     let slice_route = warp::post()
         .and(warp::path("slice"))
-        .and(warp::body::json())
+        .and(warp::body::bytes())
         .and_then(handle_slice);
 
     // POST /voronoi to generate a mesh from seed points
@@ -95,12 +99,29 @@ async fn main() {
     warp::serve(routes).run(([127, 0, 0, 1], 4000)).await;
 }
 
-pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::Rejection> {
+#[derive(Debug)]
+struct InvalidBody;
+impl Reject for InvalidBody {}
+
+pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejection> {
+    let raw = String::from_utf8_lossy(&body);
+    info!("Raw slice request body: {}", raw);
+
+    let req: SliceRequest = serde_json::from_slice(&body).map_err(|e| {
+        warn!("Failed to deserialize slice request: {}", e);
+        warp::reject::custom(InvalidBody)
+    })?;
+
+    info!(
+        "cell_vertices len: {:?}, edge_list len: {:?}",
+        req.cell_vertices.as_ref().map(|v| v.len()),
+        req.edge_list.as_ref().map(|e| e.len())
+    );
+
     // Pull out infill or lattice data to forward to the slice configuration
 
     let (seed_points, infill_pattern, wall_thickness, mode, bbox_min, bbox_max) =
         parse_infill(&req._model);
-
 
     let model_id = req
         ._model
@@ -224,7 +245,6 @@ struct StatusResponse {
 
 pub fn parse_infill(
     value: &Value,
-
 ) -> (
     Vec<(f64, f64, f64)>,
     Option<String>,
@@ -233,7 +253,6 @@ pub fn parse_infill(
     Option<(f64, f64, f64)>,
     Option<(f64, f64, f64)>,
 ) {
-
     // Recursively walk the JSON tree collecting infill/lattice blocks. Seed points from
     // all blocks are aggregated, while the first encountered pattern and wall thickness
     // take precedence. When precomputed ``cell_vertices`` and ``edge_list`` are
@@ -345,5 +364,4 @@ pub fn parse_infill(
         bbox_min,
         bbox_max,
     )
-
 }
