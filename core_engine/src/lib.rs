@@ -16,7 +16,7 @@ pub mod implicitus {
 
 use implicitus::node::Body;
 use implicitus::primitive::Shape;
-use implicitus::Model;
+use implicitus::{transform, Model};
 pub mod primitives;
 pub mod spatial;
 pub mod uniform;
@@ -26,32 +26,20 @@ pub mod voronoi;
 // that all language layers share the same value.
 include!(concat!(env!("OUT_DIR"), "/constants.rs"));
 
-// A very basic SDF evaluator that handles a few primitive shapes and optional infill.
-pub fn evaluate_sdf(
-    model: &Model,
-    x: f64,
-    y: f64,
-    z: f64,
-    infill_pattern: Option<&str>,
-    seeds: &[(f64, f64, f64)],
-    wall_thickness: f64,
-    mode: Option<&str>,
-) -> f64 {
-    let mut base_sdf = f64::MAX;
-
-    // Check for a root node
-    if let Some(root_node) = &model.root {
-        // Look for a primitive in that node
-        if let Some(Body::Primitive(p)) = &root_node.body {
-            // Match on the inner shape
-            if let Some(shape) = &p.shape {
-                base_sdf = match shape {
+// Evaluate the signed distance for a node, handling primitives, simple
+// translations and union of children.  The evaluator is intentionally
+// minimal and only supports the few primitives required by tests.
+fn eval_node(node: &implicitus::Node, x: f64, y: f64, z: f64) -> f64 {
+    match &node.body {
+        // Primitive shape at the current coordinate
+        Some(Body::Primitive(p)) => {
+            let mut sdf = if let Some(shape) = &p.shape {
+                match shape {
                     Shape::Sphere(s) => {
                         let dist = (x * x + y * y + z * z).sqrt();
                         dist - s.radius
                     }
                     Shape::Box(b) => {
-                        // Axis-aligned box centered at the origin
                         if let Some(size) = &b.size {
                             let hx = size.x / 2.0;
                             let hy = size.y / 2.0;
@@ -69,11 +57,63 @@ pub fn evaluate_sdf(
                         }
                     }
                     _ => f64::MAX,
-                };
-            }
-        }
-    }
+                }
+            } else {
+                f64::MAX
+            };
 
+            // Union any child nodes with this primitive
+            for child in &node.children {
+                let child_sdf = eval_node(child, x, y, z);
+                sdf = sdf.min(child_sdf);
+            }
+            sdf
+        }
+        // Simple translate transform: evaluate children in translated coordinates
+        Some(Body::Transform(t)) => {
+            if let Some(transform::Op::Translate(tr)) = &t.op {
+                if let Some(offset) = &tr.offset {
+                    let nx = x - offset.x;
+                    let ny = y - offset.y;
+                    let nz = z - offset.z;
+                    return node
+                        .children
+                        .iter()
+                        .fold(f64::MAX, |acc, c| acc.min(eval_node(c, nx, ny, nz)));
+                }
+            }
+            // Unknown transform, fall back to union of unmodified children
+            node.children
+                .iter()
+                .fold(f64::MAX, |acc, c| acc.min(eval_node(c, x, y, z)))
+        }
+        // No body: union of children
+        None => node
+            .children
+            .iter()
+            .fold(f64::MAX, |acc, c| acc.min(eval_node(c, x, y, z))),
+    }
+}
+
+// A very basic SDF evaluator that handles a few primitive shapes and optional infill.
+pub fn evaluate_sdf(
+    model: &Model,
+    x: f64,
+    y: f64,
+    z: f64,
+    infill_pattern: Option<&str>,
+    seeds: &[(f64, f64, f64)],
+    wall_thickness: f64,
+    mode: Option<&str>,
+) -> f64 {
+    // Evaluate the base model SDF using the simple recursive evaluator
+    let mut base_sdf = if let Some(root_node) = &model.root {
+        eval_node(root_node, x, y, z)
+    } else {
+        f64::MAX
+    };
+
+    // Optional infill adjustments
     if infill_pattern == Some("voronoi") && mode == Some("uniform") && !seeds.is_empty() {
         let cells = get_uniform_hex_cells(seeds);
         if !cells.is_empty() {
