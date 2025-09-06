@@ -2,7 +2,7 @@
 
 use bytes::Bytes;
 use core_engine::implicitus::Model;
-use core_engine::slice::{slice_model, SliceConfig, SliceResult};
+use core_engine::slice::{slice_model, SliceConfig};
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -199,25 +199,26 @@ pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejecti
         );
     }
 
-    let result = match serde_json::from_value::<Model>(req._model) {
-        Ok(model) => slice_model(&model, &config),
+    let model = match serde_json::from_value::<Model>(req._model) {
+        Ok(model) => model,
         Err(e) => {
-            warn!(
-                "Failed to deserialize model {}: {}. Returning empty slice.",
-                model_id, e
-            );
-            SliceResult {
-                contours: Vec::new(),
-                segments: Vec::new(),
-            }
+            let msg = format!("Failed to deserialize model {}: {}", model_id, e);
+            warn!("{}", msg);
+            let body = warp::reply::json(&serde_json::json!({"error": msg}));
+            return Ok(warp::reply::with_status(body, StatusCode::BAD_REQUEST));
         }
     };
 
-    Ok(warp::reply::json(&SliceResponse {
-        contours: result.contours,
-        segments: result.segments,
-        debug,
-    }))
+    let result = slice_model(&model, &config);
+
+    Ok(warp::reply::with_status(
+        warp::reply::json(&SliceResponse {
+            contours: result.contours,
+            segments: result.segments,
+            debug,
+        }),
+        StatusCode::OK,
+    ))
 }
 
 async fn handle_voronoi(
