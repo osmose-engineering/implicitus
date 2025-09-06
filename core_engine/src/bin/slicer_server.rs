@@ -6,7 +6,7 @@ use core_engine::slice::{slice_model, SliceConfig};
 use log::{info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
-use std::collections::HashMap;
+use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
 use warp::http::{Method, StatusCode};
 use warp::reject::Reject;
@@ -121,7 +121,11 @@ pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejecti
     // Pull out infill or lattice data to forward to the slice configuration
 
     let (seed_points, infill_pattern, wall_thickness, mode, bbox_min, bbox_max) =
-        parse_infill(&req._model);
+        parse_infill(
+            &req._model,
+            req.cell_vertices.as_deref(),
+            req.edge_list.as_deref(),
+        );
 
     let model_id = req
         ._model
@@ -267,6 +271,8 @@ struct StatusResponse {
 
 pub fn parse_infill(
     value: &Value,
+    cell_vertices: Option<&[(f64, f64, f64)]>,
+    edge_list: Option<&[(usize, usize)]>,
 ) -> (
     Vec<(f64, f64, f64)>,
     Option<String>,
@@ -378,6 +384,25 @@ pub fn parse_infill(
         &mut bbox_min,
         &mut bbox_max,
     );
+
+    // If a precomputed lattice was provided, derive seeds from the referenced
+    // vertex list to avoid recomputing the lattice. Only vertices referenced by
+    // ``edge_list`` are included and duplicates are removed.
+    if let (Some(verts), Some(edges)) = (cell_vertices, edge_list) {
+        let mut seen = HashSet::new();
+        for (i, j) in edges {
+            if seen.insert(*i) {
+                if let Some(v) = verts.get(*i) {
+                    seeds.push(*v);
+                }
+            }
+            if seen.insert(*j) {
+                if let Some(v) = verts.get(*j) {
+                    seeds.push(*v);
+                }
+            }
+        }
+    }
 
     if let (Some(bmin), Some(bmax)) = (bbox_min, bbox_max) {
         let out_of_bounds = seeds.iter().any(|&(x, y, z)| {
