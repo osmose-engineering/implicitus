@@ -50,12 +50,16 @@ Each entry in `edges` references two indices into this `vertices` list:
 
 ## Getting Started
 
-**Prerequisites**  
-- Rust ≥ 1.60  
-- Python 3.8+  
+**Prerequisites**
+- Rust ≥ 1.60
+- Python 3.8+
 - Node.js 14+
 
 **Setup & Run**
+
+All user interaction goes through the `design_api` service. It maintains
+models and forwards slice requests to the Rust `slicer_server` running on
+port 4000.
 
 ```bash
 # 1a) Start the Rust slicer service
@@ -63,8 +67,8 @@ cd core_engine
 cargo build
 cargo run --bin slicer_server   # listens on port 4000
 
-# 1b) Start the API Server) Start the Rust slicer service
-uvicorn design_api.main:app --host 127.0.0.1 --port 8000 --reload   # listens on port 8000
+# 1b) Start the Design API
+uvicorn design_api.main:app --host 127.0.0.1 --port 8000 --reload   # proxies slice requests to the slicer service
 
 # 1c) Start the UI Server
 cd implicitus_ui
@@ -77,6 +81,21 @@ python3 - << 'EOF'
 from ai_adapter.adapter import generate_model
 print(generate_model("unit sphere"))
 EOF
+```
+
+### Design API examples
+
+Once the services are running, interact with the system through
+`design_api`:
+
+```bash
+# Store a model
+curl -X POST http://127.0.0.1:8000/models \
+  -H 'Content-Type: application/json' \
+  -d '{"id": "abc", "name": "demo"}'
+
+# Request slices for the stored model
+curl "http://127.0.0.1:8000/models/abc/slices?layer=0.5&x_min=-1&x_max=1&y_min=-1&y_max=1&nx=50&ny=50"
 ```
 
 ## UI Unit Tests
