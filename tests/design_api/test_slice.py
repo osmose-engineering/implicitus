@@ -1,4 +1,5 @@
 import httpx
+from fastapi import HTTPException
 
 
 class DummyResponse:
@@ -174,3 +175,38 @@ def test_slice_missing_layer_returns_422(client):
     client.post("/models", json={"id": "abc"})
     resp = client.get("/models/abc/slices")
     assert resp.status_code == 422
+
+
+def test_slice_validation_error_includes_fields(client, monkeypatch):
+    def bad_validate(model, ignore_unknown_fields=True):
+        raise HTTPException(
+            status_code=400,
+            detail={
+                "detail": "bad model",
+                "offending_fields": ["foo", "bar"],
+            },
+        )
+
+    monkeypatch.setattr("design_api.main.validate_proto", bad_validate)
+    client.post("/models", json={"id": "abc", "root": {}})
+    resp = client.get("/models/abc/slices?layer=0")
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "bad model" in detail
+    assert "foo" in detail and "bar" in detail
+
+
+def test_slice_validation_error_includes_tip(client, monkeypatch):
+    def bad_validate(model, ignore_unknown_fields=True):
+        raise HTTPException(
+            status_code=400,
+            detail={"detail": "bad model", "tip": "use snake_case"},
+        )
+
+    monkeypatch.setattr("design_api.main.validate_proto", bad_validate)
+    client.post("/models", json={"id": "abc", "root": {}})
+    resp = client.get("/models/abc/slices?layer=0")
+    assert resp.status_code == 400
+    detail = resp.json()["detail"]
+    assert "bad model" in detail
+    assert "use snake_case" in detail
