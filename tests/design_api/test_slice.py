@@ -92,6 +92,36 @@ def test_slice_surfaces_errors(client, monkeypatch):
     assert "Slicing service failure" in resp.json()["detail"]
 
 
+def test_slice_allows_extra_infill_fields(client, monkeypatch):
+    capture = {}
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: DummyClient(capture))
+    client.post(
+        "/models",
+        json={
+            "id": "abc",
+            "root": {
+                "children": [
+                    {
+                        "primitive": {"sphere": {"radius": 1.0}},
+                          "modifiers": {
+                              "infill": {
+                                  "pattern": "hex",
+                                  "cell_vertices": [],
+                                  "edge_list": [],
+                                  "seed_points": [[0, 0, 0]],
+                                  "num_points": 5,
+                              }
+                          },
+                      }
+                  ]
+              },
+          },
+      )
+
+    resp = client.get("/models/abc/slices?layer=0")
+    assert resp.status_code == 200
+
+
 def test_slice_missing_model_returns_404(client):
     resp = client.get("/models/missing/slices?layer=1.0")
     assert resp.status_code == 404

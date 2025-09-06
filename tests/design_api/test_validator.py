@@ -31,3 +31,28 @@ def test_rejects_unknown_keys():
     spec["root"]["unknown_field"] = 123
     with pytest.raises(ValidationError):
         validate_model_spec(spec)
+
+
+def test_ignore_unknown_fields_allows_unknown_keys():
+    spec = map_primitive({"shape": "sphere", "size_mm": 10})
+    spec["root"]["unknown_field"] = 123
+    # Should not raise when ignore_unknown_fields=True
+    msg = validate_model_spec(spec, ignore_unknown_fields=True)
+    assert hasattr(msg, "root")
+
+
+def test_wrapped_modifier_dict():
+    spec = {
+        "root": {
+            "children": [
+                {
+                    "primitive": {"sphere": {"radius": 1.0}},
+                    "modifiers": {"infill": {"pattern": "hex"}},
+                }
+            ]
+        }
+    }
+    msg = validate_model_spec(spec)
+    child = msg.root.children[0]
+    assert len(child.modifiers) == 1
+    assert child.modifiers[0].infill.pattern == "hex"
