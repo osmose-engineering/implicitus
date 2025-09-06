@@ -4,6 +4,7 @@ from typing import Any, Dict, List
 from types import SimpleNamespace
 import numpy as np
 import inspect
+import logging
 
 
 from .voronoi_gen.voronoi_gen import (
@@ -12,6 +13,8 @@ from .voronoi_gen.voronoi_gen import (
     primitive_to_imds_mesh,
 )
 from .seed_utils import resolve_seed_spec
+
+logger = logging.getLogger(__name__)
 
 
 def _edge_list_from_adjacency(adjacency: Any) -> List[List[int]]:
@@ -185,6 +188,12 @@ def generate_hex_lattice(
         primitive,
         **lattice_kwargs,
         **extra_kwargs,
+    )
+
+    logger.debug(
+        "generate_hex_lattice: spacing=%s, seed_pts[:3]=%s",
+        spacing,
+        seed_pts[:3],
     )
 
     debug = {

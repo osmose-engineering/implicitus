@@ -356,6 +356,11 @@ pub fn parse_infill(
         &mut bbox_min,
         &mut bbox_max,
     );
+
+    info!(
+        "parse_infill: first_seeds={:?}",
+        seeds.iter().take(3).collect::<Vec<_>>()
+    );
     (
         seeds,
         pattern,
