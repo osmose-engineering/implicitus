@@ -152,6 +152,39 @@ async def slice_model(
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
 
+    def _extract_lattice_data(obj: Any) -> tuple[Optional[list], Optional[list]]:
+        """Recursively search for lattice fields in ``obj``.
+
+        Returns the first encountered ``cell_vertices`` and ``edge_list`` values
+        if present anywhere within the nested structure.  Either value may be
+        ``None`` if not found.
+        """
+
+        cell_verts: Optional[list] = None
+        edges: Optional[list] = None
+
+        def walk(o: Any) -> None:
+            nonlocal cell_verts, edges
+            if isinstance(o, dict):
+                if cell_verts is None and isinstance(o.get("cell_vertices"), list):
+                    cell_verts = o["cell_vertices"]
+                if edges is None and isinstance(o.get("edge_list"), list):
+                    edges = o["edge_list"]
+                for v in o.values():
+                    if cell_verts is not None and edges is not None:
+                        break
+                    walk(v)
+            elif isinstance(o, list):
+                for item in o:
+                    if cell_verts is not None and edges is not None:
+                        break
+                    walk(item)
+
+        walk(obj)
+        return cell_verts, edges
+
+    cell_vertices, edge_list = _extract_lattice_data(model)
+
     payload = {
         "model": model,
         "layer": layer,
@@ -162,6 +195,10 @@ async def slice_model(
         "nx": nx,
         "ny": ny,
     }
+    if cell_vertices is not None:
+        payload["cell_vertices"] = cell_vertices
+    if edge_list is not None:
+        payload["edge_list"] = edge_list
 
     try:
         async with httpx.AsyncClient() as client:
