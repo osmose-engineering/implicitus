@@ -102,6 +102,10 @@ async fn main() {
 struct InvalidBody;
 impl Reject for InvalidBody {}
 
+#[derive(Debug)]
+struct LockError;
+impl Reject for LockError {}
+
 pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejection> {
     // Log a truncated preview of the body to avoid dumping large or sensitive data.
     let raw_len = body.len();
@@ -243,24 +247,27 @@ async fn handle_voronoi_status(
     job_id: String,
     jobs: JobMap,
 ) -> Result<impl warp::Reply, warp::Rejection> {
-    let map = jobs.lock().unwrap();
-    match map.get(&job_id) {
-        Some(Some(resp)) => Ok(warp::reply::with_status(
-            warp::reply::json(resp),
-            StatusCode::OK,
-        )),
-        Some(None) => Ok(warp::reply::with_status(
-            warp::reply::json(&StatusResponse {
-                status: "rendering",
-            }),
-            StatusCode::ACCEPTED,
-        )),
-        None => Ok(warp::reply::with_status(
-            warp::reply::json(&StatusResponse {
-                status: "not_found",
-            }),
-            StatusCode::NOT_FOUND,
-        )),
+    if let Ok(map) = jobs.lock() {
+        match map.get(&job_id) {
+            Some(Some(resp)) => Ok(warp::reply::with_status(
+                warp::reply::json(resp),
+                StatusCode::OK,
+            )),
+            Some(None) => Ok(warp::reply::with_status(
+                warp::reply::json(&StatusResponse {
+                    status: "rendering",
+                }),
+                StatusCode::ACCEPTED,
+            )),
+            None => Ok(warp::reply::with_status(
+                warp::reply::json(&StatusResponse {
+                    status: "not_found",
+                }),
+                StatusCode::NOT_FOUND,
+            )),
+        }
+    } else {
+        Err(warp::reject::custom(LockError))
     }
 }
 
@@ -433,4 +440,33 @@ pub fn parse_infill(
         bbox_min,
         bbox_max,
     )
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use warp::{http::StatusCode, test::request, Filter};
+
+    #[tokio::test]
+    async fn voronoi_status_poisoned_lock_returns_500() {
+        let jobs: JobMap = Arc::new(Mutex::new(HashMap::new()));
+
+        {
+            let jobs_clone = jobs.clone();
+            let _ = std::thread::spawn(move || {
+                let _guard = jobs_clone.lock().unwrap();
+                panic!("poison");
+            })
+            .join();
+        }
+
+        let with_jobs = warp::any().map(move || jobs.clone());
+        let api = warp::path!("voronoi" / "status" / String)
+            .and(with_jobs)
+            .and_then(handle_voronoi_status);
+
+        let res = request().path("/voronoi/status/test").reply(&api).await;
+
+        assert_eq!(res.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
 }
