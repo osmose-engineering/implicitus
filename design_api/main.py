@@ -382,6 +382,10 @@ async def update(req: UpdateRequest):
         return {"sid": req.sid, "question": question}
     # Unpack updated spec and summary
     new_spec, new_summary = result
+    # Normalize any top-level infill into node['modifiers']['infill']
+    for node in new_spec:
+        if "infill" in node:
+            node.setdefault("modifiers", {})["infill"] = node.pop("infill")
 
     # Compute adjacency and edges for any infill
     for idx, node in enumerate(new_spec):
