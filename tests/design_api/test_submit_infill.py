@@ -1,9 +1,7 @@
-from fastapi.testclient import TestClient
-
-from design_api.main import app, design_states, DesignState
+from design_api.main import design_states, DesignState
 
 
-def test_submit_infill_preserves_seed_points(monkeypatch):
+def test_submit_infill_preserves_seed_points(client, monkeypatch):
     # Stub lattice generator to return seeds verbatim
     def _fake_voronoi(spec):
         seeds = spec.get("seed_points", [])
@@ -11,8 +9,6 @@ def test_submit_infill_preserves_seed_points(monkeypatch):
 
     monkeypatch.setattr("design_api.main.generate_voronoi", _fake_voronoi)
     monkeypatch.setattr("design_api.main.validate_proto", lambda x: x)
-
-    client = TestClient(app)
 
     seeds = [[0.0, 0.0, 0.0], [1.0, 1.0, 1.0]]
     node = {
@@ -38,3 +34,13 @@ def test_submit_infill_preserves_seed_points(monkeypatch):
     assert lattice["seed_points"] == seeds
 
     del design_states[sid]
+
+
+def test_submit_unknown_sid_returns_400(client):
+    resp = client.post("/design/submit", params={"sid": "nope"}, json={})
+    assert resp.status_code == 400
+
+
+def test_submit_missing_sid_returns_422(client):
+    resp = client.post("/design/submit", json={})
+    assert resp.status_code == 422
