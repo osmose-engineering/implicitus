@@ -134,10 +134,20 @@ function App() {
       const data = await resp.json();
       if (data.debug) {
         console.log('[design_api] debug info:', data.debug);
-        if (Array.isArray(data.debug.seed_points)) {
-          setSliceSeedPoints(data.debug.seed_points);
-          console.log('[design_api] seed points:', data.debug.seed_points);
-        }
+      }
+      const seeds =
+        Array.isArray(data.seed_points)
+          ? data.seed_points
+          : Array.isArray(data.debug?.seed_points)
+            ? data.debug.seed_points
+            : null;
+      if (seeds) {
+        setSliceSeedPoints(seeds);
+        console.log('[design_api] seed points:', seeds);
+      } else {
+        setSliceSeedPoints([]);
+        console.warn('[design_api] no seed points found in slice response');
+        setError('No seed points found in slice response');
       }
     } catch (err) {
       console.error('[UI] slice fetch error:', err);
