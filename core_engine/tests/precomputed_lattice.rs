@@ -2,26 +2,41 @@
 mod slicer_server;
 
 use bytes::Bytes;
+
+use serde_json::{json, Value};
+use slicer_server::{handle_slice, parse_infill, SliceRequest, SliceResponse};
+
 use core_engine::implicitus::Model;
-use serde_json::json;
-use slicer_server::{handle_slice, SliceRequest, SliceResponse};
+
 use warp::hyper::body::to_bytes;
 use warp::Reply;
+use core_engine::implicitus::{node::Body, primitive::Shape, Model, Node, Primitive, Sphere};
 
 #[tokio::test]
 async fn handle_slice_derives_seeds_from_lattice() {
-    let model_json = json!({
-        "id": "sphere",
-        "constraints": [],
-        "root": {
-            "children": [],
-            "primitive": {"sphere": {"radius": 1.0}},
-            "modifiers": [{"infill": {"pattern": "voronoi"}}]
-        }
-    });
-    let model: Model = serde_json::from_value(model_json).unwrap();
+
+    // Build a minimal valid model containing a single sphere primitive.
+    let mut model = Model::default();
+    model.id = "precomputed_lattice".into();
+    let sphere = Sphere { radius: 1.0 };
+    let mut prim = Primitive::default();
+    prim.shape = Some(Shape::Sphere(sphere));
+    let mut node = Node::default();
+    node.body = Some(Body::Primitive(prim));
+    model.root = Some(node);
+
+    // Convert the model to JSON and attach an infill pattern so `parse_infill`
+    // picks it up when building the slice configuration.
+    let mut model_json = serde_json::to_value(model).unwrap();
+    if let Value::Object(ref mut obj) = model_json {
+        obj.insert(
+            "modifiers".into(),
+            json!({"infill": {"pattern": "voronoi"}}),
+        );
+    }
+
     let req = SliceRequest {
-        _model: model,
+        _model: model_json,
         layer: 0.0,
         x_min: None,
         x_max: None,
