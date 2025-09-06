@@ -22,6 +22,8 @@ pub struct SliceRequest {
     pub y_max: Option<f64>,
     pub nx: Option<usize>,
     pub ny: Option<usize>,
+    pub bbox_min: Option<(f64, f64, f64)>,
+    pub bbox_max: Option<(f64, f64, f64)>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -93,7 +95,8 @@ async fn main() {
 
 pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::Rejection> {
     // Pull out infill or lattice data to forward to the slice configuration
-    let (seed_points, infill_pattern, wall_thickness, mode) = parse_infill(&req._model);
+    let (seed_points, infill_pattern, wall_thickness, mode, bbox_min, bbox_max) =
+        parse_infill(&req._model);
 
     let model_id = req
         ._model
@@ -146,6 +149,8 @@ pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::R
         // Forward wall thickness so slice_model can pass it through to evaluate_sdf
         wall_thickness,
         mode,
+        bbox_min: req.bbox_min.or(bbox_min),
+        bbox_max: req.bbox_max.or(bbox_max),
     };
 
     let result = match serde_json::from_value::<Model>(req._model) {
@@ -213,7 +218,16 @@ struct StatusResponse {
     status: &'static str,
 }
 
-pub fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>, f64, Option<String>) {
+pub fn parse_infill(
+    value: &Value,
+) -> (
+    Vec<(f64, f64, f64)>,
+    Option<String>,
+    f64,
+    Option<String>,
+    Option<(f64, f64, f64)>,
+    Option<(f64, f64, f64)>,
+) {
     // Recursively walk the JSON tree collecting infill/lattice blocks. Seed points from
     // all blocks are aggregated, while the first encountered pattern and wall thickness
     // take precedence.
@@ -223,6 +237,8 @@ pub fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>, f64
         pattern: &mut Option<String>,
         wall: &mut Option<f64>,
         mode: &mut Option<String>,
+        bbox_min: &mut Option<(f64, f64, f64)>,
+        bbox_max: &mut Option<(f64, f64, f64)>,
     ) {
         if let Some(obj) = v.as_object() {
             if let Some(infill) = obj.get("infill").or_else(|| obj.get("lattice")) {
@@ -241,6 +257,38 @@ pub fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>, f64
                         .and_then(|m| m.as_str())
                         .map(|s| s.to_string());
                 }
+                if bbox_min.is_none() {
+                    *bbox_min = infill
+                        .get("bbox_min")
+                        .and_then(|b| b.as_array())
+                        .and_then(|arr| {
+                            if arr.len() == 3 {
+                                Some((
+                                    arr[0].as_f64().unwrap_or(0.0),
+                                    arr[1].as_f64().unwrap_or(0.0),
+                                    arr[2].as_f64().unwrap_or(0.0),
+                                ))
+                            } else {
+                                None
+                            }
+                        });
+                }
+                if bbox_max.is_none() {
+                    *bbox_max = infill
+                        .get("bbox_max")
+                        .and_then(|b| b.as_array())
+                        .and_then(|arr| {
+                            if arr.len() == 3 {
+                                Some((
+                                    arr[0].as_f64().unwrap_or(0.0),
+                                    arr[1].as_f64().unwrap_or(0.0),
+                                    arr[2].as_f64().unwrap_or(0.0),
+                                ))
+                            } else {
+                                None
+                            }
+                        });
+                }
                 if let Some(arr) = infill.get("seed_points").and_then(|sp| sp.as_array()) {
                     for pt in arr {
                         if let Some(coords) = pt.as_array() {
@@ -256,11 +304,11 @@ pub fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>, f64
                 }
             }
             for val in obj.values() {
-                collect(val, seeds, pattern, wall, mode);
+                collect(val, seeds, pattern, wall, mode, bbox_min, bbox_max);
             }
         } else if let Some(arr) = v.as_array() {
             for val in arr {
-                collect(val, seeds, pattern, wall, mode);
+                collect(val, seeds, pattern, wall, mode, bbox_min, bbox_max);
             }
         }
     }
@@ -269,6 +317,23 @@ pub fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>, f64
     let mut pattern: Option<String> = None;
     let mut wall: Option<f64> = None;
     let mut mode: Option<String> = None;
-    collect(value, &mut seeds, &mut pattern, &mut wall, &mut mode);
-    (seeds, pattern, wall.unwrap_or(0.0), mode)
+    let mut bbox_min: Option<(f64, f64, f64)> = None;
+    let mut bbox_max: Option<(f64, f64, f64)> = None;
+    collect(
+        value,
+        &mut seeds,
+        &mut pattern,
+        &mut wall,
+        &mut mode,
+        &mut bbox_min,
+        &mut bbox_max,
+    );
+    (
+        seeds,
+        pattern,
+        wall.unwrap_or(0.0),
+        mode,
+        bbox_min,
+        bbox_max,
+    )
 }

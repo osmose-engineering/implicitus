@@ -40,6 +40,8 @@ fn voronoi_infill_slice_matches_expected() {
         infill_pattern: Some("voronoi".into()),
         wall_thickness: 0.0,
         mode: None,
+        bbox_min: None,
+        bbox_max: None,
     };
 
     let result = slice_model(&model, &config);
