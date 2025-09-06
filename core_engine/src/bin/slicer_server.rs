@@ -22,6 +22,8 @@ pub struct SliceRequest {
     pub y_max: Option<f64>,
     pub nx: Option<usize>,
     pub ny: Option<usize>,
+    pub cell_vertices: Option<Vec<(f64, f64, f64)>>,
+    pub edge_list: Option<Vec<(usize, usize)>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -93,7 +95,8 @@ async fn main() {
 
 pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::Rejection> {
     // Pull out infill or lattice data to forward to the slice configuration
-    let (seed_points, infill_pattern, wall_thickness, mode) = parse_infill(&req._model);
+    let (seed_points, infill_pattern, wall_thickness, mode) =
+        parse_infill(&req._model, req.cell_vertices.as_ref(), req.edge_list.as_ref());
 
     let model_id = req
         ._model
@@ -213,10 +216,16 @@ struct StatusResponse {
     status: &'static str,
 }
 
-pub fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>, f64, Option<String>) {
+pub fn parse_infill(
+    value: &Value,
+    cell_vertices: Option<&Vec<(f64, f64, f64)>>,
+    edge_list: Option<&Vec<(usize, usize)>>,
+) -> (Vec<(f64, f64, f64)>, Option<String>, f64, Option<String>) {
     // Recursively walk the JSON tree collecting infill/lattice blocks. Seed points from
     // all blocks are aggregated, while the first encountered pattern and wall thickness
-    // take precedence.
+    // take precedence. When precomputed ``cell_vertices`` and ``edge_list`` are
+    // supplied, seeds are derived directly from those vertices to avoid lattice
+    // recomputation.
     fn collect(
         v: &Value,
         seeds: &mut Vec<(f64, f64, f64)>,
@@ -269,6 +278,15 @@ pub fn parse_infill(value: &Value) -> (Vec<(f64, f64, f64)>, Option<String>, f64
     let mut pattern: Option<String> = None;
     let mut wall: Option<f64> = None;
     let mut mode: Option<String> = None;
-    collect(value, &mut seeds, &mut pattern, &mut wall, &mut mode);
+
+    if cell_vertices.is_some() && edge_list.is_some() {
+        // Only extract metadata; provided vertices become the seed list.
+        let mut tmp = Vec::new();
+        collect(value, &mut tmp, &mut pattern, &mut wall, &mut mode);
+        seeds = cell_vertices.cloned().unwrap_or_default();
+    } else {
+        collect(value, &mut seeds, &mut pattern, &mut wall, &mut mode);
+    }
+
     (seeds, pattern, wall.unwrap_or(0.0), mode)
 }
