@@ -22,8 +22,10 @@ pub struct SliceRequest {
     pub y_max: Option<f64>,
     pub nx: Option<usize>,
     pub ny: Option<usize>,
+
     pub bbox_min: Option<(f64, f64, f64)>,
     pub bbox_max: Option<(f64, f64, f64)>,
+
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -95,8 +97,10 @@ async fn main() {
 
 pub async fn handle_slice(req: SliceRequest) -> Result<impl warp::Reply, warp::Rejection> {
     // Pull out infill or lattice data to forward to the slice configuration
+
     let (seed_points, infill_pattern, wall_thickness, mode, bbox_min, bbox_max) =
         parse_infill(&req._model);
+
 
     let model_id = req
         ._model
@@ -220,6 +224,7 @@ struct StatusResponse {
 
 pub fn parse_infill(
     value: &Value,
+
 ) -> (
     Vec<(f64, f64, f64)>,
     Option<String>,
@@ -228,9 +233,12 @@ pub fn parse_infill(
     Option<(f64, f64, f64)>,
     Option<(f64, f64, f64)>,
 ) {
+
     // Recursively walk the JSON tree collecting infill/lattice blocks. Seed points from
     // all blocks are aggregated, while the first encountered pattern and wall thickness
-    // take precedence.
+    // take precedence. When precomputed ``cell_vertices`` and ``edge_list`` are
+    // supplied, seeds are derived directly from those vertices to avoid lattice
+    // recomputation.
     fn collect(
         v: &Value,
         seeds: &mut Vec<(f64, f64, f64)>,
@@ -317,6 +325,7 @@ pub fn parse_infill(
     let mut pattern: Option<String> = None;
     let mut wall: Option<f64> = None;
     let mut mode: Option<String> = None;
+
     let mut bbox_min: Option<(f64, f64, f64)> = None;
     let mut bbox_max: Option<(f64, f64, f64)> = None;
     collect(
@@ -336,4 +345,5 @@ pub fn parse_infill(
         bbox_min,
         bbox_max,
     )
+
 }

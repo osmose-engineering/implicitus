@@ -36,8 +36,10 @@ async fn slice_box_model_returns_square_contour() {
         y_max: Some(1.5),
         nx: Some(5),
         ny: Some(5),
+
         bbox_min: None,
         bbox_max: None,
+
     };
 
     let reply = handle_slice(req).await.unwrap();
@@ -84,8 +86,10 @@ async fn slice_returns_debug_for_invalid_model() {
         y_max: None,
         nx: None,
         ny: None,
+
         bbox_min: None,
         bbox_max: None,
+
     };
 
     let reply = handle_slice(req).await.unwrap();
@@ -116,8 +120,10 @@ async fn slice_returns_debug_for_lattice_primitive() {
         y_max: None,
         nx: None,
         ny: None,
+
         bbox_min: None,
         bbox_max: None,
+
     };
 
     let reply = handle_slice(req).await.unwrap();
