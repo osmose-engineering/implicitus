@@ -8,6 +8,24 @@ use slicer_server::{handle_slice, SliceRequest, SliceResponse};
 use warp::hyper::body::to_bytes;
 use warp::Reply;
 
+fn make_box_model() -> Model {
+    let mut model = Model::default();
+    model.id = "box".into();
+    let box_shape = Box {
+        size: Some(Vector3 {
+            x: 2.0,
+            y: 2.0,
+            z: 2.0,
+        }),
+    };
+    let mut prim = Primitive::default();
+    prim.shape = Some(Shape::Box(box_shape));
+    let mut node = Node::default();
+    node.body = Some(Body::Primitive(prim));
+    model.root = Some(node);
+    model
+}
+
 #[tokio::test]
 async fn slice_box_model_returns_square_contour() {
     // Build a simple box model centered at the origin with side length 2.0
@@ -83,7 +101,8 @@ async fn slice_returns_error_for_invalid_model() {
             "modifiers": {"infill": {"pattern": "voronoi", "seed_points": [[0.0,0.0,0.0]]}}
         },
         "layer": 0.0
-    })).unwrap();
+    }))
+    .unwrap();
     let res = handle_slice(Bytes::from(body)).await;
     assert!(res.is_err());
 }
@@ -99,7 +118,54 @@ async fn slice_returns_error_for_lattice_primitive() {
             }}
         },
         "layer": 0.0
-    })).unwrap();
+    }))
+    .unwrap();
     let res = handle_slice(Bytes::from(body)).await;
     assert!(res.is_err());
+}
+
+#[tokio::test]
+async fn slice_rejects_nx_less_than_two() {
+    for &invalid in &[0usize, 1usize] {
+        let req = SliceRequest {
+            _model: make_box_model(),
+            layer: 0.0,
+            x_min: Some(-1.5),
+            x_max: Some(1.5),
+            y_min: Some(-1.5),
+            y_max: Some(1.5),
+            nx: Some(invalid),
+            ny: Some(5),
+            bbox_min: None,
+            bbox_max: None,
+            cell_vertices: None,
+            edge_list: None,
+        };
+        let body = serde_json::to_vec(&req).unwrap();
+        let res = handle_slice(Bytes::from(body)).await;
+        assert!(res.is_err(), "expected error for nx={}", invalid);
+    }
+}
+
+#[tokio::test]
+async fn slice_rejects_ny_less_than_two() {
+    for &invalid in &[0usize, 1usize] {
+        let req = SliceRequest {
+            _model: make_box_model(),
+            layer: 0.0,
+            x_min: Some(-1.5),
+            x_max: Some(1.5),
+            y_min: Some(-1.5),
+            y_max: Some(1.5),
+            nx: Some(5),
+            ny: Some(invalid),
+            bbox_min: None,
+            bbox_max: None,
+            cell_vertices: None,
+            edge_list: None,
+        };
+        let body = serde_json::to_vec(&req).unwrap();
+        let res = handle_slice(Bytes::from(body)).await;
+        assert!(res.is_err(), "expected error for ny={}", invalid);
+    }
 }
