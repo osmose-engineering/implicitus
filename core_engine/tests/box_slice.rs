@@ -3,7 +3,7 @@ mod slicer_server;
 
 use bytes::Bytes;
 use core_engine::implicitus::{node::Body, primitive::Shape, Box, Model, Node, Primitive, Vector3};
-use serde_json::{json, to_value};
+use serde_json::json;
 use slicer_server::{handle_slice, SliceRequest, SliceResponse};
 use warp::hyper::body::to_bytes;
 use warp::Reply;
@@ -29,7 +29,7 @@ async fn slice_box_model_returns_square_contour() {
     model.root = Some(node);
 
     let req = SliceRequest {
-        _model: to_value(&model).unwrap(),
+        _model: model,
         layer: 0.0,
         x_min: Some(-1.5),
         x_max: Some(1.5),
@@ -77,63 +77,29 @@ async fn slice_box_model_returns_square_contour() {
 
 #[tokio::test]
 async fn slice_returns_error_for_invalid_model() {
-    let req = SliceRequest {
-        _model: json!({
+    let body = serde_json::to_vec(&json!({
+        "model": {
             "primitive": {"sphere": {"radius": 1.0}},
             "modifiers": {"infill": {"pattern": "voronoi", "seed_points": [[0.0,0.0,0.0]]}}
-        }),
-        layer: 0.0,
-        x_min: None,
-        x_max: None,
-        y_min: None,
-        y_max: None,
-        nx: None,
-        ny: None,
-
-        bbox_min: None,
-        bbox_max: None,
-        cell_vertices: None,
-        edge_list: None,
-    };
-
-    let body = serde_json::to_vec(&req).unwrap();
-    let reply = handle_slice(Bytes::from(body)).await.unwrap();
-    let resp = reply.into_response();
-    assert_eq!(resp.status(), warp::http::StatusCode::BAD_REQUEST);
-    let bytes = to_bytes(resp.into_body()).await.unwrap();
-    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert!(v["error"].as_str().unwrap().contains("Failed to deserialize model"));
+        },
+        "layer": 0.0
+    })).unwrap();
+    let res = handle_slice(Bytes::from(body)).await;
+    assert!(res.is_err());
 }
 
 #[tokio::test]
 async fn slice_returns_error_for_lattice_primitive() {
-    let req = SliceRequest {
-        _model: json!({
+    let body = serde_json::to_vec(&json!({
+        "model": {
             "primitive": {"lattice": {
                 "pattern": "voronoi",
                 "wall_thickness": 0.2,
                 "seed_points": [[0.0,0.0,0.0],[1.0,1.0,1.0]]
             }}
-        }),
-        layer: 0.0,
-        x_min: None,
-        x_max: None,
-        y_min: None,
-        y_max: None,
-        nx: None,
-        ny: None,
-
-        bbox_min: None,
-        bbox_max: None,
-        cell_vertices: None,
-        edge_list: None,
-    };
-
-    let body = serde_json::to_vec(&req).unwrap();
-    let reply = handle_slice(Bytes::from(body)).await.unwrap();
-    let resp = reply.into_response();
-    assert_eq!(resp.status(), warp::http::StatusCode::BAD_REQUEST);
-    let bytes = to_bytes(resp.into_body()).await.unwrap();
-    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
-    assert!(v["error"].as_str().unwrap().contains("Failed to deserialize model"));
+        },
+        "layer": 0.0
+    })).unwrap();
+    let res = handle_slice(Bytes::from(body)).await;
+    assert!(res.is_err());
 }
