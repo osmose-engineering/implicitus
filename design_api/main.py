@@ -214,13 +214,36 @@ async def slice_model(
     cell_vertices, edge_list = _extract_lattice_data(model)
     bbox_min, bbox_max = _extract_bbox(model)
 
+    def _trim_large_arrays(obj: Any, limit: int = 10) -> Any:
+        if isinstance(obj, list):
+            if len(obj) > limit:
+                return [_trim_large_arrays(v, limit) for v in obj[:limit]] + ["..."]
+            return [_trim_large_arrays(v, limit) for v in obj]
+        if isinstance(obj, dict):
+            return {k: _trim_large_arrays(v, limit) for k, v in obj.items()}
+        return obj
+
     try:
-        model = MessageToDict(
-            validate_proto(model, ignore_unknown_fields=True),
-            preserving_proto_field_name=True,
+        proto_model = validate_proto(model, ignore_unknown_fields=True)
+    except HTTPException as exc:
+        logging.exception(
+            "Invalid model %s: %s",
+            _trim_large_arrays(copy.deepcopy(model)),
+            exc,
         )
+        raise HTTPException(status_code=exc.status_code, detail=exc.detail)
     except Exception as exc:
+        logging.exception(
+            "Invalid model %s: %s",
+            _trim_large_arrays(copy.deepcopy(model)),
+            exc,
+        )
         raise HTTPException(status_code=400, detail=f"Invalid model: {exc}")
+
+    model = MessageToDict(
+        proto_model,
+        preserving_proto_field_name=True,
+    )
     logging.debug(
         "slice_model: bbox_min=%s bbox_max=%s cell_vertices[:3]=%s edge_list[:3]=%s",
         bbox_min,
