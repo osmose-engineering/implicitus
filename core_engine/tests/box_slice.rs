@@ -76,7 +76,7 @@ async fn slice_box_model_returns_square_contour() {
 }
 
 #[tokio::test]
-async fn slice_returns_debug_for_invalid_model() {
+async fn slice_returns_error_for_invalid_model() {
     let req = SliceRequest {
         _model: json!({
             "primitive": {"sphere": {"radius": 1.0}},
@@ -98,18 +98,15 @@ async fn slice_returns_debug_for_invalid_model() {
 
     let body = serde_json::to_vec(&req).unwrap();
     let reply = handle_slice(Bytes::from(body)).await.unwrap();
-    let body = reply.into_response().into_body();
-    let bytes = to_bytes(body).await.unwrap();
-    let resp: SliceResponse = serde_json::from_slice(&bytes).unwrap();
-
-    assert_eq!(resp.debug.seed_count, 1);
-    assert_eq!(resp.debug.seed_points.unwrap().len(), 1);
-    assert!(resp.contours.is_empty());
-    assert!(resp.segments.is_empty());
+    let resp = reply.into_response();
+    assert_eq!(resp.status(), warp::http::StatusCode::BAD_REQUEST);
+    let bytes = to_bytes(resp.into_body()).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(v["error"].as_str().unwrap().contains("Failed to deserialize model"));
 }
 
 #[tokio::test]
-async fn slice_returns_debug_for_lattice_primitive() {
+async fn slice_returns_error_for_lattice_primitive() {
     let req = SliceRequest {
         _model: json!({
             "primitive": {"lattice": {
@@ -134,12 +131,9 @@ async fn slice_returns_debug_for_lattice_primitive() {
 
     let body = serde_json::to_vec(&req).unwrap();
     let reply = handle_slice(Bytes::from(body)).await.unwrap();
-    let body = reply.into_response().into_body();
-    let bytes = to_bytes(body).await.unwrap();
-    let resp: SliceResponse = serde_json::from_slice(&bytes).unwrap();
-
-    assert_eq!(resp.debug.seed_count, 2);
-    assert_eq!(resp.debug.seed_points.unwrap().len(), 2);
-    assert!(resp.contours.is_empty());
-    assert!(resp.segments.is_empty());
+    let resp = reply.into_response();
+    assert_eq!(resp.status(), warp::http::StatusCode::BAD_REQUEST);
+    let bytes = to_bytes(resp.into_body()).await.unwrap();
+    let v: serde_json::Value = serde_json::from_slice(&bytes).unwrap();
+    assert!(v["error"].as_str().unwrap().contains("Failed to deserialize model"));
 }
