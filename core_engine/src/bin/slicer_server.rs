@@ -129,12 +129,11 @@ pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejecti
 
     // Pull out infill or lattice data to forward to the slice configuration
 
-    let (seed_points, infill_pattern, wall_thickness, mode, bbox_min, bbox_max) =
-        parse_infill(
-            &req._model,
-            req.cell_vertices.as_deref(),
-            req.edge_list.as_deref(),
-        );
+    let (seed_points, infill_pattern, wall_thickness, mode, bbox_min, bbox_max) = parse_infill(
+        &req._model,
+        req.cell_vertices.as_deref(),
+        req.edge_list.as_deref(),
+    );
 
     let model_id = if req._model.id.is_empty() {
         "unknown".to_string()
@@ -173,14 +172,21 @@ pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejecti
         },
     };
 
+    let nx = req.nx.unwrap_or(50);
+    let ny = req.ny.unwrap_or(50);
+    if nx < 2 || ny < 2 {
+        warn!("Invalid grid resolution: nx={} ny={}, expected >=2", nx, ny);
+        return Err(warp::reject::custom(InvalidBody));
+    }
+
     let config = SliceConfig {
         z: req.layer,
         x_min: req.x_min.unwrap_or(-1.0),
         x_max: req.x_max.unwrap_or(1.0),
         y_min: req.y_min.unwrap_or(-1.0),
         y_max: req.y_max.unwrap_or(1.0),
-        nx: req.nx.unwrap_or(50),
-        ny: req.ny.unwrap_or(50),
+        nx,
+        ny,
         seed_points,
         infill_pattern,
         // Forward wall thickness so slice_model can pass it through to evaluate_sdf
@@ -192,22 +198,18 @@ pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejecti
 
     info!(
         "SliceConfig: bbox_min={:?} bbox_max={:?} mode={:?}",
-        config.bbox_min,
-        config.bbox_max,
-        config.mode
+        config.bbox_min, config.bbox_max, config.mode
     );
     if bbox_min.is_some() && config.bbox_min != bbox_min {
         warn!(
             "SliceConfig bbox_min {:?} differs from parsed {:?}",
-            config.bbox_min,
-            bbox_min
+            config.bbox_min, bbox_min
         );
     }
     if bbox_max.is_some() && config.bbox_max != bbox_max {
         warn!(
             "SliceConfig bbox_max {:?} differs from parsed {:?}",
-            config.bbox_max,
-            bbox_max
+            config.bbox_max, bbox_max
         );
     }
 
