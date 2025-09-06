@@ -9,6 +9,7 @@ use crate::implicitus::Model;
 use crate::uniform::hex::compute_uniform_cells;
 use crate::voronoi_mesh;
 
+use log::info;
 use numpy::{PyArray1, PyArray2, PyArrayMethods};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
@@ -18,6 +19,9 @@ pub type Contour = Vec<(f64, f64)>;
 
 /// A single line segment represented by its start and end points.
 pub type Segment = ((f64, f64), (f64, f64));
+
+/// Maximum number of infill segments to log for debugging / hairball correlation.
+const SEGMENT_LOG_LIMIT: usize = 20;
 
 /// Output from a slice operation containing outer contours and infill segments.
 pub struct SliceResult {
@@ -217,6 +221,28 @@ pub fn slice_model(model: &Model, config: &SliceConfig) -> SliceResult {
                 }
             }
             _ => {}
+        }
+    }
+
+    // Log a limited set of infill segments for debugging and hairball visualization.
+    if !segments.is_empty() {
+        let log_count = segments.len().min(SEGMENT_LOG_LIMIT);
+        for (i, &((x0, y0), (x1, y1))) in segments.iter().take(log_count).enumerate() {
+            if (x0 - x1).abs() < 1e-9 && (y0 - y1).abs() < 1e-9 {
+                info!("hairball segment {i}: point ({:.3}, {:.3})", x0, y0);
+            } else {
+                info!(
+                    "hairball segment {i}: line ({:.3}, {:.3}) -> ({:.3}, {:.3})",
+                    x0, y0, x1, y1
+                );
+            }
+        }
+        if segments.len() > SEGMENT_LOG_LIMIT {
+            info!(
+                "hairball segment log truncated to first {} of {} segments",
+                SEGMENT_LOG_LIMIT,
+                segments.len()
+            );
         }
     }
 
