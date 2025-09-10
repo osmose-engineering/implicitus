@@ -2,6 +2,7 @@ import numpy as np
 import logging
 import random
 import math
+import os
 from typing import Union, Any
 from typing import Tuple, List, Optional
 from typing import Dict, Callable
@@ -325,6 +326,35 @@ def trace_hexagon(
         hex_pts = regularize_hexagon(hex_pts, plane_normal)
     except ImportError:
         pass
+
+    if os.getenv("UNIFORM_CELL_DEBUG"):
+        logger = logging.getLogger(__name__)
+        logger.debug("trace_hexagon seed %s vertices %s", seed_pt.tolist(), hex_pts.tolist())
+        for idx, vtx in enumerate(hex_pts):
+            if np.any(vtx < bbox_min) or np.any(vtx > bbox_max):
+                logger.debug(
+                    "trace_hexagon vertex %d out of bbox [%s, %s]: %s",
+                    idx,
+                    bbox_min.tolist(),
+                    bbox_max.tolist(),
+                    vtx.tolist(),
+                )
+        n = len(hex_pts)
+        for i in range(n):
+            j = (i + 1) % n
+            if i >= n or j >= n:
+                logger.debug(
+                    "trace_hexagon edge (%d, %d) references invalid index (n=%d)",
+                    i,
+                    j,
+                    n,
+                )
+            else:
+                logger.debug(
+                    "trace_hexagon edge endpoints: (%d, %d)",
+                    i,
+                    j,
+                )
 
     if report_method and return_raw:
         return hex_pts, used_fallback, raw_hex

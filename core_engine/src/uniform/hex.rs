@@ -2,6 +2,7 @@ use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
 use numpy::{PyReadonlyArray2, PyReadonlyArray1, PyArray1, PyArray2, PyArrayMethods};
 use std::collections::{HashMap, HashSet};
+use std::env;
 
 fn hexagon_metrics(pts: &Vec<[f64;3]>) -> (Vec<f64>, f64, f64, f64) {
     let mut edges = Vec::new();
@@ -97,6 +98,22 @@ pub fn compute_uniform_cells(
     dump_data.set_item("failed_indices", failed_list)?;
     let _ = vertex_tolerance;
 
+    let debug_enabled = env::var("UNIFORM_CELL_DEBUG").is_ok();
+    if debug_enabled {
+        let _ = env_logger::try_init();
+    }
+
+    let medial_arr = medial_points.bind(py).downcast::<PyArray2<f64>>()?;
+    let medial_view = unsafe { medial_arr.as_array() };
+    let mut bbox_min = [f64::INFINITY; 3];
+    let mut bbox_max = [f64::NEG_INFINITY; 3];
+    for row in medial_view.outer_iter() {
+        for k in 0..3 {
+            if row[k] < bbox_min[k] { bbox_min[k] = row[k]; }
+            if row[k] > bbox_max[k] { bbox_max[k] = row[k]; }
+        }
+    }
+
     let mut all_vertices: Vec<[f64;3]> = Vec::new();
     let mut cell_slices: HashMap<usize,(usize,usize)> = HashMap::new();
     let cells_out = PyDict::new_bound(py);
@@ -125,6 +142,31 @@ pub fn compute_uniform_cells(
             pts_vec.push([row[0], row[1], row[2]]);
             all_vertices.push([row[0], row[1], row[2]]);
         }
+        if debug_enabled {
+            log::debug!("compute_uniform_cells seed {:?} vertices {:?}", seed, pts_vec);
+            for (vi, v) in pts_vec.iter().enumerate() {
+                if v[0] < bbox_min[0] || v[0] > bbox_max[0]
+                    || v[1] < bbox_min[1] || v[1] > bbox_max[1]
+                    || v[2] < bbox_min[2] || v[2] > bbox_max[2] {
+                    log::debug!(
+                        "compute_uniform_cells vertex {} out of bbox [{:?}, {:?}]: {:?}",
+                        vi, bbox_min, bbox_max, v
+                    );
+                }
+            }
+            let n = pts_vec.len();
+            for i in 0..n {
+                let j = (i + 1) % n;
+                if i >= n || j >= n {
+                    log::debug!(
+                        "compute_uniform_cells edge ({}, {}) invalid index (n={})",
+                        i, j, n
+                    );
+                } else {
+                    log::debug!("compute_uniform_cells edge endpoints: ({}, {})", i, j);
+                }
+            }
+        }
         let start = all_vertices.len() - pts_vec.len();
         let end = all_vertices.len();
         cell_slices.insert(idx, (start, end));
@@ -147,6 +189,20 @@ pub fn compute_uniform_cells(
     let edges = build_edge_list(&cell_slices);
     dump_data.set_item("edges", &edges)?;
     let _ = dump_fn.call1((dump_data,));
+
+    if debug_enabled {
+        let total = all_vertices.len();
+        for (a, b) in &edges {
+            if *a >= total || *b >= total {
+                log::debug!(
+                    "compute_uniform_cells global edge ({}, {}) invalid for {} vertices",
+                    a, b, total
+                );
+            } else {
+                log::debug!("compute_uniform_cells global edge endpoints: ({}, {})", a, b);
+            }
+        }
+    }
 
     if return_status && return_edges {
         let tuple = PyTuple::new_bound(py, &[
