@@ -17,25 +17,26 @@ stub_rust = types.ModuleType("ai_adapter.rust_primitives")
 stub_rust.sample_inside = lambda *args, **kwargs: []
 sys.modules["ai_adapter.rust_primitives"] = stub_rust
 
-stub_adapter = types.ModuleType("ai_adapter.csg_adapter")
-stub_adapter.review_request = lambda *args, **kwargs: ([], "")
-stub_adapter.generate_summary = lambda *args, **kwargs: ""
-stub_adapter.update_request = lambda *args, **kwargs: ([], "")
-sys.modules["ai_adapter.csg_adapter"] = stub_adapter
+# Allow tests to import the real csg_adapter now that heavy dependencies are mocked
 
 # Stub out infill generation helpers to avoid heavy dependencies.
 stub_infill = types.ModuleType("design_api.services.infill_service")
 stub_infill.generate_hex_lattice = lambda *args, **kwargs: {}
 stub_infill.generate_voronoi = lambda *args, **kwargs: {}
+stub_infill.build_hex_lattice = lambda *args, **kwargs: ([], [], [], [])
 sys.modules["design_api.services.infill_service"] = stub_infill
+import design_api.services as _services
+_services.infill_service = stub_infill
 
 # Minimal stubs for Voronoi helpers used by seed utilities.
 stub_voro_core = types.ModuleType("design_api.services.voronoi_gen.voronoi_gen")
 stub_voro_core.derive_bbox_from_primitive = lambda *args, **kwargs: ([0, 0, 0], [1, 1, 1])
+stub_voro_core.build_hex_lattice = lambda *args, **kwargs: ([], [], [], [])
 sys.modules["design_api.services.voronoi_gen.voronoi_gen"] = stub_voro_core
 stub_voro_pkg = types.ModuleType("design_api.services.voronoi_gen")
 stub_voro_pkg.voronoi_gen = stub_voro_core
 sys.modules["design_api.services.voronoi_gen"] = stub_voro_pkg
+_services.voronoi_gen = stub_voro_pkg
 
 from design_api.main import app, models, design_states
 

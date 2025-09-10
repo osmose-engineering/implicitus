@@ -5,7 +5,6 @@ from google.protobuf.json_format import ParseDict
 from ai_adapter.schema.implicitus_pb2 import Model
 import uuid
 from google.protobuf import json_format
-from ai_adapter import rust_primitives
 from constants import DEFAULT_VORONOI_SEEDS
 
 import logging
