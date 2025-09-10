@@ -380,9 +380,12 @@ function App() {
     setLoading(true);
     try {
       const parsed = JSON.parse(specText);
-      // strip any existing seed_points to avoid sending large arrays back
-      const specToSend = parsed.map(node => {
+      // strip any existing seed_points to avoid sending large arrays back,
+      // but cache them locally so we can restore after update
+      const removedSeeds: [number, number, number][][] = [];
+      const specToSend = parsed.map((node: any, idx: number) => {
         if (node.modifiers?.infill?.seed_points) {
+          removedSeeds[idx] = node.modifiers.infill.seed_points;
           const { seed_points, ...restInfill } = node.modifiers.infill;
           return {
             ...node,
@@ -407,16 +410,31 @@ function App() {
       }
       const data = await response.json();
       if (data.spec && Array.isArray(data.spec)) {
-        setSpec(data.spec);
-        setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
-        const infill = data.spec[0]?.modifiers?.infill;
+        // Reattach seed_points from response or cached copy
+        const updatedSpec = data.spec.map((node: any, idx: number) => {
+          const infill = node.modifiers?.infill;
+          const cached = removedSeeds[idx];
+          if (!infill?.seed_points && cached) {
+            if (infill) {
+              infill.seed_points = cached;
+            } else {
+              node.modifiers = { ...(node.modifiers || {}), infill: { seed_points: cached } };
+            }
+          }
+          return node;
+        });
+        setSpec(updatedSpec);
+        setSpecText(JSON.stringify(reorderSpec(updatedSpec), null, 2));
+        const infill = updatedSpec[0]?.modifiers?.infill;
         if (infill?.debug) {
 
           console.log('[design_api] debug info:', infill.debug);
 
         }
-        if (infill?.seed_points) {
-          fetchVoronoiMesh(infill.seed_points);
+        const seeds = infill?.seed_points;
+        if (seeds) {
+          setSliceSeedPoints(seeds);
+          fetchVoronoiMesh(seeds);
         }
         setIsDirty(false);
         if (data.summary) {
