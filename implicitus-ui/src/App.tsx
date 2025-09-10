@@ -154,6 +154,15 @@ function App() {
     }
   };
 
+  useEffect(() => {
+    if (sliceSeedPoints.length > 0) {
+      fetchVoronoiMesh(sliceSeedPoints);
+    } else {
+      setMeshVertices([]);
+      setMeshEdges([]);
+    }
+  }, [sliceSeedPoints]);
+
   const handleValidate = async () => {
     setError(null);
     setLoading(true);
