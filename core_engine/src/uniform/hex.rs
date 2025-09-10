@@ -1,10 +1,10 @@
+use numpy::{PyArray1, PyArray2, PyArrayMethods, PyReadonlyArray1, PyReadonlyArray2};
 use pyo3::prelude::*;
 use pyo3::types::{PyDict, PyList, PyTuple};
-use numpy::{PyReadonlyArray2, PyReadonlyArray1, PyArray1, PyArray2, PyArrayMethods};
 use std::collections::{HashMap, HashSet};
 use std::env;
 
-fn hexagon_metrics(pts: &Vec<[f64;3]>) -> (Vec<f64>, f64, f64, f64) {
+fn hexagon_metrics(pts: &Vec<[f64; 3]>) -> (Vec<f64>, f64, f64, f64) {
     let mut edges = Vec::new();
     for i in 0..pts.len() {
         let a = pts[i];
@@ -12,28 +12,42 @@ fn hexagon_metrics(pts: &Vec<[f64;3]>) -> (Vec<f64>, f64, f64, f64) {
         let dx = a[0] - b[0];
         let dy = a[1] - b[1];
         let dz = a[2] - b[2];
-        edges.push((dx*dx + dy*dy + dz*dz).sqrt());
+        edges.push((dx * dx + dy * dy + dz * dz).sqrt());
     }
     let mean = edges.iter().sum::<f64>() / edges.len() as f64;
-    let std = (edges.iter().map(|e| (e-mean).powi(2)).sum::<f64>() / edges.len() as f64).sqrt();
-    let mut centroid = [0.0f64;3];
-    for p in pts { centroid[0]+=p[0]; centroid[1]+=p[1]; centroid[2]+=p[2]; }
-    centroid[0]/=pts.len() as f64; centroid[1]/=pts.len() as f64; centroid[2]/=pts.len() as f64;
+    let std = (edges.iter().map(|e| (e - mean).powi(2)).sum::<f64>() / edges.len() as f64).sqrt();
+    let mut centroid = [0.0f64; 3];
+    for p in pts {
+        centroid[0] += p[0];
+        centroid[1] += p[1];
+        centroid[2] += p[2];
+    }
+    centroid[0] /= pts.len() as f64;
+    centroid[1] /= pts.len() as f64;
+    centroid[2] /= pts.len() as f64;
     let mut area = 0.0;
     for i in 0..pts.len() {
-        let a = [pts[i][0]-centroid[0], pts[i][1]-centroid[1], pts[i][2]-centroid[2]];
-        let b = [pts[(i+1)%pts.len()][0]-centroid[0], pts[(i+1)%pts.len()][1]-centroid[1], pts[(i+1)%pts.len()][2]-centroid[2]];
-        let cross = [
-            a[1]*b[2]-a[2]*b[1],
-            a[2]*b[0]-a[0]*b[2],
-            a[0]*b[1]-a[1]*b[0],
+        let a = [
+            pts[i][0] - centroid[0],
+            pts[i][1] - centroid[1],
+            pts[i][2] - centroid[2],
         ];
-        area += 0.5*((cross[0]*cross[0]+cross[1]*cross[1]+cross[2]*cross[2]).sqrt());
+        let b = [
+            pts[(i + 1) % pts.len()][0] - centroid[0],
+            pts[(i + 1) % pts.len()][1] - centroid[1],
+            pts[(i + 1) % pts.len()][2] - centroid[2],
+        ];
+        let cross = [
+            a[1] * b[2] - a[2] * b[1],
+            a[2] * b[0] - a[0] * b[2],
+            a[0] * b[1] - a[1] * b[0],
+        ];
+        area += 0.5 * ((cross[0] * cross[0] + cross[1] * cross[1] + cross[2] * cross[2]).sqrt());
     }
     (edges, mean, std, area)
 }
 
-fn build_edge_list(cell_slices: &HashMap<usize,(usize,usize)>) -> Vec<(usize,usize)> {
+fn build_edge_list(cell_slices: &HashMap<usize, (usize, usize)>) -> Vec<(usize, usize)> {
     let mut edges = Vec::new();
     for (_idx, &(start, end)) in cell_slices.iter() {
         for i in start..end {
@@ -41,12 +55,12 @@ fn build_edge_list(cell_slices: &HashMap<usize,(usize,usize)>) -> Vec<(usize,usi
             edges.push((i, j));
         }
     }
-    let mut seen: HashSet<(usize,usize)> = HashSet::new();
+    let mut seen: HashSet<(usize, usize)> = HashSet::new();
     let mut unique = Vec::new();
-    for (a,b) in edges {
+    for (a, b) in edges {
         let key = (a.min(b), a.max(b));
         if seen.insert(key) {
-            unique.push((a,b));
+            unique.push((a, b));
         }
     }
     unique
@@ -77,11 +91,15 @@ pub fn compute_uniform_cells(
     let trace_hexagon = module.getattr("trace_hexagon")?;
     let dump_fn = module.getattr("dump_uniform_cell_map")?;
 
-    let medial_points = compute_medial_axis.call1((imds_mesh.clone_ref(py),))?.into_py(py);
+    let medial_points = compute_medial_axis
+        .call1((imds_mesh.clone_ref(py),))?
+        .into_py(py);
 
     let seeds_arr = seeds.as_array();
     let mut seed_list: Vec<Vec<f64>> = Vec::new();
-    for row in seeds_arr.outer_iter() { seed_list.push(vec![row[0], row[1], row[2]]); }
+    for row in seeds_arr.outer_iter() {
+        seed_list.push(vec![row[0], row[1], row[2]]);
+    }
     let plane_vec = plane_normal.as_array();
     let plane_list = vec![plane_vec[0], plane_vec[1], plane_vec[2]];
 
@@ -109,13 +127,17 @@ pub fn compute_uniform_cells(
     let mut bbox_max = [f64::NEG_INFINITY; 3];
     for row in medial_view.outer_iter() {
         for k in 0..3 {
-            if row[k] < bbox_min[k] { bbox_min[k] = row[k]; }
-            if row[k] > bbox_max[k] { bbox_max[k] = row[k]; }
+            if row[k] < bbox_min[k] {
+                bbox_min[k] = row[k];
+            }
+            if row[k] > bbox_max[k] {
+                bbox_max[k] = row[k];
+            }
         }
     }
 
-    let mut all_vertices: Vec<[f64;3]> = Vec::new();
-    let mut cell_slices: HashMap<usize,(usize,usize)> = HashMap::new();
+    let mut all_vertices: Vec<[f64; 3]> = Vec::new();
+    let mut cell_slices: HashMap<usize, (usize, usize)> = HashMap::new();
     let cells_out = PyDict::new_bound(py);
 
     for (idx, seed) in seed_list.iter().enumerate() {
@@ -126,7 +148,9 @@ pub fn compute_uniform_cells(
             medial_points.clone_ref(py),
             plane_arr.into_py(py),
         ];
-        if let Some(md) = max_distance { args.push(md.into_py(py)); }
+        if let Some(md) = max_distance {
+            args.push(md.into_py(py));
+        }
         let kwargs = PyDict::new_bound(py);
         kwargs.set_item("report_method", true)?;
         kwargs.set_item("return_raw", true)?;
@@ -137,36 +161,61 @@ pub fn compute_uniform_cells(
         let raw_hex = tpl.get_item(2)?;
         let hex_array = hex_pts.downcast::<PyArray2<f64>>()?.clone();
         let hex_vec = unsafe { hex_array.as_array() };
-        let mut pts_vec: Vec<[f64;3]> = Vec::new();
+        let mut pts_vec: Vec<[f64; 3]> = Vec::new();
         for row in hex_vec.outer_iter() {
             pts_vec.push([row[0], row[1], row[2]]);
             all_vertices.push([row[0], row[1], row[2]]);
         }
         if debug_enabled {
-            log::debug!("compute_uniform_cells seed {:?} vertices {:?}", seed, pts_vec);
-            for (vi, v) in pts_vec.iter().enumerate() {
-                if v[0] < bbox_min[0] || v[0] > bbox_max[0]
-                    || v[1] < bbox_min[1] || v[1] > bbox_max[1]
-                    || v[2] < bbox_min[2] || v[2] > bbox_max[2] {
+            log::debug!(
+                "compute_uniform_cells seed {:?} vertices {:?}",
+                seed,
+                pts_vec
+            );
+        }
+
+        let mut offending_vertices: Vec<usize> = Vec::new();
+        for (vi, v) in pts_vec.iter().enumerate() {
+            if v[0] < bbox_min[0]
+                || v[0] > bbox_max[0]
+                || v[1] < bbox_min[1]
+                || v[1] > bbox_max[1]
+                || v[2] < bbox_min[2]
+                || v[2] > bbox_max[2]
+            {
+                offending_vertices.push(vi);
+                if debug_enabled {
                     log::debug!(
                         "compute_uniform_cells vertex {} out of bbox [{:?}, {:?}]: {:?}",
-                        vi, bbox_min, bbox_max, v
+                        vi,
+                        bbox_min,
+                        bbox_max,
+                        v
                     );
                 }
             }
-            let n = pts_vec.len();
-            for i in 0..n {
-                let j = (i + 1) % n;
+        }
+        let n = pts_vec.len();
+        let mut offending_edges: Vec<(usize, usize)> = Vec::new();
+        for i in 0..n {
+            let j = (i + 1) % n;
+            if offending_vertices.contains(&i) || offending_vertices.contains(&j) {
+                offending_edges.push((i, j));
+            }
+            if debug_enabled {
                 if i >= n || j >= n {
                     log::debug!(
                         "compute_uniform_cells edge ({}, {}) invalid index (n={})",
-                        i, j, n
+                        i,
+                        j,
+                        n
                     );
                 } else {
                     log::debug!("compute_uniform_cells edge endpoints: ({}, {})", i, j);
                 }
             }
         }
+        let out_of_bounds = !offending_vertices.is_empty();
         let start = all_vertices.len() - pts_vec.len();
         let end = all_vertices.len();
         cell_slices.insert(idx, (start, end));
@@ -175,6 +224,9 @@ pub fn compute_uniform_cells(
         cell_info.set_item("seed", seed)?;
         cell_info.set_item("vertices", hex_pts.clone())?;
         cell_info.set_item("raw_vertices", raw_hex)?;
+        cell_info.set_item("out_of_bounds", out_of_bounds)?;
+        cell_info.set_item("offending_vertices", offending_vertices.clone())?;
+        cell_info.set_item("offending_edges", offending_edges.clone())?;
         let metrics = PyDict::new_bound(py);
         metrics.set_item("edge_lengths", edge_lengths)?;
         metrics.set_item("mean_edge_length", mean_edge)?;
@@ -188,7 +240,9 @@ pub fn compute_uniform_cells(
 
     let edges = build_edge_list(&cell_slices);
     dump_data.set_item("edges", &edges)?;
-    let _ = dump_fn.call1((dump_data,));
+    let bbox_min_vec = vec![bbox_min[0], bbox_min[1], bbox_min[2]];
+    let bbox_max_vec = vec![bbox_max[0], bbox_max[1], bbox_max[2]];
+    let _ = dump_fn.call1((dump_data, bbox_min_vec, bbox_max_vec));
 
     if debug_enabled {
         let total = all_vertices.len();
@@ -196,36 +250,45 @@ pub fn compute_uniform_cells(
             if *a >= total || *b >= total {
                 log::debug!(
                     "compute_uniform_cells global edge ({}, {}) invalid for {} vertices",
-                    a, b, total
+                    a,
+                    b,
+                    total
                 );
             } else {
-                log::debug!("compute_uniform_cells global edge endpoints: ({}, {})", a, b);
+                log::debug!(
+                    "compute_uniform_cells global edge endpoints: ({}, {})",
+                    a,
+                    b
+                );
             }
         }
     }
 
     if return_status && return_edges {
-        let tuple = PyTuple::new_bound(py, &[
-            cells_out.clone().into_py(py),
-            edges.clone().into_py(py),
-            0i32.into_py(py),
-            PyList::empty_bound(py).into_py(py),
-        ]);
+        let tuple = PyTuple::new_bound(
+            py,
+            &[
+                cells_out.clone().into_py(py),
+                edges.clone().into_py(py),
+                0i32.into_py(py),
+                PyList::empty_bound(py).into_py(py),
+            ],
+        );
         return Ok(tuple.into_py(py));
     }
     if return_status {
-        let tuple = PyTuple::new_bound(py, &[
-            cells_out.clone().into_py(py),
-            0i32.into_py(py),
-            PyList::empty_bound(py).into_py(py),
-        ]);
+        let tuple = PyTuple::new_bound(
+            py,
+            &[
+                cells_out.clone().into_py(py),
+                0i32.into_py(py),
+                PyList::empty_bound(py).into_py(py),
+            ],
+        );
         return Ok(tuple.into_py(py));
     }
     if return_edges {
-        let tuple = PyTuple::new_bound(py, &[
-            cells_out.into_py(py),
-            edges.into_py(py),
-        ]);
+        let tuple = PyTuple::new_bound(py, &[cells_out.into_py(py), edges.into_py(py)]);
         return Ok(tuple.into_py(py));
     }
     Ok(cells_out.into_py(py))
