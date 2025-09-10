@@ -60,7 +60,9 @@ _core = _load_core_engine()
 _compute_uniform_cells_rust = _core.compute_uniform_cells
 
 
-def dump_uniform_cell_map(dump_data: Dict[str, Any]) -> None:
+def dump_uniform_cell_map(
+    dump_data: Dict[str, Any], bbox_min: Any, bbox_max: Any
+) -> None:
     """Persist uniform generation diagnostics to ``UNIFORM_CELL_DUMP.json``.
 
     The dump is written relative to the repository root if possible; otherwise
@@ -82,6 +84,14 @@ def dump_uniform_cell_map(dump_data: Dict[str, Any]) -> None:
     if repo_root is None:
         repo_root = Path.cwd()
 
+    dump_data["bbox_min"] = bbox_min
+    dump_data["bbox_max"] = bbox_max
+    cells = dump_data.get("cells", {})
+    for cell in cells.values():
+        cell.setdefault("out_of_bounds", False)
+        cell.setdefault("offending_vertices", [])
+        cell.setdefault("offending_edges", [])
+
     logging.debug("REPO ROOT: %s", repo_root)
 
     dump_path = repo_root / "logs" / "UNIFORM_CELL_DUMP.json"
@@ -100,4 +110,9 @@ def dump_uniform_cell_map(dump_data: Dict[str, Any]) -> None:
 # Expose the Rust implementation while keeping helpers available for monkeypatching
 compute_uniform_cells = _compute_uniform_cells_rust
 
-__all__ = ["compute_uniform_cells", "dump_uniform_cell_map", "compute_medial_axis", "trace_hexagon"]
+__all__ = [
+    "compute_uniform_cells",
+    "dump_uniform_cell_map",
+    "compute_medial_axis",
+    "trace_hexagon",
+]
