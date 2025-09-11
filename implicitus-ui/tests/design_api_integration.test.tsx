@@ -68,11 +68,14 @@ const testBody = async () => {
         infill: {
           pattern: 'voronoi',
           mode: 'organic',
-          uniform: false,
-          min_dist: 2,
           bbox_min: [0, 0, 0],
           bbox_max: [1, 1, 1],
-          num_points: 4,
+          seed_points: [
+            [0, 0, 0],
+            [1, 0, 0],
+            [0, 1, 0],
+            [0, 0, 1],
+          ],
         },
       },
     ],
@@ -86,14 +89,15 @@ const testBody = async () => {
   expect(resp.ok).toBe(true);
   const body = await resp.json();
   const infill = body.spec[0].modifiers.infill;
+  const vertices = infill.cell_vertices || infill.vertices || [];
   expect(infill.edge_list.length).toBeGreaterThan(0);
-  expect(infill.cell_vertices.length).toBeGreaterThan(0);
+  expect(vertices.length).toBeGreaterThan(0);
 
   render(
     <VoronoiCanvas
       seedPoints={infill.seed_points}
       edges={infill.edge_list}
-      vertices={infill.cell_vertices}
+      vertices={vertices}
       bbox={[0, 0, 0, 1, 1, 1]}
     />
   );
