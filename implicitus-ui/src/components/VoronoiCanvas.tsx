@@ -126,7 +126,8 @@ export function robustEdgeThreshold(lengths: number[], factor: number) {
 export function computeFilteredEdges(
   points: [number, number, number][],
   edges: [number, number][],
-  thresholdFactor: number = 1.5
+  thresholdFactor: number = 1.5,
+  zTolerance: number = EDGE_Z_VARIATION_TOLERANCE
 ) {
   if (!Array.isArray(edges) || edges.length === 0) return [];
   type EdgeInfo = { edge: [number, number]; length: number; vertical: boolean };
@@ -143,6 +144,10 @@ export function computeFilteredEdges(
     const dx = xi - xj,
       dy = yi - yj,
       dz = zi - zj;
+    if (Math.abs(dz) < zTolerance) {
+      // Skip edges that fail to span meaningfully in the z-axis.
+      continue;
+    }
     const length = Math.sqrt(dx * dx + dy * dy + dz * dz);
     const vertical = Math.abs(dz) > Math.max(Math.abs(dx), Math.abs(dy));
     data.push({ edge: [i, j], length, vertical });
@@ -187,6 +192,8 @@ interface VoronoiCanvasProps {
   cells?: Array<{ verts: number[][]; faces: number[][] }>;
   /** Optional multiplier for edge-length filtering */
   edgeLengthThreshold?: number;
+  /** Z-variation tolerance for filtering nearly flat edges */
+  edgeZVariationTolerance?: number;
 }
 
 // Toggle verbose logging. In the browser `process` may be undefined, so guard
@@ -213,6 +220,7 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
   infillEdges = [],
   cells = [],
   edgeLengthThreshold = 1.5,
+  edgeZVariationTolerance = EDGE_Z_VARIATION_TOLERANCE,
 }) => {
   // Strut geometry can come from either the primary vertex/edge arrays or, when
   // those are absent, from the infill geometry.  Previously we logged a warning
@@ -319,8 +327,20 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
         validEdges: edgesForStruts,
         edgeLengthThreshold,
       });
-    return computeFilteredEdges(pointsForStruts, edgesForStruts, edgeLengthThreshold);
-  }, [pointsForStruts, edgesForStruts, edgeLengthThreshold, edges, infillEdges]);
+    return computeFilteredEdges(
+      pointsForStruts,
+      edgesForStruts,
+      edgeLengthThreshold,
+      edgeZVariationTolerance
+    );
+  }, [
+    pointsForStruts,
+    edgesForStruts,
+    edgeLengthThreshold,
+    edgeZVariationTolerance,
+    edges,
+    infillEdges,
+  ]);
   DEBUG_CANVAS &&
     console.log('VoronoiCanvas filteredEdges count:', filteredEdges.length);
   DEBUG_CANVAS && console.log('VoronoiCanvas sample filteredEdges (first 5):', filteredEdges.slice(0,5));
@@ -331,18 +351,19 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
   // when a strict diagnostic flag is enabled.
   const hasFlatEdges = useMemo(() => {
     if (
-      filteredEdges.length === 0 ||
+      edgesForStruts.length === 0 ||
       pointsForStruts.length === 0 ||
       usingFallbackSeeds
-    )
+    ) {
       return false;
-    const flat = filteredEdges.some(([i, j]) => {
+    }
+    const flat = edgesForStruts.some(([i, j]) => {
       const zi = pointsForStruts[i]?.[2];
       const zj = pointsForStruts[j]?.[2];
-      return Math.abs(zi - zj) < EDGE_Z_VARIATION_TOLERANCE;
+      return Math.abs(zi - zj) < edgeZVariationTolerance;
     });
     if (flat) {
-      const msg = `VoronoiCanvas: edge z-range below tolerance (${EDGE_Z_VARIATION_TOLERANCE})`;
+      const msg = `VoronoiCanvas: edge z-range below tolerance (${edgeZVariationTolerance})`;
       if (
         typeof process !== 'undefined' &&
         process.env.VORONOI_ASSERT_Z === 'true'
@@ -352,7 +373,12 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
       console.warn(msg);
     }
     return flat;
-  }, [filteredEdges, pointsForStruts, usingFallbackSeeds]);
+  }, [
+    edgesForStruts,
+    pointsForStruts,
+    usingFallbackSeeds,
+    edgeZVariationTolerance,
+  ]);
   DEBUG_CANVAS && console.log('VoronoiCanvas hasFlatEdges:', hasFlatEdges);
   // For debug: only render seed points inside the sphere when no edges
   const debugSeedPoints = useMemo(() => {

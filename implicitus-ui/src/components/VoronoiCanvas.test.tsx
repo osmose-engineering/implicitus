@@ -33,28 +33,11 @@ describe('VoronoiCanvas filteredEdges', () => {
     const spacing = 1;
     const [pts, edges] = generateHexTest3D(bboxMin, bboxMax, spacing);
     const filtered = computeFilteredEdges(pts as any, edges as any);
-
     expect(filtered.length).toBeGreaterThan(0);
-    const lengths: number[] = [];
-    let verticalCount = 0;
     filtered.forEach(([i, j]) => {
-      const [xi, yi, zi] = pts[i];
-      const [xj, yj, zj] = pts[j];
-      const dx = xi - xj;
-      const dy = yi - yj;
-      const dz = zi - zj;
-      lengths.push(Math.sqrt(dx * dx + dy * dy + dz * dz));
-      if (Math.abs(dz) > Math.max(Math.abs(dx), Math.abs(dy))) verticalCount++;
+      const dz = Math.abs(pts[i][2] - pts[j][2]);
+      expect(dz).toBeGreaterThanOrEqual(EDGE_Z_VARIATION_TOLERANCE);
     });
-    const unique = new Set(lengths.map(l => l.toFixed(6)));
-    expect(unique.size).toBeLessThanOrEqual(2);
-    expect(verticalCount).toBeGreaterThan(0);
-
-    const g = new Graph();
-    pts.forEach((_, idx) => g.setNode(String(idx)));
-    filtered.forEach(([i, j]) => g.setEdge(String(i), String(j)));
-    const components = alg.components(g);
-    expect(components.length).toBe(1);
   });
 
   it('keeps long vertical edges that exceed horizontal lengths', () => {
@@ -78,9 +61,18 @@ describe('VoronoiCanvas filteredEdges', () => {
     ];
 
     const filtered = computeFilteredEdges(pts as any, edges as any);
-    // All edges, including the vertical one, should survive filtering.
-    expect(filtered).toContainEqual([0, 5]);
-    expect(filtered.length).toBe(edges.length);
+    // Only the vertical edge should survive filtering.
+    expect(filtered).toEqual([[0, 5]]);
+  });
+
+  it('drops edges with near-zero z variation', () => {
+    const pts = [
+      [0, 0, 0],
+      [1, 0, EDGE_Z_VARIATION_TOLERANCE / 2],
+    ];
+    const edges = [[0, 1]] as any;
+    const filtered = computeFilteredEdges(pts as any, edges);
+    expect(filtered).toHaveLength(0);
   });
 });
 
