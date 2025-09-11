@@ -42,6 +42,14 @@ def compute_uniform_cells(*args, **kwargs):
     return [], {}
 core_stub.compute_uniform_cells = compute_uniform_cells
 
+# expose stub as top-level ``core_engine`` package as well
+core_pkg_stub = types.ModuleType('core_engine')
+core_pkg_stub.prune_adjacency_via_grid = prune_adjacency_via_grid
+core_pkg_stub.OctreeNode = object
+core_pkg_stub.generate_adaptive_grid = generate_adaptive_grid
+core_pkg_stub.compute_uniform_cells = compute_uniform_cells
+sys.modules['core_engine'] = core_pkg_stub
+
 class CoreLoader(importlib.abc.Loader):
     def create_module(self, spec):
         return core_stub

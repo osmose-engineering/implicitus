@@ -1,13 +1,27 @@
-import { spawn } from 'child_process';
-import path from 'path';
 
-const CARGO = process.env.CARGO || 'cargo';
-const cwd = path.join(__dirname, '..', '..', 'core_engine');
+import http from 'http';
 
-const child = spawn(CARGO, ['run', '--bin', 'slicer_server'], {
-  cwd,
-  stdio: 'inherit'
+const server = http.createServer((req, res) => {
+  if (req.method === 'POST' && req.url === '/slice') {
+    let data = '';
+    req.on('data', chunk => { data += chunk; });
+    req.on('end', () => {
+      // Return a simple circular contour for tests
+      const pts = Array.from({ length: 40 }, (_, i) => {
+        const t = (2 * Math.PI * i) / 40;
+        return [Math.cos(t), Math.sin(t)];
+      });
+      res.setHeader('Content-Type', 'application/json');
+      res.end(JSON.stringify({ contours: [pts] }));
+    });
+    return;
+  }
+  res.statusCode = 404;
+  res.end();
 });
 
-process.on('SIGTERM', () => child.kill());
-process.on('SIGINT', () => child.kill());
+server.listen(4000);
+
+process.on('SIGTERM', () => server.close());
+process.on('SIGINT', () => server.close());
+

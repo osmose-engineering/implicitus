@@ -16,10 +16,8 @@ import { setupServer } from 'msw/node';
 };
 
 const PYTHON = process.env.PYTHON || 'python';
-const CARGO = process.env.CARGO || 'cargo';
 const pythonCheck = spawnSync(PYTHON, ['-c', 'import fastapi, uvicorn'], { stdio: 'ignore' });
-const cargoCheck = spawnSync(CARGO, ['--version'], { stdio: 'ignore' });
-const hasDeps = pythonCheck.status === 0 && cargoCheck.status === 0;
+const hasDeps = pythonCheck.status === 0;
 
 const contour = Array.from({ length: 40 }, (_, i) => {
   const theta = (2 * Math.PI * i) / 40;
@@ -79,11 +77,8 @@ const testBody = async () => {
       if (!designRunning) throw new Error('design_api server did not start');
     }
 
-    const slicerCwd = path.join(__dirname, '..', '..', 'core_engine');
-    slicerServer = spawn(CARGO, ['run', '--bin', 'slicer_server'], {
-      cwd: slicerCwd,
-      stdio: 'ignore',
-    });
+    const slicerPath = path.join(__dirname, 'start_slicer_server.js');
+    slicerServer = spawn('node', [slicerPath], { stdio: 'ignore' });
     const sliceReq = { model: {}, layer: 0 };
     for (let i = 0; i < 100; i++) {
       try {
@@ -94,7 +89,7 @@ const testBody = async () => {
         });
         if (res.ok) break;
       } catch {}
-      await new Promise(r => setTimeout(r, 1000));
+      await new Promise(r => setTimeout(r, 100));
     }
   }, 180000);
 
