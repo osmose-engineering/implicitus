@@ -122,14 +122,24 @@ function App() {
   };
 
   const fetchSlice = async (model: any) => {
-    if (!model?.id) return;
+    if (!model) return;
     try {
-      await fetch(`${API_BASE}/models`, {
+      const postResp = await fetch(`${API_BASE}/models`, {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify(model),
       });
-      const resp = await fetch(`${API_BASE}/models/${model.id}/slices?layer=0`);
+      if (!postResp.ok) {
+        setError(`Model upload failed: ${postResp.status} ${postResp.statusText}`);
+        return;
+      }
+      const postData = await postResp.json().catch(() => null);
+      const modelId = postData?.id;
+      if (!modelId) {
+        setError('Model upload response missing id');
+        return;
+      }
+      const resp = await fetch(`${API_BASE}/models/${modelId}/slices?layer=0`);
       if (!resp.ok) return;
       const data = await resp.json();
       if (data.debug) {
@@ -151,6 +161,7 @@ function App() {
       }
     } catch (err) {
       console.error('[UI] slice fetch error:', err);
+      setError('Slice fetch error');
     }
   };
 
