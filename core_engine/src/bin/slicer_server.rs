@@ -3,7 +3,7 @@
 use bytes::Bytes;
 use core_engine::implicitus::Model;
 use core_engine::slice::{slice_model, SliceConfig};
-use log::{info, warn};
+use tracing::{info, warn};
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -11,6 +11,7 @@ use std::sync::{Arc, Mutex};
 use warp::http::{Method, StatusCode};
 use warp::reject::Reject;
 use warp::Filter;
+use uuid::Uuid;
 
 #[derive(Deserialize, Serialize)]
 pub struct SliceRequest {
@@ -62,7 +63,7 @@ type JobMap = Arc<Mutex<HashMap<String, Option<VoronoiResponse>>>>;
 #[tokio::main]
 async fn main() {
     pyo3::prepare_freethreaded_python();
-    env_logger::init();
+    tracing_subscriber::fmt::init();
     // shared job state
     let jobs: JobMap = Arc::new(Mutex::new(HashMap::new()));
     let with_jobs = warp::any().map(move || jobs.clone());
@@ -124,6 +125,7 @@ pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejecti
         warn!("Failed to deserialize slice request: {}", e);
         warp::reject::custom(InvalidBody)
     })?;
+    let request_id = Uuid::new_v4().to_string();
 
     info!(
         "cell_vertices len: {:?}, edge_list len: {:?}",
@@ -137,6 +139,7 @@ pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejecti
         &req._model,
         req.cell_vertices.as_deref(),
         req.edge_list.as_deref(),
+        &request_id,
     );
 
     let model_id = if req._model.id.is_empty() {
@@ -145,8 +148,9 @@ pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejecti
         req._model.id.clone()
     };
 
-    info!("Slice request for model ID: {}", model_id);
+    info!(request_id = %request_id, "Slice request for model ID: {}", model_id);
     info!(
+        request_id = %request_id,
         "parse_infill -> seed_count: {}, first_seeds: {:?}, pattern: {:?}, wall_thickness: {}, mode: {:?}",
         seed_points.len(),
         seed_points.iter().take(3).collect::<Vec<_>>(),
@@ -156,7 +160,7 @@ pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejecti
     );
 
     if seed_points.is_empty() {
-        warn!("No seed points found for model ID {}", model_id);
+        warn!(request_id = %request_id, "No seed points found for model ID {}", model_id);
     }
 
     // Include seed points in the debug response by default. This can be disabled
@@ -280,6 +284,7 @@ pub fn parse_infill(
     model: &Model,
     cell_vertices: Option<&[(f64, f64, f64)]>,
     edge_list: Option<&[(usize, usize)]>,
+    request_id: &str,
 ) -> (
     Vec<(f64, f64, f64)>,
     Option<String>,
@@ -402,11 +407,23 @@ pub fn parse_infill(
         for (i, j) in edges {
             if seen.insert(*i) {
                 if let Some(v) = verts.get(*i) {
+                    info!(
+                        request_id = request_id,
+                        seed_point = ?v,
+                        edge_indices = ?(*i, *j),
+                        "derived_seed_from_edge"
+                    );
                     seeds.push(*v);
                 }
             }
             if seen.insert(*j) {
                 if let Some(v) = verts.get(*j) {
+                    info!(
+                        request_id = request_id,
+                        seed_point = ?v,
+                        edge_indices = ?(*i, *j),
+                        "derived_seed_from_edge"
+                    );
                     seeds.push(*v);
                 }
             }
@@ -419,13 +436,16 @@ pub fn parse_infill(
         });
         if out_of_bounds {
             warn!(
+                request_id = request_id,
                 "parse_infill: seed points outside bbox_min={:?} bbox_max={:?}",
-                bmin, bmax
+                bmin,
+                bmax
             );
         }
     }
 
     info!(
+        request_id = request_id,
         "parse_infill: bbox_min={:?} bbox_max={:?} mode={:?} first_seeds={:?}",
         bbox_min,
         bbox_max,
@@ -468,5 +488,47 @@ mod tests {
         let res = request().path("/voronoi/status/test").reply(&api).await;
 
         assert_eq!(res.status(), StatusCode::INTERNAL_SERVER_ERROR);
+    }
+
+    #[test]
+    fn logs_seed_extraction_from_edges() {
+        use std::io::Write;
+        use std::sync::{Arc, Mutex};
+        use tracing_subscriber::fmt::MakeWriter;
+
+        #[derive(Clone)]
+        struct Buf(Arc<Mutex<Vec<u8>>>);
+        impl<'a> MakeWriter<'a> for Buf {
+            type Writer = BufWriter;
+            fn make_writer(&'a self) -> Self::Writer {
+                BufWriter(self.0.clone())
+            }
+        }
+        struct BufWriter(Arc<Mutex<Vec<u8>>>);
+        impl Write for BufWriter {
+            fn write(&mut self, buf: &[u8]) -> std::io::Result<usize> {
+                self.0.lock().unwrap().extend_from_slice(buf);
+                Ok(buf.len())
+            }
+            fn flush(&mut self) -> std::io::Result<()> {
+                Ok(())
+            }
+        }
+
+        let buffer = Arc::new(Mutex::new(Vec::new()));
+        let make = Buf(buffer.clone());
+        let subscriber = tracing_subscriber::fmt().with_writer(make).finish();
+        let request_id = "test-req";
+
+        tracing::subscriber::with_default(subscriber, || {
+            let model = Model::default();
+            let verts = vec![(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)];
+            let edges = vec![(0usize, 1usize)];
+            let _ = parse_infill(&model, Some(&verts), Some(&edges), request_id);
+        });
+
+        let logs = String::from_utf8(buffer.lock().unwrap().clone()).unwrap();
+        assert!(logs.contains("test-req"), "logs: {}", logs);
+        assert!(logs.contains("edge_indices"), "logs: {}", logs);
     }
 }

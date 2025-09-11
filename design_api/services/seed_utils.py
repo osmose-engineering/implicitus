@@ -2,10 +2,16 @@ from __future__ import annotations
 
 from typing import Any, Dict, List, Optional, Tuple
 
+import logging
+import uuid
+
 import numpy as np
 
 from constants import DEFAULT_VORONOI_SEEDS
 from .voronoi_gen.voronoi_gen import derive_bbox_from_primitive
+
+
+logger = logging.getLogger(__name__)
 
 def resolve_seed_spec(
     primitive: Dict[str, Any],
@@ -16,6 +22,7 @@ def resolve_seed_spec(
     spacing: Optional[float] = None,
     mode: Optional[str] = None,
     uniform: Optional[Any] = None,
+    request_id: Optional[str] = None,
 ) -> Dict[str, Any]:
     """Normalize seed generation parameters for lattice construction.
 
@@ -76,6 +83,19 @@ def resolve_seed_spec(
 
     spacing = spacing or 2.0
 
+    request_id = request_id or str(uuid.uuid4())
+
+    if mode == "uniform" and seed_points:
+        for idx, pt in enumerate(seed_points):
+            logger.info(
+                "uniform_seed_point",
+                extra={
+                    "request_id": request_id,
+                    "seed_index": idx,
+                    "seed_point": pt,
+                },
+            )
+
     return {
         "bbox_min": bbox_min,
         "bbox_max": bbox_max,
@@ -83,4 +103,5 @@ def resolve_seed_spec(
         "num_points": num_points,
         "spacing": spacing,
         "mode": mode,
+        "request_id": request_id,
     }
