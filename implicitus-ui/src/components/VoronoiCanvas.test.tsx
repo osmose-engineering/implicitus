@@ -151,3 +151,55 @@ describe('VoronoiCanvas warning', () => {
     delete process.env.VORONOI_ASSERT_Z;
   });
 });
+
+describe('VoronoiCanvas DOM rendering', () => {
+  it('renders the expected number of vertices and edges', async () => {
+    vi.resetModules();
+    vi.doMock('./VoronoiStruts', () => ({
+      VoronoiStruts: ({ vertices, edges }: any) => (
+        <svg data-testid="voronoi-svg">
+          {vertices.map((_: any, i: number) => (
+            <circle key={`v-${i}`} />
+          ))}
+          {edges.map((_: any, i: number) => (
+            <line key={`e-${i}`} />
+          ))}
+        </svg>
+      ),
+    }));
+    vi.doMock('@react-three/fiber', () => ({
+      Canvas: ({ children }: any) => <div>{children}</div>,
+      extend: () => {},
+    }));
+    vi.doMock('@react-three/drei', async () => {
+      const actual = await vi.importActual<any>('@react-three/drei');
+      return {
+        ...actual,
+        OrbitControls: () => <div />,
+      };
+    });
+    const { default: MockedVoronoiCanvas } = await import('./VoronoiCanvas');
+    const vertices: [number, number, number][] = [
+      [0, 0, 0],
+      [1, 0, 1],
+      [2, 0, 2],
+    ];
+    const edges: [number, number][] = [
+      [0, 1],
+      [1, 2],
+    ];
+    render(
+      <MockedVoronoiCanvas
+        seedPoints={vertices}
+        vertices={vertices}
+        edges={edges}
+        bbox={[0, 0, 0, 1, 1, 1]}
+        showStruts
+      />
+    );
+    const svg = screen.getByTestId('voronoi-svg');
+    expect(svg.querySelectorAll('circle')).toHaveLength(vertices.length);
+    expect(svg.querySelectorAll('line')).toHaveLength(edges.length);
+    vi.resetModules();
+  });
+});

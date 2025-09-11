@@ -38,6 +38,10 @@ If the rendering changes intentionally, update the snapshot with:
 npx playwright test tests/voronoi_canvas.visual.spec.ts --update-snapshots
 ```
 
+Baseline images live in `tests/__screenshots__/`. After modifying the rendering
+intentionally, regenerate these screenshots with the command above and commit
+the updated files.
+
 ### Integration test binaries
 
 Some tests spawn helper servers implemented in Python and Rust. The paths to

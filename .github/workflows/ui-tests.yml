@@ -1,0 +1,30 @@
+name: UI Tests
+
+on:
+  push:
+    paths:
+      - 'implicitus-ui/**'
+      - '.github/workflows/ui-tests.yml'
+  pull_request:
+    paths:
+      - 'implicitus-ui/**'
+      - '.github/workflows/ui-tests.yml'
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 18
+      - name: Install dependencies
+        run: |
+          cd implicitus-ui
+          npm ci
+          npx playwright install --with-deps
+      - name: Run unit and visual tests
+        run: |
+          cd implicitus-ui
+          npm test
+          npx playwright test

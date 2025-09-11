@@ -45,4 +45,5 @@ test('VoronoiCanvas visual regression', async ({ page }) => {
   await expect(root).toHaveAttribute('data-has-flat-edges', 'false');
   const canvas = page.locator('canvas');
   await expect(canvas).toHaveScreenshot('voronoi-canvas-baseline.png');
+  await expect(page).toHaveScreenshot('voronoi-canvas-seeds.png');
 });

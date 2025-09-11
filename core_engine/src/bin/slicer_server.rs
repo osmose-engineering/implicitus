@@ -3,6 +3,9 @@
 use bytes::Bytes;
 use core_engine::implicitus::Model;
 use core_engine::slice::{slice_model, SliceConfig};
+
+use tracing::{info, warn};
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -14,6 +17,7 @@ use uuid::Uuid;
 use warp::http::{Method, StatusCode};
 use warp::reject::Reject;
 use warp::Filter;
+use uuid::Uuid;
 
 #[derive(Deserialize, Serialize)]
 pub struct SliceRequest {
@@ -80,7 +84,9 @@ fn init_logging() -> WorkerGuard {
 #[tokio::main]
 async fn main() {
     pyo3::prepare_freethreaded_python();
+
     let _guard = init_logging();
+
     // shared job state
     let jobs: JobMap = Arc::new(Mutex::new(HashMap::new()));
     let with_jobs = warp::any().map(move || jobs.clone());
@@ -454,7 +460,9 @@ pub fn parse_infill(
         if out_of_bounds {
             warn!(
                 request_id = request_id,
+
                 "parse_infill: seed points outside bbox_min={:?} bbox_max={:?}", bmin, bmax
+
             );
         }
     }
@@ -547,6 +555,7 @@ mod tests {
         assert!(logs.contains("edge_indices"), "logs: {}", logs);
     }
 
+
     #[test]
     fn writes_log_file_in_home_dir() {
         use std::fs;
@@ -569,4 +578,5 @@ mod tests {
         let contents = fs::read_to_string(log_path).expect("log file exists");
         assert!(contents.contains("file logging test"));
     }
+
 }
