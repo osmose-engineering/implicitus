@@ -57,6 +57,29 @@ def fake_find_spec(name, package=None):
 importlib.util.find_spec = fake_find_spec
 sys.modules['core_engine.core_engine'] = core_stub
 
+# stub voronoi_gen to avoid compiling additional Rust extensions
+voronoi_stub = types.ModuleType('design_api.services.voronoi_gen.voronoi_gen')
+def compute_voronoi_adjacency(pts, *args, **kwargs):
+    edges = []
+    for i in range(len(pts)):
+        for j in range(i + 1, len(pts)):
+            edges.append((i, j))
+    return edges
+def build_hex_lattice(*args, **kwargs):
+    return [], [], [], {}
+def primitive_to_imds_mesh(*args, **kwargs):
+    return None
+def derive_bbox_from_primitive(*args, **kwargs):
+    return (0.0, 0.0, 0.0), (0.0, 0.0, 0.0)
+def point_in_primitive(*args, **kwargs):
+    return True
+voronoi_stub.compute_voronoi_adjacency = compute_voronoi_adjacency
+voronoi_stub.build_hex_lattice = build_hex_lattice
+voronoi_stub.primitive_to_imds_mesh = primitive_to_imds_mesh
+voronoi_stub.derive_bbox_from_primitive = derive_bbox_from_primitive
+voronoi_stub.point_in_primitive = point_in_primitive
+sys.modules['design_api.services.voronoi_gen.voronoi_gen'] = voronoi_stub
+
 from design_api.main import app
 import uvicorn
 
