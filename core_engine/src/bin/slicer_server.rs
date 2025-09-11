@@ -3,11 +3,17 @@
 use bytes::Bytes;
 use core_engine::implicitus::Model;
 use core_engine::slice::{slice_model, SliceConfig};
+
 use tracing::{info, warn};
+
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
 use std::sync::{Arc, Mutex};
+use tracing::{info, warn};
+use tracing_appender::non_blocking::WorkerGuard;
+use tracing_subscriber::{fmt, layer::SubscriberExt, util::SubscriberInitExt};
+use uuid::Uuid;
 use warp::http::{Method, StatusCode};
 use warp::reject::Reject;
 use warp::Filter;
@@ -60,10 +66,27 @@ struct VoronoiResponse {
 
 type JobMap = Arc<Mutex<HashMap<String, Option<VoronoiResponse>>>>;
 
+fn init_logging() -> WorkerGuard {
+    let home_dir = std::env::var("HOME").unwrap_or_else(|_| ".".into());
+    let file_appender = tracing_appender::rolling::never(&home_dir, "slicer_server.log");
+    let (non_blocking, guard) = tracing_appender::non_blocking(file_appender);
+    let file_layer = fmt::layer().with_writer(non_blocking).with_ansi(false);
+    let stdout_layer = fmt::layer();
+
+    tracing_subscriber::registry()
+        .with(stdout_layer)
+        .with(file_layer)
+        .init();
+
+    guard
+}
+
 #[tokio::main]
 async fn main() {
     pyo3::prepare_freethreaded_python();
-    tracing_subscriber::fmt::init();
+
+    let _guard = init_logging();
+
     // shared job state
     let jobs: JobMap = Arc::new(Mutex::new(HashMap::new()));
     let with_jobs = warp::any().map(move || jobs.clone());
@@ -437,9 +460,9 @@ pub fn parse_infill(
         if out_of_bounds {
             warn!(
                 request_id = request_id,
-                "parse_infill: seed points outside bbox_min={:?} bbox_max={:?}",
-                bmin,
-                bmax
+
+                "parse_infill: seed points outside bbox_min={:?} bbox_max={:?}", bmin, bmax
+
             );
         }
     }
@@ -531,4 +554,29 @@ mod tests {
         assert!(logs.contains("test-req"), "logs: {}", logs);
         assert!(logs.contains("edge_indices"), "logs: {}", logs);
     }
+
+
+    #[test]
+    fn writes_log_file_in_home_dir() {
+        use std::fs;
+        use std::time::Duration;
+
+        let tmp = std::env::temp_dir().join("slicer_log_test");
+        let _ = fs::create_dir_all(&tmp);
+        std::env::set_var("HOME", &tmp);
+
+        {
+            let guard = init_logging();
+            tracing::info!("file logging test");
+            drop(guard);
+        }
+
+        // Allow background logging thread to flush
+        std::thread::sleep(Duration::from_millis(100));
+
+        let log_path = tmp.join("slicer_server.log");
+        let contents = fs::read_to_string(log_path).expect("log file exists");
+        assert!(contents.contains("file logging test"));
+    }
+
 }
