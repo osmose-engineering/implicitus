@@ -5,7 +5,9 @@
       "size_mm": 10,
       "infill": {
         "pattern": "voronoi",
+
         "mode": "organic",
+
         "seed_points": [
           [0, 0, 0],
           [1, 0, 0],
