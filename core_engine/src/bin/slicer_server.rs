@@ -4,8 +4,6 @@ use bytes::Bytes;
 use core_engine::implicitus::Model;
 use core_engine::slice::{slice_model, SliceConfig};
 
-use tracing::{info, warn};
-
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
 use std::collections::{HashMap, HashSet};
@@ -17,7 +15,6 @@ use uuid::Uuid;
 use warp::http::{Method, StatusCode};
 use warp::reject::Reject;
 use warp::Filter;
-use uuid::Uuid;
 
 #[derive(Deserialize, Serialize)]
 pub struct SliceRequest {
