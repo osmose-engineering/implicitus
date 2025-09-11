@@ -37,8 +37,11 @@ def _map_base_shape(spec: dict) -> dict:
         raise SomeMappingError(f"Unknown shape: {shape}")
     return {'id': id_str, 'root': {'primitive': primitive}}
 
-def map_primitive(node: dict) -> dict:
-    logger.debug(f"map_primitive called with node: {node}")
+def map_primitive(node: dict, request_id: str | None = None) -> dict:
+    logger.debug(
+        "map_primitive called",
+        extra={"request_id": request_id, "node": node},
+    )
     """
     Convert a primitive node with optional modifiers into a proto-ready dict.
     Applies modifiers in order: shell -> infill -> boolean.
@@ -78,12 +81,15 @@ def map_primitive(node: dict) -> dict:
         shell_params = modifiers['shell']
         root = {
             "booleanOp": {"union": {}},
-            "children": [root, {"primitive": {"shell": shell_params}}]
+            "children": [root, {"primitive": {"shell": shell_params}}],
         }
 
     # Apply infill modifier (supports Voronoi)
     if 'infill' in modifiers:
-        logger.debug(f"Applying infill with params: {modifiers.get('infill')}")
+        logger.debug(
+            "Applying infill",
+            extra={"request_id": request_id, "params": modifiers.get("infill")},
+        )
         infill_params = modifiers['infill']
         if 'bboxMin' in infill_params or 'bboxMax' in infill_params:
             raise SomeMappingError("Bounding box keys must use snake_case (bbox_min/bbox_max)")
@@ -100,12 +106,12 @@ def map_primitive(node: dict) -> dict:
         bool_params = modifiers['boolean_op']
         root = {
             "booleanOp": {bool_params['op']: {}},
-            "children": [root, map_primitive(bool_params['shape_node'])]
+            "children": [root, map_primitive(bool_params['shape_node'], request_id=request_id)]
         }
 
     # Return final wrapped dict
     mapped['root'] = root
-    logger.debug(f"map_primitive output mapped: {mapped}")
+    logger.debug("map_primitive output mapped", extra={"request_id": request_id, "mapped": mapped})
     return mapped
 
 def get_response_fields(proto_model):
@@ -139,13 +145,17 @@ def get_response_fields(proto_model):
 
 
 # New function for mapping spec to proto dict model
-def map_to_proto_dict(spec):
-    logger.debug(f"map_to_proto_dict called with spec: {spec}")
+def map_to_proto_dict(spec, request_id: str | None = None):
+    request_id = request_id or str(uuid.uuid4())
+    logger.debug(
+        "map_to_proto_dict called",
+        extra={"request_id": request_id, "spec": spec},
+    )
     """
     Convert a spec (dict or list of specs) into a full Model dict ready for JSON-to-proto.
     If multiple primitives, wraps them in a union booleanOp under root.
     """
-    mapped = map_primitive(spec)
+    mapped = map_primitive(spec, request_id=request_id)
     # If map_primitive returned a list, wrap in a union op
     if isinstance(mapped, list):
         model_id = str(uuid.uuid4())
@@ -156,5 +166,23 @@ def map_to_proto_dict(spec):
                 "children": mapped
             }
         }
+    # Log uniform seed points and associated lattice data when present
+    infill = spec.get("modifiers", {}).get("infill", {}) if isinstance(spec, dict) else {}
+    seeds = infill.get("seed_points") or []
+    cell_vertices = infill.get("cell_vertices") or []
+    edge_list = infill.get("edge_list") or []
+    if seeds and cell_vertices and edge_list:
+        for idx, seed in enumerate(seeds):
+            logger.info(
+                "uniform_seed_cell",
+                extra={
+                    "request_id": request_id,
+                    "seed_index": idx,
+                    "seed_point": seed,
+                    "cell_vertices": cell_vertices,
+                    "edge_indices": edge_list,
+                },
+            )
+
     # Otherwise it's already a single-node dict
     return mapped
