@@ -48,7 +48,7 @@ import React, { useState, useRef, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
 import './App.css'
-import VoronoiCanvas from './components/VoronoiCanvas';
+import VoronoiCanvas, { EDGE_Z_VARIATION_TOLERANCE } from './components/VoronoiCanvas';
 import { Checkbox } from './components/UI';
 import { Tabs, TabList, Tab, TabPanel } from 'react-tabs';
 import 'react-tabs/style/react-tabs.css';
@@ -101,6 +101,7 @@ function App() {
   const [showRaymarch, setShowRaymarch] = useState(true);
   const [showStruts, setShowStruts]     = useState(false);
   const [strutRadius, setStrutRadius]   = useState(0.02);
+  const [edgeZTolerance, setEdgeZTolerance] = useState(EDGE_Z_VARIATION_TOLERANCE);
 
   const [tabIndex, setTabIndex] = useState(1);
 
@@ -651,6 +652,17 @@ function App() {
               />
               Show Infill
             </label>
+            <label style={{ marginLeft: '1em' }}>
+              Z Tol:
+              <input
+                type="number"
+                value={edgeZTolerance}
+                step={1e-6}
+                min={0}
+                onChange={e => setEdgeZTolerance(e.target.valueAsNumber)}
+                style={{ width: '6em', marginLeft: '0.5em' }}
+              />
+            </label>
           </div>
 
           {/* Tabbed preview: Ray-March and Strut views */}
@@ -676,6 +688,7 @@ function App() {
                   showInfill={visibility.infill}
                   showRaymarch={true}
                   showStruts={false}
+                  edgeZVariationTolerance={edgeZTolerance}
                 />
               )}
             </TabPanel>
@@ -698,6 +711,7 @@ function App() {
                   showStruts={true}
                   strutRadius={strutRadius}
                   strutColor="white"
+                  edgeZVariationTolerance={edgeZTolerance}
                 />
               )}
             </TabPanel>
