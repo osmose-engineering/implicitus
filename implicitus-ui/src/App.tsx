@@ -141,7 +141,13 @@ function App() {
         return;
       }
       const resp = await fetch(`${API_BASE}/models/${modelId}/slices?layer=0`);
-      if (!resp.ok) return;
+      if (!resp.ok) {
+        const text = await resp.text();
+        const msg = `Slice request failed: ${resp.status} ${resp.statusText} - ${text}`;
+        console.error('[UI] slice request failed:', msg);
+        setError(msg);
+        throw new Error(msg);
+      }
       const data = await resp.json();
       if (data.debug) {
         console.log('[design_api] debug info:', data.debug);
@@ -160,9 +166,10 @@ function App() {
         console.warn('[design_api] no seed points found in slice response');
         setError('No seed points found in slice response');
       }
-    } catch (err) {
+    } catch (err: any) {
       console.error('[UI] slice fetch error:', err);
-      setError('Slice fetch error');
+      setError(err.message || 'Slice fetch error');
+      throw err;
     }
   };
 
@@ -290,7 +297,7 @@ function App() {
         if (infill?.seed_points) {
           fetchVoronoiMesh(infill.seed_points);
         }
-        fetchSlice({ id: 'preview', root: { children: data.spec } });
+        await fetchSlice({ id: 'preview', root: { children: data.spec } });
         if (data.summary) {
           setSummary(data.summary);
           setMessages(prev => [...prev, { speaker: 'assistant', text: data.summary }]);
@@ -378,7 +385,7 @@ function App() {
       }
       setModelProto(data);
       if (data.locked_model) {
-        fetchSlice(data.locked_model);
+        await fetchSlice(data.locked_model);
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred during confirm');
