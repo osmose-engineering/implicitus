@@ -503,11 +503,14 @@ pub fn parse_infill(
     }
 
     if let Some(cells_data) = cells {
-        let mut seen = HashSet::new();
         for cell in cells_data {
             for v in &cell.vertices {
-                let key = (v.x.to_bits(), v.y.to_bits(), v.z.to_bits());
-                if seen.insert(key) {
+                let key = (
+                    (v.x * 1e6).round() as i64,
+                    (v.y * 1e6).round() as i64,
+                    (v.z * 1e6).round() as i64,
+                );
+                if seed_set.insert(key) {
                     let pt = (v.x, v.y, v.z);
                     info!(
                         request_id = request_id,
