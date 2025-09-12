@@ -238,6 +238,56 @@ def test_slice_forwards_cells(client, monkeypatch):
     assert capture["json"]["cells"] == expected
 
 
+def test_slice_accepts_dict_cells(client, monkeypatch):
+    capture = {}
+    cells_raw = {
+        "0": {
+            "vertices": [[0.1, 0.2, 0.3], [1.0, 1.1, 1.2], [2.0, 2.1, 2.2]],
+            "faces": [[0, 1, 2]],
+        }
+    }
+
+    from design_api.services.validator import validate_model_spec as real_validate
+
+    def check_validate(model, ignore_unknown_fields=True):
+        import json as _json
+        assert "cells" not in _json.dumps(model)
+        return real_validate(model, ignore_unknown_fields=ignore_unknown_fields)
+
+    monkeypatch.setattr("design_api.main.validate_proto", check_validate)
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: DummyClient(capture))
+
+    client.post(
+        "/models",
+        json={
+            "id": "abc",
+            "version": 1,
+            "root": {
+                "children": [
+                    {
+                        "primitive": {"sphere": {"radius": 1.0}},
+                        "modifiers": {"infill": {"pattern": "hex", "cells": cells_raw}},
+                    }
+                ]
+            },
+        },
+    )
+
+    resp = client.get("/models/abc/slices?layer=0")
+    assert resp.status_code == 200
+    expected = [
+        {
+            "vertices": [
+                {"x": 0.1, "y": 0.2, "z": 0.3},
+                {"x": 1.0, "y": 1.1, "z": 1.2},
+                {"x": 2.0, "y": 2.1, "z": 2.2},
+            ],
+            "faces": [{"vertex_indices": [0, 1, 2]}],
+        }
+    ]
+    assert capture["json"]["cells"] == expected
+
+
 def test_slice_missing_model_returns_404(client):
     resp = client.get("/models/missing/slices?layer=1.0")
     assert resp.status_code == 404
