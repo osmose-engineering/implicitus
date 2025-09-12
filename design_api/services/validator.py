@@ -48,6 +48,40 @@ def _validate_seed_points(obj: Any) -> None:
         for item in obj:
             _validate_seed_points(item)
 
+
+def _validate_edge_indices(obj: Any) -> None:
+    """Recursively ensure all edges reference valid vertex indices.
+
+    Parameters
+    ----------
+    obj:
+        Portion of the spec dictionary to inspect.
+
+    Raises
+    ------
+    ValidationError
+        If any edge index is outside the bounds of ``cell_vertices``.
+    """
+
+    if isinstance(obj, dict):
+        edges = obj.get("edge_list")
+        verts = obj.get("cell_vertices")
+        if isinstance(edges, list) and isinstance(verts, list):
+            n = len(verts)
+            for edge in edges:
+                if not isinstance(edge, (list, tuple)):
+                    continue
+                for idx in edge:
+                    if not isinstance(idx, int) or idx < 0 or idx >= n:
+                        raise ValidationError(
+                            f"Edge index {idx} out of bounds for cell_vertices of length {n}"
+                        )
+        for v in obj.values():
+            _validate_edge_indices(v)
+    elif isinstance(obj, list):
+        for item in obj:
+            _validate_edge_indices(item)
+
 def validate_model_spec(spec_dict: dict, ignore_unknown_fields: bool = False) -> Model:
     """Validate and convert a raw JSON spec dictionary into a protobuf ``Model``.
 
@@ -105,6 +139,7 @@ def validate_model_spec(spec_dict: dict, ignore_unknown_fields: bool = False) ->
     _normalize_modifiers(spec_dict)
     _ensure_snake_case(spec_dict)
     _validate_seed_points(spec_dict)
+    _validate_edge_indices(spec_dict)
 
     logging.debug("Normalized spec: %s", reprlib.repr(spec_dict))
 
