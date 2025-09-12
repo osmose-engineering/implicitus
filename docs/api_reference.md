@@ -1,8 +1,11 @@
 
 ## Mesh Generation Fields
 
-The `design/mesh` endpoint exposes several controls for seed sampling:
+The `design/mesh` endpoint exposes several controls for seed sampling. Only the
+following keys are interpreted; any additional fields are ignored:
 
+- `pattern` – currently only `"voronoi"` is supported (with `"honeycomb"`
+  mapped to `"voronoi"`).
 - `mode` – either `"uniform"` or `"organic"`. Defaults to `"uniform"`.
 - `num_points` – desired number of seed points. Defaults to
   `DEFAULT_VORONOI_SEEDS` when omitted.
@@ -12,6 +15,9 @@ The `design/mesh` endpoint exposes several controls for seed sampling:
 - `spacing` or `min_dist` – override the spacing inference. When both are
   omitted and only `num_points` is supplied, spacing is estimated from the
   bounding‑box volume so that fewer points produce a coarser lattice.
+
+Internal flags used in earlier revisions (for example, `_is_voronoi`) are no
+longer recognized.
 
 ## Voronoi Generation Parameters
 

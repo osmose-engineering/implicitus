@@ -15,7 +15,7 @@ function reorderInfillKeys(node: any) {
   }
   const ordered: any = {};
   const primaryKeys = [
-    'pattern','_is_voronoi','spacing','wall_thickness',
+    'pattern','spacing','wall_thickness',
     'uniform','num_points','adaptive','max_depth',
     'threshold','resolution','shell_offset','auto_cap'
   ];
