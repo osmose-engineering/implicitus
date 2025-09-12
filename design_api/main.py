@@ -553,7 +553,12 @@ async def review(req: dict, sid: Optional[str] = Query(None)):
         save_rendered_spec(sid, wrapped)
 
         log_turn(sid, "review", req.get("raw", ""), wrapped, summary=summary)
-        return {"sid": sid, "spec": wrapped, "summary": summary}
+        return {
+            "sid": sid,
+            "version": SPEC_VERSION,
+            "spec": spec,
+            "summary": summary,
+        }
     except HTTPException:
         # propagate intentional HTTP errors without remapping to 500s
         raise
@@ -669,7 +674,12 @@ async def update(req: UpdateRequest, sid: str = Query(...)):
     wrapped = _wrap_spec(new_spec)
     save_rendered_spec(sid, wrapped)
     log_turn(sid, "update", req.raw, wrapped)
-    return {"sid": sid, "spec": wrapped, "summary": new_summary}
+    return {
+        "sid": sid,
+        "version": SPEC_VERSION,
+        "spec": new_spec,
+        "summary": new_summary,
+    }
 
 
 # New endpoint: submit final model
