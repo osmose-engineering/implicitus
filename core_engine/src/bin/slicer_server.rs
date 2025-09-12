@@ -17,6 +17,25 @@ use warp::reject::Reject;
 use warp::Filter;
 
 #[derive(Deserialize, Serialize)]
+pub struct Point3D {
+    pub x: f64,
+    pub y: f64,
+    pub z: f64,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct Face {
+    #[serde(rename = "vertex_indices")]
+    pub vertex_indices: Vec<usize>,
+}
+
+#[derive(Deserialize, Serialize)]
+pub struct Cell3D {
+    pub vertices: Vec<Point3D>,
+    pub faces: Vec<Face>,
+}
+
+#[derive(Deserialize, Serialize)]
 pub struct SliceRequest {
     #[serde(rename = "model")]
     pub _model: Model,
@@ -33,6 +52,7 @@ pub struct SliceRequest {
 
     pub cell_vertices: Option<Vec<(f64, f64, f64)>>,
     pub edge_list: Option<Vec<(usize, usize)>>,
+    pub cells: Option<Vec<Cell3D>>,
 }
 
 #[derive(Serialize, Deserialize, Debug)]
@@ -148,9 +168,10 @@ pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejecti
     let request_id = Uuid::new_v4().to_string();
 
     info!(
-        "cell_vertices len: {:?}, edge_list len: {:?}",
+        "cell_vertices len: {:?}, edge_list len: {:?}, cells len: {:?}",
         req.cell_vertices.as_ref().map(|v| v.len()),
-        req.edge_list.as_ref().map(|e| e.len())
+        req.edge_list.as_ref().map(|e| e.len()),
+        req.cells.as_ref().map(|c| c.len())
     );
 
     // Pull out infill or lattice data to forward to the slice configuration
@@ -159,6 +180,7 @@ pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejecti
         &req._model,
         req.cell_vertices.as_deref(),
         req.edge_list.as_deref(),
+        req.cells.as_deref(),
         &request_id,
     );
 
@@ -304,6 +326,7 @@ pub fn parse_infill(
     model: &Model,
     cell_vertices: Option<&[(f64, f64, f64)]>,
     edge_list: Option<&[(usize, usize)]>,
+    cells: Option<&[Cell3D]>,
     request_id: &str,
 ) -> (
     Vec<(f64, f64, f64)>,
@@ -450,6 +473,24 @@ pub fn parse_infill(
         }
     }
 
+    if let Some(cells_data) = cells {
+        let mut seen = HashSet::new();
+        for cell in cells_data {
+            for v in &cell.vertices {
+                let key = (v.x.to_bits(), v.y.to_bits(), v.z.to_bits());
+                if seen.insert(key) {
+                    let pt = (v.x, v.y, v.z);
+                    info!(
+                        request_id = request_id,
+                        seed_point = ?pt,
+                        "derived_seed_from_cell"
+                    );
+                    seeds.push(pt);
+                }
+            }
+        }
+    }
+
     if let (Some(bmin), Some(bmax)) = (bbox_min, bbox_max) {
         let out_of_bounds = seeds.iter().any(|&(x, y, z)| {
             x < bmin.0 || x > bmax.0 || y < bmin.1 || y > bmax.1 || z < bmin.2 || z > bmax.2
@@ -544,7 +585,7 @@ mod tests {
             let model = Model::default();
             let verts = vec![(0.0, 0.0, 0.0), (1.0, 0.0, 0.0)];
             let edges = vec![(0usize, 1usize)];
-            let _ = parse_infill(&model, Some(&verts), Some(&edges), request_id);
+            let _ = parse_infill(&model, Some(&verts), Some(&edges), None, request_id);
         });
 
         let logs = String::from_utf8(buffer.lock().unwrap().clone()).unwrap();

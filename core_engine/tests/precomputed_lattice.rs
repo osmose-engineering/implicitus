@@ -44,9 +44,10 @@ async fn handle_slice_derives_seeds_from_lattice() {
         nx: None,
         ny: None,
         bbox_min: None,
-        bbox_max: None,
+       bbox_max: None,
         cell_vertices: Some(vec![(0.0, 0.0, 0.0), (1.0, 0.0, 0.0), (0.0, 1.0, 0.0)]),
         edge_list: Some(vec![(0usize, 1usize), (1, 2)]),
+        cells: None,
     };
 
     let body = serde_json::to_vec(&req).unwrap();
