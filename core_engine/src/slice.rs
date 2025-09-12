@@ -13,6 +13,7 @@ use log::info;
 use numpy::{PyArray1, PyArray2, PyArrayMethods};
 use pyo3::prelude::*;
 use pyo3::types::PyDict;
+use std::collections::HashSet;
 
 /// A single contour loop: a series of (x, y) points.
 pub type Contour = Vec<(f64, f64)>;
@@ -27,6 +28,13 @@ const SEGMENT_LOG_LIMIT: usize = 20;
 pub struct SliceResult {
     pub contours: Vec<Contour>,
     pub segments: Vec<Segment>,
+}
+
+/// Polyhedral cell geometry used for precomputed infill.
+#[derive(Clone)]
+pub struct Cell {
+    pub vertices: Vec<(f64, f64, f64)>,
+    pub faces: Vec<Vec<usize>>,
 }
 
 /// Slice parameters: bounding box and resolution.
@@ -44,6 +52,7 @@ pub struct SliceConfig {
     pub mode: Option<String>,
     pub bbox_min: Option<(f64, f64, f64)>,
     pub bbox_max: Option<(f64, f64, f64)>,
+    pub cells: Option<Vec<Cell>>,
 }
 
 /// Marching squares edge table mapping case index to edge pairs.
@@ -116,7 +125,34 @@ pub fn slice_model(model: &Model, config: &SliceConfig) -> SliceResult {
     if !config.seed_points.is_empty() {
         match config.infill_pattern.as_deref() {
             Some("voronoi") => {
-                if config.mode.as_deref() == Some("uniform") {
+                if let Some(cells) = &config.cells {
+                    for cell in cells {
+                        let mut edge_set = HashSet::new();
+                        for face in &cell.faces {
+                            let m = face.len();
+                            for i in 0..m {
+                                let a = face[i];
+                                let b = face[(i + 1) % m];
+                                let key = if a < b { (a, b) } else { (b, a) };
+                                edge_set.insert(key);
+                            }
+                        }
+                        for (a, b) in edge_set {
+                            let p0 = cell.vertices[a];
+                            let p1 = cell.vertices[b];
+                            let z0 = p0.2;
+                            let z1 = p1.2;
+                            if (z0 - config.z) * (z1 - config.z) <= 0.0 && (z1 - z0).abs() > 1e-9 {
+                                let t = (config.z - z0) / (z1 - z0);
+                                if (0.0..=1.0).contains(&t) {
+                                    let x = p0.0 + t * (p1.0 - p0.0);
+                                    let y = p0.1 + t * (p1.1 - p0.1);
+                                    segments.push(((x, y), (x, y)));
+                                }
+                            }
+                        }
+                    }
+                } else if config.mode.as_deref() == Some("uniform") {
                     let uniform_cells =
                         Python::with_gil(|py| -> PyResult<Vec<Vec<(f64, f64, f64)>>> {
                             let seed_rows: Vec<Vec<f64>> = config
