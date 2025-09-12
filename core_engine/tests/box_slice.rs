@@ -60,6 +60,7 @@ async fn slice_box_model_returns_square_contour() {
         bbox_max: None,
         cell_vertices: None,
         edge_list: None,
+        cells: None,
     };
 
     let body = serde_json::to_vec(&req).unwrap();
@@ -140,6 +141,7 @@ async fn slice_rejects_nx_less_than_two() {
             bbox_max: None,
             cell_vertices: None,
             edge_list: None,
+            cells: None,
         };
         let body = serde_json::to_vec(&req).unwrap();
         let res = handle_slice(Bytes::from(body)).await;
@@ -163,6 +165,7 @@ async fn slice_rejects_ny_less_than_two() {
             bbox_max: None,
             cell_vertices: None,
             edge_list: None,
+            cells: None,
         };
         let body = serde_json::to_vec(&req).unwrap();
         let res = handle_slice(Bytes::from(body)).await;
