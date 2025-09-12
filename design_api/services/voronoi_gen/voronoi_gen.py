@@ -436,6 +436,10 @@ def compute_voronoi_adjacency(
     """
     Compute a list of neighboring seed index pairs using a spatial hash grid.
 
+    The calculation operates fully in 3D; all three coordinates of each seed
+    are considered when inferring spacing and pruning adjacency. No projection
+    onto the ``xy`` plane occurs.
+
     Parameters
     ----------
     points
