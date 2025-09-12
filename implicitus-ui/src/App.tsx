@@ -47,6 +47,44 @@ function reorderSpec(specArray: any[]) {
 export function getSpecArray(data: any) {
   return Array.isArray(data?.spec) ? data.spec : data?.spec?.spec;
 }
+
+function sanitizeInfillCells(nodes: any[]) {
+  return nodes.map(node => {
+    const infill = node.modifiers?.infill;
+    if (infill?.cells && !Array.isArray(infill.cells)) {
+      if (typeof infill.cells === 'object') {
+        console.warn('[UI] converting object infill.cells to array');
+        return {
+          ...node,
+          modifiers: {
+            ...node.modifiers,
+            infill: { ...infill, cells: Object.values(infill.cells) },
+          },
+        };
+      }
+      console.warn('[UI] dropping invalid infill.cells before slice');
+      const { cells, ...rest } = infill;
+      return {
+        ...node,
+        modifiers: {
+          ...node.modifiers,
+          infill: rest,
+        },
+      };
+    }
+    return node;
+  });
+}
+
+function sanitizeModelForSlice(model: any) {
+  if (model?.root?.children && Array.isArray(model.root.children)) {
+    return {
+      ...model,
+      root: { ...model.root, children: sanitizeInfillCells(model.root.children) },
+    };
+  }
+  return model;
+}
 import React, { useState, useRef, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
@@ -288,8 +326,9 @@ function App() {
       // Handle updated spec with nested modifiers
       if (data.spec) {
         const specArray = getSpecArray(data);
-        if (Array.isArray(specArray)) {
-          const infill = specArray[0]?.modifiers?.infill;
+        const sanitizedSpec = Array.isArray(specArray) ? sanitizeInfillCells(specArray) : null;
+        if (Array.isArray(sanitizedSpec)) {
+          const infill = sanitizedSpec[0]?.modifiers?.infill;
           console.log('[UI] backend infill counts:', {
             points: infill?.seed_points?.length,
             edges: infill?.edges?.length,
@@ -300,13 +339,13 @@ function App() {
             console.log('[design_api] debug info:', infill.debug);
 
           }
-          setSpec(specArray);
-          setSpecText(JSON.stringify(reorderSpec(specArray), null, 2));
+          setSpec(sanitizedSpec);
+          setSpecText(JSON.stringify(reorderSpec(sanitizedSpec), null, 2));
           if (infill?.seed_points) {
             fetchVoronoiMesh(infill.seed_points);
           }
           const specVersion = data.version ?? 1;
-          await fetchSlice({ id: 'preview', version: specVersion, root: { children: specArray } });
+          await fetchSlice({ id: 'preview', version: specVersion, root: { children: sanitizedSpec } });
           if (data.summary) {
             setSummary(data.summary);
             setMessages(prev => [...prev, { speaker: 'assistant', text: data.summary }]);
@@ -395,7 +434,7 @@ function App() {
       }
       setModelProto(data);
       if (data.locked_model) {
-        await fetchSlice(data.locked_model);
+        await fetchSlice(sanitizeModelForSlice(data.locked_model));
       }
     } catch (err: any) {
       setError(err.message || 'An error occurred during confirm');
@@ -439,9 +478,10 @@ function App() {
       }
       const data = await response.json();
       const specArray = getSpecArray(data);
-      if (Array.isArray(specArray)) {
+      const sanitizedSpec = Array.isArray(specArray) ? sanitizeInfillCells(specArray) : null;
+      if (Array.isArray(sanitizedSpec)) {
         // Reattach seed_points from response or cached copy
-        const updatedSpec = specArray.map((node: any, idx: number) => {
+        const updatedSpec = sanitizedSpec.map((node: any, idx: number) => {
           const infill = node.modifiers?.infill;
           const cached = removedSeeds[idx];
           if (!infill?.seed_points && cached) {
@@ -506,10 +546,11 @@ function App() {
       if (!response.ok) throw new Error(rawText);
       const data = JSON.parse(rawText);
       const specArray = getSpecArray(data);
-      if (Array.isArray(specArray)) {
-        setSpec(specArray);
-        setSpecText(JSON.stringify(specArray, null, 2));
-        const infill = specArray[0]?.modifiers?.infill;
+      const sanitizedSpec = Array.isArray(specArray) ? sanitizeInfillCells(specArray) : null;
+      if (Array.isArray(sanitizedSpec)) {
+        setSpec(sanitizedSpec);
+        setSpecText(JSON.stringify(sanitizedSpec, null, 2));
+        const infill = sanitizedSpec[0]?.modifiers?.infill;
         if (infill?.debug) {
 
           console.log('[design_api] debug info:', infill.debug);
