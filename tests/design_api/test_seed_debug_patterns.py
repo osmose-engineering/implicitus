@@ -61,7 +61,7 @@ def test_seed_debug_log_records_seeds(monkeypatch):
     with open(log_file) as f:
         entries = [json.loads(line) for line in f]
 
-    assert entries[0]["spec"][0]["modifiers"]["infill"]["pattern"] == "voronoi"
-    assert entries[0]["spec"][0]["modifiers"]["infill"]["seed_points"] == patterns[0][1]
-    assert entries[1]["spec"][0]["modifiers"]["infill"]["pattern"] == "hex"
-    assert entries[1]["spec"][0]["modifiers"]["infill"]["seed_points"] == patterns[1][1]
+    assert entries[0]["spec"]["spec"][0]["modifiers"]["infill"]["pattern"] == "voronoi"
+    assert entries[0]["spec"]["spec"][0]["modifiers"]["infill"]["seed_points"] == patterns[0][1]
+    assert entries[1]["spec"]["spec"][0]["modifiers"]["infill"]["pattern"] == "hex"
+    assert entries[1]["spec"]["spec"][0]["modifiers"]["infill"]["seed_points"] == patterns[1][1]

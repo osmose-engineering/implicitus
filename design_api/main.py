@@ -52,6 +52,26 @@ SEED_DEBUG_LOG = LOG_DIR / "seed_debug.log"
 RENDERED_SPEC_DIR = ROOT / "rendered_specs"
 RENDERED_SPEC_DIR.mkdir(exist_ok=True)
 
+# Version of the rendered spec format
+SPEC_VERSION = 1
+
+
+def _wrap_spec(spec: list | dict) -> dict:
+    """Attach a version field to a spec list/dict.
+
+    Parameters
+    ----------
+    spec:
+        The specification data structure (typically a list of nodes).
+
+    Returns
+    -------
+    dict
+        A wrapper with ``version`` and ``spec`` keys.
+    """
+
+    return {"version": SPEC_VERSION, "spec": spec}
+
 
 def save_rendered_spec(session_id: str, spec: Any, suffix: str = "") -> None:
     """Persist the rendered JSON spec for later debugging.
@@ -85,7 +105,7 @@ design_states: dict[str, DesignState] = {}
 # in-memory model storage: model_id -> model
 models: dict[str, dict] = {}
 
-def log_turn(session_id: str, turn_type: str, raw: str, spec: list, summary: Optional[str] = None, question: Optional[str] = None):
+def log_turn(session_id: str, turn_type: str, raw: str, spec: dict, summary: Optional[str] = None, question: Optional[str] = None):
     entry = {
         "session": session_id,
         "timestamp": time.time(),
@@ -100,7 +120,8 @@ def log_turn(session_id: str, turn_type: str, raw: str, spec: list, summary: Opt
 
     # remove large fields from infill modifiers to keep logs small
     scrubbed_spec = []
-    for node in entry["spec"]:
+    raw_spec = spec.get("spec", []) if isinstance(spec, dict) else spec
+    for node in raw_spec:
         node_copy = copy.deepcopy(node)
         mods = node_copy.get("modifiers")
         if mods and isinstance(mods.get("infill"), dict):
@@ -109,7 +130,7 @@ def log_turn(session_id: str, turn_type: str, raw: str, spec: list, summary: Opt
             mods["infill"].pop("edge_list", None)
             mods["infill"].pop("vertices", None)
         scrubbed_spec.append(node_copy)
-    entry["spec"] = scrubbed_spec
+    entry["spec"] = _wrap_spec(scrubbed_spec)
     if summary is not None:
         entry["summary"] = summary
     if question is not None:
@@ -417,6 +438,7 @@ async def design(req: DesignRequest):
             raise HTTPException(status_code=502, detail=f"Failed to parse JSON from LLM. Cleaned: {cleaned}")
         # 2. Map and normalize into protobuf dict
         spec_dict = map_to_proto_dict(spec_dict)
+        spec_dict.setdefault("version", SPEC_VERSION)
         # 3. Validate against the Protobuf schema
         proto_spec = validate_proto(spec_dict)
 
@@ -442,7 +464,7 @@ async def review(req: dict, sid: Optional[str] = Query(None)):
         # If the adapter returned a clarification question, surface it
         if isinstance(result, dict) and "question" in result:
             question = result["question"]
-            log_turn(sid, "clarify", req.get("raw", ""), [], question=question)
+            log_turn(sid, "clarify", req.get("raw", ""), _wrap_spec([]), question=question)
             return {"sid": sid, "question": question}
         # Otherwise we have a spec and summary tuple
         spec, summary = result
@@ -523,10 +545,11 @@ async def review(req: dict, sid: Optional[str] = Query(None)):
 
         spec = _sanitize(spec)
         design_states[sid].draft_spec = spec
-        save_rendered_spec(sid, spec)
+        wrapped = _wrap_spec(spec)
+        save_rendered_spec(sid, wrapped)
 
-        log_turn(sid, "review", req.get("raw", ""), spec, summary=summary)
-        return {"sid": sid, "spec": spec, "summary": summary}
+        log_turn(sid, "review", req.get("raw", ""), wrapped, summary=summary)
+        return {"sid": sid, "spec": wrapped, "summary": summary}
     except HTTPException:
         # propagate intentional HTTP errors without remapping to 500s
         raise
@@ -559,7 +582,7 @@ async def update(req: UpdateRequest, sid: str = Query(...)):
     # If adapter returned a clarification question, forward it
     if isinstance(result, dict) and "question" in result:
         question = result["question"]
-        log_turn(sid, "clarify", req.raw, design_states[sid].draft_spec, question=question)
+        log_turn(sid, "clarify", req.raw, _wrap_spec(design_states[sid].draft_spec), question=question)
         return {"sid": sid, "question": question}
     # Unpack updated spec and summary
     new_spec, new_summary = result
@@ -639,9 +662,10 @@ async def update(req: UpdateRequest, sid: str = Query(...)):
 
     new_spec = _sanitize(new_spec)
     design_states[sid].draft_spec = new_spec
-    save_rendered_spec(sid, new_spec)
-    log_turn(sid, "update", req.raw, new_spec)
-    return {"sid": sid, "spec": new_spec, "summary": new_summary}
+    wrapped = _wrap_spec(new_spec)
+    save_rendered_spec(sid, wrapped)
+    log_turn(sid, "update", req.raw, wrapped)
+    return {"sid": sid, "spec": wrapped, "summary": new_summary}
 
 
 # New endpoint: submit final model

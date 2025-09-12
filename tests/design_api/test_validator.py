@@ -12,7 +12,7 @@ def test_validate_sphere_happy():
 def test_validate_missing_root():
     # Missing 'root' field should result in ValidationError or default Model
     try:
-        msg = validate_model_spec({"id": "foo"})
+        msg = validate_model_spec({"id": "foo", "version": 1})
         # If no exception, ensure it produces a Model-like response
         assert hasattr(msg, 'root')
     except ValidationError:
@@ -42,6 +42,7 @@ def test_ignore_unknown_fields_allows_unknown_keys():
 
 def test_wrapped_modifier_dict():
     spec = {
+        "version": 1,
         "root": {
             "children": [
                 {
@@ -60,6 +61,7 @@ def test_wrapped_modifier_dict():
 def _make_seed_spec(seeds):
     return {
         "id": "abc",
+        "version": 1,
         "root": {
             "primitive": {"sphere": {"radius": 1.0}},
             "modifiers": {
@@ -90,6 +92,7 @@ def test_rejects_out_of_bounds_seed_point():
 def test_rejects_out_of_bounds_edge_index():
     spec = {
         "id": "abc",
+        "version": 1,
         "root": {
             "primitive": {"sphere": {"radius": 1.0}},
             "modifiers": {
@@ -101,6 +104,20 @@ def test_rejects_out_of_bounds_edge_index():
             },
         },
     }
+    with pytest.raises(ValidationError):
+        validate_model_spec(spec)
+
+
+def test_missing_version_rejected():
+    spec = map_primitive({"shape": "sphere", "size_mm": 10})
+    spec.pop("version", None)
+    with pytest.raises(ValidationError):
+        validate_model_spec(spec)
+
+
+def test_unknown_version_rejected():
+    spec = map_primitive({"shape": "sphere", "size_mm": 10})
+    spec["version"] = 99
     with pytest.raises(ValidationError):
         validate_model_spec(spec)
 

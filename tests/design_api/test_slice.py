@@ -36,7 +36,7 @@ class DummyClient:
 def test_slice_forwards_params(client, monkeypatch):
     capture = {}
     monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: DummyClient(capture))
-    client.post("/models", json={"id": "abc"})
+    client.post("/models", json={"id": "abc", "version": 1})
     resp = client.get(
         "/models/abc/slices",
         params={
@@ -67,7 +67,7 @@ def test_slice_forwards_params(client, monkeypatch):
 def test_slice_uses_defaults(client, monkeypatch):
     capture = {}
     monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: DummyClient(capture))
-    client.post("/models", json={"id": "abc"})
+    client.post("/models", json={"id": "abc", "version": 1})
     resp = client.get("/models/abc/slices?layer=2.0")
     assert resp.status_code == 200
     assert capture["json"] == {
@@ -88,7 +88,7 @@ def test_slice_surfaces_errors(client, monkeypatch):
             raise httpx.HTTPError("boom")
 
     monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: ErrorClient({}))
-    client.post("/models", json={"id": "abc"})
+    client.post("/models", json={"id": "abc", "version": 1})
     resp = client.get("/models/abc/slices?layer=1.0")
     assert resp.status_code == 500
     assert "Slicing service failure" in resp.json()["detail"]
@@ -101,6 +101,7 @@ def test_slice_allows_extra_infill_fields(client, monkeypatch):
         "/models",
         json={
             "id": "abc",
+            "version": 1,
             "root": {
                 "children": [
                     {
@@ -141,6 +142,7 @@ def test_slice_with_full_spec_returns_expected_fields(client, monkeypatch):
     )
     full_spec = {
         "id": "abc",
+        "version": 1,
         "root": {
             "children": [
                 {
@@ -191,6 +193,7 @@ def test_slice_forwards_cells(client, monkeypatch):
         "/models",
         json={
             "id": "abc",
+            "version": 1,
             "root": {
                 "children": [
                     {
@@ -223,7 +226,7 @@ def test_slice_missing_model_returns_404(client):
 
 
 def test_slice_missing_layer_returns_422(client):
-    client.post("/models", json={"id": "abc"})
+    client.post("/models", json={"id": "abc", "version": 1})
     resp = client.get("/models/abc/slices")
     assert resp.status_code == 422
 
@@ -239,7 +242,7 @@ def test_slice_validation_error_includes_fields(client, monkeypatch):
         )
 
     monkeypatch.setattr("design_api.main.validate_proto", bad_validate)
-    client.post("/models", json={"id": "abc", "root": {}})
+    client.post("/models", json={"id": "abc", "version": 1, "root": {}})
     resp = client.get("/models/abc/slices?layer=0")
     assert resp.status_code == 400
     detail = resp.json()["detail"]
@@ -255,7 +258,7 @@ def test_slice_validation_error_includes_tip(client, monkeypatch):
         )
 
     monkeypatch.setattr("design_api.main.validate_proto", bad_validate)
-    client.post("/models", json={"id": "abc", "root": {}})
+    client.post("/models", json={"id": "abc", "version": 1, "root": {}})
     resp = client.get("/models/abc/slices?layer=0")
     assert resp.status_code == 400
     detail = resp.json()["detail"]
