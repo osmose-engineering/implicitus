@@ -279,11 +279,12 @@ def parse_raw_spec(llm_output):
 
     # If the input is already a list of nodes in our internal format, return as is.
     def _is_internal_node_dict(d):
-        # Only a dict with exactly key "primitive", or with exactly keys "infill" and "children"
+        # A node is considered internal if it includes a primitive (optionally with children)
+        # or an infill entry with children.
         if not isinstance(d, dict):
             return False
         keys = set(d.keys())
-        if keys == {"primitive"}:
+        if keys in ({"primitive"}, {"primitive", "children"}):
             return True
         if keys == {"infill", "children"}:
             return True
@@ -320,7 +321,7 @@ def parse_raw_spec(llm_output):
     for spec in specs:
         modifier = _build_modifier_dict(spec)
         primitive_params = _build_primitive_dict(spec)
-        node = {"primitive": primitive_params}
+        node = {"primitive": primitive_params, "children": []}
         if modifier:
             # Attach infill (or other) modifier under 'modifiers'
             node.setdefault("modifiers", {})["infill"] = modifier

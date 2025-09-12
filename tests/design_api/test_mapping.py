@@ -7,12 +7,14 @@ def test_map_sphere_minimal():
     inp = {"shape":"sphere","size_mm":10}
     out = map_primitive(inp)
     assert out["root"]["primitive"]["sphere"]["radius"] == 5.0
+    assert out["root"]["children"] == []
 
 def test_map_box_nonuniform():
     inp = {"shape":"box","size_mm":[10,20,30]}
     out = map_primitive(inp)
     sz = out["root"]["primitive"]["box"]["size"]
     assert (sz["x"], sz["y"], sz["z"]) == (10,20,30)
+    assert out["root"]["children"] == []
 
 def test_map_unknown_shape_raises():
     with pytest.raises(SomeMappingError):
@@ -36,9 +38,11 @@ def test_map_box_with_infill():
     # First child: original box primitive
     assert "primitive" in children[0]
     assert "box" in children[0]["primitive"]
+    assert children[0]["children"] == []
     # Second child: lattice primitive
     assert "primitive" in children[1]
     assert "lattice" in children[1]["primitive"]
+    assert children[1]["children"] == []
     lattice = children[1]["primitive"]["lattice"]
     assert lattice["pattern"] == "voronoi"
     assert lattice["min_dist"] == 0.5
@@ -62,5 +66,6 @@ def test_map_sphere_with_shell():
     # Second child: shell primitive
     assert "primitive" in children[1]
     assert "shell" in children[1]["primitive"]
+    assert children[1]["children"] == []
     shell = children[1]["primitive"]["shell"]
     assert shell["thickness_mm"] == 2.0
