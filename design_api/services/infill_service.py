@@ -127,7 +127,6 @@ def generate_hex_lattice(
         "seed_points",
         "num_points",
         "use_voronoi_edges",
-        "_is_voronoi",
         "uniform",
     }
     extra_kwargs = {k: v for k, v in spec.items() if k not in reserved_keys}

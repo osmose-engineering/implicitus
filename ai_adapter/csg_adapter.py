@@ -183,13 +183,11 @@ def _build_modifier_dict(raw_spec: dict) -> dict:
             uniform_flag = uniform_flag.lower() == "true"
         infill_data["mode"] = "uniform" if uniform_flag else "organic"
 
-    # Mark Voronoi infill specially
+    # Normalize pattern-specific defaults
     if pattern == "voronoi":
-        infill_data["_is_voronoi"] = True
         infill_data.setdefault("mode", "uniform")
     if pattern == "honeycomb":
         # Treat honeycomb as a voronoi lattice with uniform sampling
-        infill_data["_is_voronoi"] = True
         infill_data["pattern"] = "voronoi"
         infill_data.setdefault("mode", "uniform")
     density = infill_data.get("density")
@@ -405,7 +403,7 @@ def interpret_llm_request(llm_output):
         # Enrich any voronoi modifiers with defaults
         for node in nodes:
             infill = node.get("modifiers", {}).get("infill")
-            if isinstance(infill, dict) and infill.get("_is_voronoi"):
+            if isinstance(infill, dict) and infill.get("pattern") == "voronoi":
                 prim = node["primitive"]
                 bbox_min, bbox_max = _compute_bbox_from_primitive(prim)
                 size = [bbox_max[i] - bbox_min[i] for i in range(3)]
@@ -477,7 +475,7 @@ def interpret_llm_request(llm_output):
     # Enrich any voronoi modifiers with defaults
     for node in nodes:
         infill = node.get("modifiers", {}).get("infill")
-        if isinstance(infill, dict) and infill.get("_is_voronoi"):
+        if isinstance(infill, dict) and infill.get("pattern") == "voronoi":
             prim = node["primitive"]
             bbox_min, bbox_max = _compute_bbox_from_primitive(prim)
             size = [bbox_max[i] - bbox_min[i] for i in range(3)]
@@ -624,7 +622,7 @@ def review_request(request_data):
         # Enrich any voronoi modifiers with default parameters on review
         for node in nodes:
             infill = node.get("modifiers", {}).get("infill")
-            if isinstance(infill, dict) and infill.get("_is_voronoi"):
+            if isinstance(infill, dict) and infill.get("pattern") == "voronoi":
                 prim = node["primitive"]
                 bbox_min, bbox_max = _compute_bbox_from_primitive(prim)
                 size = [bbox_max[i] - bbox_min[i] for i in range(3)]
