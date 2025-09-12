@@ -216,7 +216,14 @@ def test_slice_forwards_cells(client, monkeypatch):
                 "children": [
                     {
                         "primitive": {"sphere": {"radius": 1.0}},
-                        "modifiers": {"infill": {"pattern": "hex", "cells": cells_raw}},
+                        "modifiers": {
+                            "infill": {
+                                "pattern": "hex",
+                                "cells": cells_raw,
+                                "cell_vertices": [],
+                                "edge_list": [],
+                            }
+                        },
                     }
                 ]
             },
@@ -266,7 +273,14 @@ def test_slice_accepts_dict_cells(client, monkeypatch):
                 "children": [
                     {
                         "primitive": {"sphere": {"radius": 1.0}},
-                        "modifiers": {"infill": {"pattern": "hex", "cells": cells_raw}},
+                        "modifiers": {
+                            "infill": {
+                                "pattern": "hex",
+                                "cells": cells_raw,
+                                "cell_vertices": [],
+                                "edge_list": [],
+                            }
+                        },
                     }
                 ]
             },
