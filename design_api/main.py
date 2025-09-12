@@ -357,6 +357,10 @@ async def slice_model(
         "nx": nx,
         "ny": ny,
     }
+    if bbox_min is not None:
+        payload["bbox_min"] = bbox_min
+    if bbox_max is not None:
+        payload["bbox_max"] = bbox_max
     if cell_vertices is not None:
         payload["cell_vertices"] = cell_vertices
     if edge_list is not None:

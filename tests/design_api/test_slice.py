@@ -64,6 +64,24 @@ def test_slice_forwards_params(client, monkeypatch):
     }
 
 
+def test_slice_forwards_bbox(client, monkeypatch):
+    capture = {}
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: DummyClient(capture))
+    client.post(
+        "/models",
+        json={
+            "id": "abc",
+            "version": 1,
+            "bbox_min": [0, 1, 2],
+            "bbox_max": [3, 4, 5],
+        },
+    )
+    resp = client.get("/models/abc/slices?layer=1.0")
+    assert resp.status_code == 200
+    assert capture["json"]["bbox_min"] == [0, 1, 2]
+    assert capture["json"]["bbox_max"] == [3, 4, 5]
+
+
 def test_slice_uses_defaults(client, monkeypatch):
     capture = {}
     monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: DummyClient(capture))
