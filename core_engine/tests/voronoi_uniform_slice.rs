@@ -58,6 +58,13 @@ def fake_trace_hexagon(seed, medial_points, plane, *args, **kwargs):
         .unwrap();
 }
 
+fn max_radius(contour: &[(f64, f64)]) -> f64 {
+    contour
+        .iter()
+        .map(|&(x, y)| (x * x + y * y).sqrt())
+        .fold(f64::NEG_INFINITY, |a, b| a.max(b))
+}
+
 #[test]
 fn slice_uniform_voronoi_produces_hex_segments() {
     init_python();
@@ -117,4 +124,57 @@ fn slice_uniform_voronoi_produces_hex_segments() {
             i
         );
     }
+}
+
+#[test]
+fn uniform_wall_thickness_expands_contours() {
+    init_python();
+    Python::with_gil(|py| patch_hex_stubs(py));
+
+    let mut model = Model::default();
+    model.id = "uniform_wall".into();
+    let sphere = Sphere { radius: 2.0 };
+    let mut prim = Primitive::default();
+    prim.shape = Some(Shape::Sphere(sphere));
+    let mut node = Node::default();
+    node.body = Some(Body::Primitive(prim));
+    model.root = Some(node);
+
+    let seeds = vec![(0.0, 0.0, 0.0)];
+
+    let mut config = SliceConfig {
+        z: 0.0,
+        x_min: -3.0,
+        x_max: 3.0,
+        y_min: -3.0,
+        y_max: 3.0,
+        nx: 7,
+        ny: 7,
+        seed_points: seeds.clone(),
+        infill_pattern: Some("voronoi".into()),
+        wall_thickness: 0.2,
+        mode: Some("uniform".into()),
+        bbox_min: None,
+        bbox_max: None,
+        cells: None,
+    };
+
+    let thin = slice_model(&model, &config);
+    assert!(!thin.contours.is_empty(), "Expected contour for thin wall",);
+    let thin_outer = max_radius(&thin.contours[0]);
+
+    config.wall_thickness = 0.4;
+    let thick = slice_model(&model, &config);
+    assert!(
+        !thick.contours.is_empty(),
+        "Expected contour for thick wall",
+    );
+    let thick_outer = max_radius(&thick.contours[0]);
+
+    let growth = thick_outer - thin_outer;
+    assert!(
+        (growth - 0.2).abs() < 1e-3,
+        "Expected contour to expand by 0.2, got {}",
+        growth
+    );
 }
