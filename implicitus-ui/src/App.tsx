@@ -44,6 +44,9 @@ function reorderInfillKeys(node: any) {
 function reorderSpec(specArray: any[]) {
   return specArray.map(node => reorderInfillKeys(node));
 }
+export function getSpecArray(data: any) {
+  return Array.isArray(data?.spec) ? data.spec : data?.spec?.spec;
+}
 import React, { useState, useRef, useEffect } from 'react';
 import Editor from '@monaco-editor/react';
 import * as monaco from 'monaco-editor';
@@ -280,36 +283,39 @@ function App() {
         throw new Error(`Failed to parse JSON spec: ${parseError}`);
       }
       // Handle updated spec with nested modifiers
-      if (data.spec && Array.isArray(data.spec)) {
-        const infill = data.spec[0]?.modifiers?.infill;
-        console.log('[UI] backend infill counts:', {
-          points: infill?.seed_points?.length,
-          edges: infill?.edges?.length,
-          sampleEdges: infill?.edges?.slice(0, 5),
-        });
-        if (infill?.debug) {
+      if (data.spec) {
+        const specArray = getSpecArray(data);
+        if (Array.isArray(specArray)) {
+          const infill = specArray[0]?.modifiers?.infill;
+          console.log('[UI] backend infill counts:', {
+            points: infill?.seed_points?.length,
+            edges: infill?.edges?.length,
+            sampleEdges: infill?.edges?.slice(0, 5),
+          });
+          if (infill?.debug) {
 
-          console.log('[design_api] debug info:', infill.debug);
+            console.log('[design_api] debug info:', infill.debug);
 
+          }
+          setSpec(specArray);
+          setSpecText(JSON.stringify(reorderSpec(specArray), null, 2));
+          if (infill?.seed_points) {
+            fetchVoronoiMesh(infill.seed_points);
+          }
+          await fetchSlice({ id: 'preview', root: { children: specArray } });
+          if (data.summary) {
+            setSummary(data.summary);
+            setMessages(prev => [...prev, { speaker: 'assistant', text: data.summary }]);
+          }
+          // Capture session ID for subsequent updates
+          if (!sessionId && data.sid) {
+            setSessionId(data.sid);
+          }
+          setIsDirty(false);
+          setLoading(false);
+          setPrompt('');
+          return;
         }
-        setSpec(data.spec);
-        setSpecText(JSON.stringify(reorderSpec(data.spec), null, 2));
-        if (infill?.seed_points) {
-          fetchVoronoiMesh(infill.seed_points);
-        }
-        await fetchSlice({ id: 'preview', root: { children: data.spec } });
-        if (data.summary) {
-          setSummary(data.summary);
-          setMessages(prev => [...prev, { speaker: 'assistant', text: data.summary }]);
-        }
-        // Capture session ID for subsequent updates
-        if (!sessionId && data.sid) {
-          setSessionId(data.sid);
-        }
-        setIsDirty(false);
-        setLoading(false);
-        setPrompt('');
-        return;
       }
       if (data.question) {
         // Extract plain question text from the JSON-wrapped response
@@ -428,9 +434,10 @@ function App() {
         throw new Error(`Server error: ${response.status} ${response.statusText} - ${text}`);
       }
       const data = await response.json();
-      if (data.spec && Array.isArray(data.spec)) {
+      const specArray = getSpecArray(data);
+      if (Array.isArray(specArray)) {
         // Reattach seed_points from response or cached copy
-        const updatedSpec = data.spec.map((node: any, idx: number) => {
+        const updatedSpec = specArray.map((node: any, idx: number) => {
           const infill = node.modifiers?.infill;
           const cached = removedSeeds[idx];
           if (!infill?.seed_points && cached) {
@@ -494,10 +501,11 @@ function App() {
       const rawText = await response.text();
       if (!response.ok) throw new Error(rawText);
       const data = JSON.parse(rawText);
-      if (data.spec && Array.isArray(data.spec)) {
-        setSpec(data.spec);
-        setSpecText(JSON.stringify(data.spec, null, 2));
-        const infill = data.spec[0]?.modifiers?.infill;
+      const specArray = getSpecArray(data);
+      if (Array.isArray(specArray)) {
+        setSpec(specArray);
+        setSpecText(JSON.stringify(specArray, null, 2));
+        const infill = specArray[0]?.modifiers?.infill;
         if (infill?.debug) {
 
           console.log('[design_api] debug info:', infill.debug);
