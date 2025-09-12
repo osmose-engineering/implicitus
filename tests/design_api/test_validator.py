@@ -86,3 +86,21 @@ def test_rejects_out_of_bounds_seed_point():
     with pytest.raises(ValidationError):
         validate_model_spec(spec)
 
+
+def test_rejects_out_of_bounds_edge_index():
+    spec = {
+        "id": "abc",
+        "root": {
+            "primitive": {"sphere": {"radius": 1.0}},
+            "modifiers": {
+                "infill": {
+                    "pattern": "hex",
+                    "cell_vertices": [[0, 0, 0], [1, 0, 0]],
+                    "edge_list": [[0, 2]],
+                }
+            },
+        },
+    }
+    with pytest.raises(ValidationError):
+        validate_model_spec(spec)
+
