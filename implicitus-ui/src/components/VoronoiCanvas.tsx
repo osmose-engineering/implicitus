@@ -331,13 +331,12 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
       pointsForStruts,
       edgesForStruts,
       edgeLengthThreshold,
-      edgeZVariationTolerance
+      0
     );
   }, [
     pointsForStruts,
     edgesForStruts,
     edgeLengthThreshold,
-    edgeZVariationTolerance,
     edges,
     infillEdges,
   ]);
@@ -345,24 +344,31 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
     console.log('VoronoiCanvas filteredEdges count:', filteredEdges.length);
   DEBUG_CANVAS && console.log('VoronoiCanvas sample filteredEdges (first 5):', filteredEdges.slice(0,5));
 
-  // After filtering, ensure that surviving edges still span some distance in z.
-  // Completely flat edges often hint at upstream bugs that collapsed 3D
-  // geometry into a single layer.  We warn in development and optionally throw
-  // when a strict diagnostic flag is enabled.
+  // After filtering, ensure that the remaining edges collectively span
+  // meaningful distance along the z-axis.  A globally flat edge set often
+  // indicates upstream geometry that collapsed into a single plane.  Warn (or
+  // optionally throw) only once per mount.
+  const warnedFlatRef = useRef(false);
   const hasFlatEdges = useMemo(() => {
     if (
-      edgesForStruts.length === 0 ||
+      filteredEdges.length === 0 ||
       pointsForStruts.length === 0 ||
       usingFallbackSeeds
     ) {
       return false;
     }
-    const flat = edgesForStruts.some(([i, j]) => {
+    let zMin = Infinity;
+    let zMax = -Infinity;
+    for (const [i, j] of filteredEdges) {
       const zi = pointsForStruts[i]?.[2];
       const zj = pointsForStruts[j]?.[2];
-      return Math.abs(zi - zj) < edgeZVariationTolerance;
-    });
-    if (flat) {
+      if (zi === undefined || zj === undefined) continue;
+      zMin = Math.min(zMin, zi, zj);
+      zMax = Math.max(zMax, zi, zj);
+    }
+    const span = zMax - zMin;
+    const flat = span < edgeZVariationTolerance;
+    if (flat && !warnedFlatRef.current) {
       const msg = `VoronoiCanvas: edge z-range below tolerance (${edgeZVariationTolerance})`;
       if (
         typeof process !== 'undefined' &&
@@ -371,10 +377,11 @@ const VoronoiCanvas: React.FC<VoronoiCanvasProps> = ({
         throw new Error(msg);
       }
       console.warn(msg);
+      warnedFlatRef.current = true;
     }
     return flat;
   }, [
-    edgesForStruts,
+    filteredEdges,
     pointsForStruts,
     usingFallbackSeeds,
     edgeZVariationTolerance,
