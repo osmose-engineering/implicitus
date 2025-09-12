@@ -56,3 +56,33 @@ def test_wrapped_modifier_dict():
     assert len(child.modifiers) == 1
     assert child.modifiers[0].infill.pattern == "hex"
 
+
+def _make_seed_spec(seeds):
+    return {
+        "id": "abc",
+        "root": {
+            "primitive": {"sphere": {"radius": 1.0}},
+            "modifiers": {
+                "infill": {
+                    "pattern": "hex",
+                    "bbox_min": [0, 0, 0],
+                    "bbox_max": [1, 1, 1],
+                    "seed_points": seeds,
+                    "num_points": len(seeds),
+                }
+            },
+        },
+    }
+
+
+def test_rejects_duplicate_seed_points():
+    spec = _make_seed_spec([[0, 0, 0], [0, 0, 0]])
+    with pytest.raises(ValidationError):
+        validate_model_spec(spec)
+
+
+def test_rejects_out_of_bounds_seed_point():
+    spec = _make_seed_spec([[2, 0, 0]])
+    with pytest.raises(ValidationError):
+        validate_model_spec(spec)
+

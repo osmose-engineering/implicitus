@@ -4,10 +4,49 @@ from google.protobuf.message import DecodeError
 import logging
 import reprlib
 import re
+from typing import Any
 
 class ValidationError(Exception):
     """Raised when the JSON spec cannot be parsed into the protobuf schema."""
     pass
+
+
+def _validate_seed_points(obj: Any) -> None:
+    """Recursively ensure seed points are unique and within bounds.
+
+    Parameters
+    ----------
+    obj:
+        Portion of the spec dictionary to inspect.
+
+    Raises
+    ------
+    ValidationError
+        If duplicate or out-of-bounds seed points are found.
+    """
+
+    if isinstance(obj, dict):
+        seeds = obj.get("seed_points")
+        if isinstance(seeds, list):
+            # Check for duplicates
+            pts = [tuple(pt) for pt in seeds]
+            if len(pts) != len(set(pts)):
+                raise ValidationError("Duplicate seed point detected")
+
+            bbox_min = obj.get("bbox_min")
+            bbox_max = obj.get("bbox_max")
+            if bbox_min is not None and bbox_max is not None:
+                for pt in seeds:
+                    for p, mn, mx in zip(pt, bbox_min, bbox_max):
+                        if p < mn or p > mx:
+                            raise ValidationError(
+                                f"Seed point {pt} outside of bounding box"  # noqa: E501
+                            )
+        for v in obj.values():
+            _validate_seed_points(v)
+    elif isinstance(obj, list):
+        for item in obj:
+            _validate_seed_points(item)
 
 def validate_model_spec(spec_dict: dict, ignore_unknown_fields: bool = False) -> Model:
     """Validate and convert a raw JSON spec dictionary into a protobuf ``Model``.
@@ -65,6 +104,7 @@ def validate_model_spec(spec_dict: dict, ignore_unknown_fields: bool = False) ->
 
     _normalize_modifiers(spec_dict)
     _ensure_snake_case(spec_dict)
+    _validate_seed_points(spec_dict)
 
     logging.debug("Normalized spec: %s", reprlib.repr(spec_dict))
 
