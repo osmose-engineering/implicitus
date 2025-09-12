@@ -5,7 +5,7 @@ use bytes::Bytes;
 
 use ordered_float::OrderedFloat;
 use serde_json::{json, Value};
-use slicer_server::{handle_slice, SliceRequest, SliceResponse};
+use slicer_server::{handle_slice, Cell3D, Point3D, SliceRequest, SliceResponse};
 use std::collections::HashSet;
 
 use core_engine::implicitus::{node::Body, primitive::Shape, Model, Node, Primitive, Sphere};
@@ -65,7 +65,7 @@ async fn handle_slice_derives_seeds_from_lattice() {
 }
 
 #[tokio::test]
-async fn seed_points_and_edge_list_are_unique() {
+async fn seed_points_edge_list_and_cells_are_unique() {
     let mut model = Model::default();
     model.id = "precomputed_lattice".into();
     let sphere = Sphere { radius: 1.0 };
@@ -99,7 +99,23 @@ async fn seed_points_and_edge_list_are_unique() {
         bbox_max: None,
         cell_vertices: Some(vec![(0.0, 0.0, 0.0), (1.0, 1.0, 1.0), (2.0, 2.0, 2.0)]),
         edge_list: Some(vec![(0usize, 1usize), (1, 2)]),
-        cells: None,
+
+        cells: Some(vec![Cell3D {
+            vertices: vec![
+                Point3D {
+                    x: 2.0,
+                    y: 2.0,
+                    z: 2.0,
+                },
+                Point3D {
+                    x: 3.0,
+                    y: 3.0,
+                    z: 3.0,
+                },
+            ],
+            faces: vec![],
+        }]),
+
     };
 
     let body = serde_json::to_vec(&req).unwrap();
@@ -107,14 +123,15 @@ async fn seed_points_and_edge_list_are_unique() {
     let bytes = to_bytes(reply.into_response().into_body()).await.unwrap();
     let resp: SliceResponse = serde_json::from_slice(&bytes).unwrap();
 
-    assert_eq!(resp.debug.seed_count, 3);
+    assert_eq!(resp.debug.seed_count, 4);
     let seeds = resp.debug.seed_points.unwrap();
     let unique: HashSet<_> = seeds
         .iter()
         .map(|&(x, y, z)| (OrderedFloat(x), OrderedFloat(y), OrderedFloat(z)))
         .collect();
-    assert_eq!(unique.len(), 3);
+    assert_eq!(unique.len(), 4);
     assert!(unique.contains(&(OrderedFloat(0.0), OrderedFloat(0.0), OrderedFloat(0.0))));
     assert!(unique.contains(&(OrderedFloat(1.0), OrderedFloat(1.0), OrderedFloat(1.0))));
     assert!(unique.contains(&(OrderedFloat(2.0), OrderedFloat(2.0), OrderedFloat(2.0))));
+    assert!(unique.contains(&(OrderedFloat(3.0), OrderedFloat(3.0), OrderedFloat(3.0))));
 }
