@@ -34,6 +34,52 @@ def _edge_list_from_adjacency(adjacency: Any) -> List[List[int]]:
     return edges
 
 
+def _normalize_cells(cells: Any) -> List[Dict[str, Any]]:
+    """Convert ``cells`` mapping/list into a JSON-serializable list.
+
+    Each element is coerced to include ``vertices`` and ``faces`` keys to
+    match the structure expected by the slicer. Vertex and face indices are
+    converted to plain Python lists so the entire structure can be serialized
+    directly.
+    """
+
+    if not cells:
+        return []
+
+    if isinstance(cells, dict):
+        cell_iter = cells.values()
+    else:
+        cell_iter = cells
+
+    out: List[Dict[str, Any]] = []
+    for cell in cell_iter:
+        if isinstance(cell, dict):
+            verts = cell.get("vertices", [])
+            faces = cell.get("faces") or []
+            cell_extra = dict(cell)
+        else:
+            verts = cell
+            faces = []
+            cell_extra = {}
+
+        verts_list = [list(v) for v in verts]
+        face_list: List[Dict[str, Any]] = []
+        for face in faces:
+            if isinstance(face, dict):
+                inds = face.get("vertex_indices", [])
+            else:
+                inds = face
+            face_list.append({"vertex_indices": list(inds)})
+
+        cell_out: Dict[str, Any] = {"vertices": verts_list, "faces": face_list}
+        for k, v in cell_extra.items():
+            if k not in {"vertices", "faces"}:
+                cell_out[k] = v
+        out.append(cell_out)
+
+    return out
+
+
 def generate_voronoi(spec: Dict[str, Any]) -> Dict[str, Any]:
     """Compute Voronoi-based adjacency for an infill spec.
 
@@ -207,6 +253,8 @@ def generate_hex_lattice(
         seed_pts[:3],
     )
 
+    cells = _normalize_cells(cells)
+
     if return_vertices:
         # ``build_hex_lattice`` returns vertices and edges as tuples. Convert them
         # into plain lists so the structure can be serialized directly into
@@ -235,8 +283,8 @@ def generate_hex_lattice(
     res["debug"] = {
         "seed_count": len(res.get("seed_points", [])),
         "infill_type": spec.get("pattern", "voronoi"),
-        # Derive the mode from the structure returned by ``build_hex_lattice``.
-        "mode": "uniform" if isinstance(res.get("cells"), dict) else "organic",
+        # ``cells`` are normalized to a list, so use the resolved mode directly.
+        "mode": mode,
     }
 
     return res
