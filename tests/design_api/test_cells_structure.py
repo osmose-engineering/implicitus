@@ -16,6 +16,7 @@ def test_cells_normalized_list(monkeypatch):
         return [[0.0, 0.0, 0.0]], [], [], cells
 
     monkeypatch.setattr(infill, "build_hex_lattice", fake_build_hex_lattice)
+    monkeypatch.setattr(infill, "compute_voronoi_adjacency", lambda *a, **k: [])
 
     spec = {
         "bbox_min": [0, 0, 0],

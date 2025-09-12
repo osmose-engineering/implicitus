@@ -247,6 +247,10 @@ def generate_hex_lattice(
         **extra_kwargs,
     )
 
+    if not edge_list:
+        adjacency = compute_voronoi_adjacency(seed_pts, spacing=spacing * 0.5)
+        edge_list = _edge_list_from_adjacency(adjacency)
+
     logger.debug(
         "generate_hex_lattice: spacing=%s, seed_pts[:3]=%s",
         spacing,
@@ -255,12 +259,12 @@ def generate_hex_lattice(
 
     cells = _normalize_cells(cells)
 
+    edges = [list(e) for e in edge_list]
     if return_vertices:
-        # ``build_hex_lattice`` returns vertices and edges as tuples. Convert them
-        # into plain lists so the structure can be serialized directly into
-        # JSON without relying on the caller's sanitization step.
+        # ``build_hex_lattice`` returns vertices as tuples. Convert them into
+        # plain lists so the structure can be serialized directly into JSON
+        # without relying on the caller's sanitization step.
         verts = [list(v) for v in cell_vertices]
-        edges = [list(e) for e in edge_list]
         res = {
             "seed_points": seed_pts,
             "cell_vertices": verts,
@@ -270,11 +274,9 @@ def generate_hex_lattice(
             "bbox_max": bbox_max,
         }
     else:
-        adjacency = compute_voronoi_adjacency(seed_pts, spacing=spacing * 0.5)
-        edge_list = _edge_list_from_adjacency(adjacency)
         res = {
             "seed_points": seed_pts,
-            "edge_list": edge_list,
+            "edge_list": edges,
             "cells": cells,
             "bbox_min": bbox_min,
             "bbox_max": bbox_max,
