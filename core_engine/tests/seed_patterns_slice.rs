@@ -44,6 +44,7 @@ fn voronoi_custom_seeds_modify_segments() {
         mode: None,
         bbox_min: None,
         bbox_max: None,
+        cells: None,
     };
 
     let r1 = slice_model(&model, &cfg(seeds_a));
@@ -74,6 +75,7 @@ fn hex_custom_seeds_modify_segments() {
         mode: None,
         bbox_min: None,
         bbox_max: None,
+        cells: None,
     };
 
     let r1 = slice_model(&model, &cfg(seeds_a));
