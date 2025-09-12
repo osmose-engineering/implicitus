@@ -35,7 +35,11 @@ def _map_base_shape(spec: dict) -> dict:
         primitive = {'cylinder': {'radius': spec['radius_mm'], 'height': spec['height_mm']}}
     else:
         raise SomeMappingError(f"Unknown shape: {shape}")
-    return {'id': id_str, 'root': {'primitive': primitive}}
+    # Ensure leaf nodes include an explicit empty children list for consistency
+    return {
+        'id': id_str,
+        'root': {'primitive': primitive, 'children': []},
+    }
 
 def map_primitive(node: dict, request_id: str | None = None) -> dict:
     logger.debug(
@@ -81,7 +85,10 @@ def map_primitive(node: dict, request_id: str | None = None) -> dict:
         shell_params = modifiers['shell']
         root = {
             "booleanOp": {"union": {}},
-            "children": [root, {"primitive": {"shell": shell_params}}],
+            "children": [
+                root,
+                {"primitive": {"shell": shell_params}, "children": []},
+            ],
         }
 
     # Apply infill modifier (supports Voronoi)
@@ -97,8 +104,8 @@ def map_primitive(node: dict, request_id: str | None = None) -> dict:
             "booleanOp": {"intersection": {}},
             "children": [
                 root,
-                {"primitive": {'lattice': infill_params}}
-            ]
+                {"primitive": {'lattice': infill_params}, "children": []},
+            ],
         }
 
     # Apply boolean_op modifier
@@ -106,7 +113,10 @@ def map_primitive(node: dict, request_id: str | None = None) -> dict:
         bool_params = modifiers['boolean_op']
         root = {
             "booleanOp": {bool_params['op']: {}},
-            "children": [root, map_primitive(bool_params['shape_node'], request_id=request_id)]
+            "children": [
+                root,
+                map_primitive(bool_params['shape_node'], request_id=request_id),
+            ],
         }
 
     # Return final wrapped dict with version information
