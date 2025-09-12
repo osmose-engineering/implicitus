@@ -125,7 +125,10 @@ function App() {
     }
   };
 
-  const fetchSlice = async (model: any) => {
+  /**
+   * Uploads a model for slicing. `model` must include an `id` and `version`.
+   */
+  const fetchSlice = async (model: { id: string; version: number; [key: string]: any }) => {
     if (!model) return;
     try {
       const postResp = await fetch(`${API_BASE}/models`, {
@@ -302,7 +305,8 @@ function App() {
           if (infill?.seed_points) {
             fetchVoronoiMesh(infill.seed_points);
           }
-          await fetchSlice({ id: 'preview', root: { children: specArray } });
+          const specVersion = data.version ?? 1;
+          await fetchSlice({ id: 'preview', version: specVersion, root: { children: specArray } });
           if (data.summary) {
             setSummary(data.summary);
             setMessages(prev => [...prev, { speaker: 'assistant', text: data.summary }]);
