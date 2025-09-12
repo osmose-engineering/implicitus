@@ -217,13 +217,15 @@ async def slice_model(
 
         ``cell_vertices``, ``edge_list``, and ``cells`` are extracted and
         **removed** from the model so they do not interfere with protobuf
-        validation. Any ``seed_points`` arrays are also stripped since the slicer
-        works solely from the lattice data.
+        validation. ``seed_points`` are only stripped when at least one of the
+        lattice arrays is present; otherwise they are preserved so the slicer
+        can compute the lattice itself.
         """
 
         cell_verts: Optional[list] = None
         edges: Optional[list] = None
         cells: Optional[list] = None
+        seed_nodes: list[dict] = []
 
         def to_proto_cells(raw_cells: list) -> list:
             proto = []
@@ -258,7 +260,7 @@ async def slice_model(
                     except Exception:
                         cells = raw
                 if isinstance(o.get("seed_points"), list):
-                    o.pop("seed_points")
+                    seed_nodes.append(o)
                 for v in o.values():
                     walk(v)
             elif isinstance(o, list):
@@ -266,6 +268,11 @@ async def slice_model(
                     walk(item)
 
         walk(obj)
+
+        if cell_verts is not None or edges is not None or cells is not None:
+            for node in seed_nodes:
+                node.pop("seed_points", None)
+
         return cell_verts, edges, cells
 
     def _extract_bbox(obj: Any) -> tuple[Optional[list], Optional[list]]:

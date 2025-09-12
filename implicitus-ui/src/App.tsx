@@ -329,10 +329,11 @@ function App() {
         const sanitizedSpec = Array.isArray(specArray) ? sanitizeInfillCells(specArray) : null;
         if (Array.isArray(sanitizedSpec)) {
           const infill = sanitizedSpec[0]?.modifiers?.infill;
+          const edgeList = infill?.edge_list ?? infill?.edges;
           console.log('[UI] backend infill counts:', {
             points: infill?.seed_points?.length,
-            edges: infill?.edges?.length,
-            sampleEdges: infill?.edges?.slice(0, 5),
+            edges: edgeList?.length,
+            sampleEdges: edgeList?.slice(0, 5),
           });
           if (infill?.debug) {
 
