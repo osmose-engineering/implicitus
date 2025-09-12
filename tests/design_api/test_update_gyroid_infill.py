@@ -22,5 +22,5 @@ def test_update_infill_nested_under_modifiers(client, monkeypatch):
         json={"spec": [node], "raw": "add gyroid infill"},
     )
     assert resp.status_code == 200
-    spec = resp.json()["spec"]["spec"]
+    spec = resp.json()["spec"]
     assert spec[0]["modifiers"]["infill"]["pattern"] == "gyroid"
