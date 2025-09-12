@@ -191,6 +191,7 @@ pub fn slice_model(model: &Model, config: &SliceConfig) -> SliceResult {
                     if let Ok(cells) = uniform_cells {
                         for verts in cells {
                             let m = verts.len();
+                            let mut points: Vec<(f64, f64)> = Vec::new();
                             for i in 0..m {
                                 let p0 = verts[i];
                                 let p1 = verts[(i + 1) % m];
@@ -203,8 +204,15 @@ pub fn slice_model(model: &Model, config: &SliceConfig) -> SliceResult {
                                     if (0.0..=1.0).contains(&t) {
                                         let x = p0.0 + t * (p1.0 - p0.0);
                                         let y = p0.1 + t * (p1.1 - p0.1);
-                                        segments.push(((x, y), (x, y)));
+                                        points.push((x, y));
                                     }
+                                }
+                            }
+                            if points.len() > 1 {
+                                for i in 0..points.len() {
+                                    let start = points[i];
+                                    let end = points[(i + 1) % points.len()];
+                                    segments.push((start, end));
                                 }
                             }
                         }

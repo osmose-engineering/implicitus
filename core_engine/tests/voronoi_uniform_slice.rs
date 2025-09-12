@@ -98,4 +98,23 @@ fn slice_uniform_voronoi_produces_hex_segments() {
         "Expected 6 hexagonal segments, got {}",
         result.segments.len()
     );
+
+    for &(start, end) in &result.segments {
+        assert!(
+            (start.0 - end.0).abs() > 1e-9 || (start.1 - end.1).abs() > 1e-9,
+            "Degenerate segment {:?} -> {:?}",
+            start,
+            end
+        );
+    }
+
+    for i in 0..result.segments.len() {
+        let (_, end) = result.segments[i];
+        let (next_start, _) = result.segments[(i + 1) % result.segments.len()];
+        assert!(
+            (end.0 - next_start.0).abs() < 1e-9 && (end.1 - next_start.1).abs() < 1e-9,
+            "Segments not connected at index {}",
+            i
+        );
+    }
 }

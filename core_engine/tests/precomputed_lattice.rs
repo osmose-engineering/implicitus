@@ -100,21 +100,7 @@ async fn seed_points_edge_list_and_cells_are_unique() {
         cell_vertices: Some(vec![(0.0, 0.0, 0.0), (1.0, 1.0, 1.0), (2.0, 2.0, 2.0)]),
         edge_list: Some(vec![(0usize, 1usize), (1, 2)]),
 
-        cells: Some(vec![Cell3D {
-            vertices: vec![
-                Point3D {
-                    x: 2.0,
-                    y: 2.0,
-                    z: 2.0,
-                },
-                Point3D {
-                    x: 3.0,
-                    y: 3.0,
-                    z: 3.0,
-                },
-            ],
-            faces: vec![],
-        }]),
+        cells: None,
 
     };
 
