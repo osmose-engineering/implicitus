@@ -1,6 +1,6 @@
 // @vitest-environment jsdom
 import React from 'react';
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest';
+import { describe, it, expect, vi } from 'vitest';
 import { render, screen } from '@testing-library/react';
 import {
   generateHexTest3D,
@@ -8,23 +8,6 @@ import {
   EDGE_Z_VARIATION_TOLERANCE,
 } from './VoronoiCanvas';
 import VoronoiCanvas from './VoronoiCanvas';
-import { Graph, alg } from 'graphlib';
-
-const originalWarn = console.warn;
-
-beforeEach(() => {
-  console.warn = (...args: any[]) => {
-    const msg = args.join(' ');
-    if (msg.includes('edge z-range below tolerance')) {
-      throw new Error(msg);
-    }
-    return originalWarn(...args);
-  };
-});
-
-afterEach(() => {
-  console.warn = originalWarn;
-});
 
 describe('VoronoiCanvas filteredEdges', () => {
   it('produces uniform edge lengths and a single connected component', () => {
@@ -100,13 +83,45 @@ describe('VoronoiCanvas warning', () => {
     warn.mockRestore();
   });
 
-  it('warns about edges with near-zero z-range', () => {
+  it('warns once when filtered edges are planar', () => {
     const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
     const vertices: [number, number, number][] = [
       [0, 0, 0],
-      [1, 0, EDGE_Z_VARIATION_TOLERANCE / 2], // practically flat
+      [1, 0, 0],
+      [0, 1, 0],
     ];
-    const edges: [number, number][] = [[0, 1]];
+    const edges: [number, number][] = [
+      [0, 1],
+      [1, 2],
+    ];
+    const props = {
+      seedPoints: [],
+      vertices,
+      edges,
+      bbox: [0, 0, 0, 1, 1, 1] as [number, number, number, number, number, number],
+    };
+    const { rerender } = render(<VoronoiCanvas {...props} />);
+    expect(warn).toHaveBeenCalledWith(
+      expect.stringContaining('edge z-range below tolerance')
+    );
+    const root = screen.getByTestId('voronoi-canvas-root');
+    expect(root.dataset.hasFlatEdges).toBe('true');
+    rerender(<VoronoiCanvas {...props} />);
+    expect(warn).toHaveBeenCalledTimes(1);
+    warn.mockRestore();
+  });
+
+  it('does not warn when edges span 3D', () => {
+    const warn = vi.spyOn(console, 'warn').mockImplementation(() => {});
+    const vertices: [number, number, number][] = [
+      [0, 0, 0],
+      [1, 0, 1],
+      [0, 1, 2],
+    ];
+    const edges: [number, number][] = [
+      [0, 1],
+      [1, 2],
+    ];
     render(
       <VoronoiCanvas
         seedPoints={[]}
@@ -115,11 +130,11 @@ describe('VoronoiCanvas warning', () => {
         bbox={[0, 0, 0, 1, 1, 1]}
       />
     );
-    expect(warn).toHaveBeenCalledWith(
+    expect(warn).not.toHaveBeenCalledWith(
       expect.stringContaining('edge z-range below tolerance')
     );
     const root = screen.getByTestId('voronoi-canvas-root');
-    expect(root.dataset.hasFlatEdges).toBe('true');
+    expect(root.dataset.hasFlatEdges).toBe('false');
     warn.mockRestore();
   });
 
@@ -127,9 +142,11 @@ describe('VoronoiCanvas warning', () => {
     process.env.VORONOI_ASSERT_Z = 'true';
     const vertices: [number, number, number][] = [
       [0, 0, 0],
-      [1, 0, 0], // identical z
+      [1, 0, 0],
     ];
-    const edges: [number, number][] = [[0, 1]];
+    const edges: [number, number][] = [
+      [0, 1],
+    ];
     expect(() =>
       render(
         <VoronoiCanvas
