@@ -27,7 +27,7 @@ def test_update_saves_spec_file(client, monkeypatch):
 
     with open(saved_path) as f:
         data = json.load(f)
-    assert data[0]["primitive"]["cube"]["size"] == 1
+    assert data["spec"][0]["primitive"]["cube"]["size"] == 1
 
     # Clean up
     saved_path.unlink()

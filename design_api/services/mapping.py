@@ -109,8 +109,11 @@ def map_primitive(node: dict, request_id: str | None = None) -> dict:
             "children": [root, map_primitive(bool_params['shape_node'], request_id=request_id)]
         }
 
-    # Return final wrapped dict
+    # Return final wrapped dict with version information
     mapped['root'] = root
+    # Attach a top-level version so downstream consumers can assert
+    # compatibility with the spec format.
+    mapped['version'] = 1
     logger.debug("map_primitive output mapped", extra={"request_id": request_id, "mapped": mapped})
     return mapped
 
@@ -161,6 +164,7 @@ def map_to_proto_dict(spec, request_id: str | None = None):
         model_id = str(uuid.uuid4())
         return {
             "id": model_id,
+            "version": 1,
             "root": {
                 "booleanOp": {"union": {}},
                 "children": mapped

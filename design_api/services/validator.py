@@ -6,6 +6,9 @@ import reprlib
 import re
 from typing import Any
 
+# Supported versions of the model spec. Update as new versions are introduced.
+SUPPORTED_VERSIONS = {1}
+
 class ValidationError(Exception):
     """Raised when the JSON spec cannot be parsed into the protobuf schema."""
     pass
@@ -237,6 +240,16 @@ def validate_model_spec(spec_dict: dict, ignore_unknown_fields: bool = False) ->
         elif isinstance(obj, list):
             for item in obj:
                 _normalize_modifiers(item)
+
+    # Ensure the spec declares a supported version. A copy is made so that the
+    # version field can be stripped before protobuf parsing.
+    version = spec_dict.get("version")
+    if version is None:
+        raise ValidationError("Missing version field")
+    if version not in SUPPORTED_VERSIONS:
+        raise ValidationError(f"Unrecognized version: {version}")
+    spec_dict = dict(spec_dict)
+    spec_dict.pop("version", None)
 
     _normalize_modifiers(spec_dict)
     _ensure_snake_case(spec_dict)
