@@ -45,23 +45,31 @@ def generate_voronoi(spec: Dict[str, Any]) -> Dict[str, Any]:
         return structure.
     """
 
+    # Drop any upstream debug info to avoid leaking it further downstream.
+    spec = dict(spec)
+    spec.pop("debug", None)
+
     pts: List[List[float]] = spec.get("seed_points", [])
     spacing = spec.get("spacing") or spec.get("min_dist") or 2.0
     adjacency = compute_voronoi_adjacency(pts, spacing=spacing * 0.5)
     edge_list = _edge_list_from_adjacency(adjacency)
 
-    return {
+    res = {
         "seed_points": pts,
         "vertices": pts,
         "edge_list": edge_list,
         "cells": spec.get("cells"),
         "bbox_min": spec.get("bbox_min"),
         "bbox_max": spec.get("bbox_max"),
-        "debug": {
-            "seed_count": len(pts),
-            "infill_type": spec.get("pattern", "voronoi"),
-        },
     }
+
+    res["debug"] = {
+        "seed_count": len(res.get("seed_points", [])),
+        "infill_type": spec.get("pattern", "voronoi"),
+        "mode": "uniform" if isinstance(res.get("cells"), dict) else "organic",
+    }
+
+    return res
 
 
 def generate_hex_lattice(
@@ -90,6 +98,10 @@ def generate_hex_lattice(
     hexagonal close packing.  Fewer seeds therefore generate a coarser lattice.
     Explicit ``spacing`` or ``min_dist`` values override this computation.
     """
+
+    # Drop any upstream debug block to avoid forwarding unsupported fields.
+    spec = dict(spec)
+    spec.pop("debug", None)
 
     primitive = spec.get("primitive", {})
 
@@ -195,36 +207,36 @@ def generate_hex_lattice(
         seed_pts[:3],
     )
 
-    debug = {
-        "seed_count": len(seed_pts),
-        "infill_type": spec.get("pattern", "voronoi"),
-        "mode": mode,
-    }
-
     if return_vertices:
         # ``build_hex_lattice`` returns vertices and edges as tuples. Convert them
         # into plain lists so the structure can be serialized directly into
         # JSON without relying on the caller's sanitization step.
         verts = [list(v) for v in cell_vertices]
         edges = [list(e) for e in edge_list]
-        return {
+        res = {
             "seed_points": seed_pts,
             "cell_vertices": verts,
             "edge_list": edges,
             "cells": cells,
             "bbox_min": bbox_min,
             "bbox_max": bbox_max,
-            "debug": debug,
+        }
+    else:
+        adjacency = compute_voronoi_adjacency(seed_pts, spacing=spacing * 0.5)
+        edge_list = _edge_list_from_adjacency(adjacency)
+        res = {
+            "seed_points": seed_pts,
+            "edge_list": edge_list,
+            "cells": cells,
+            "bbox_min": bbox_min,
+            "bbox_max": bbox_max,
         }
 
-    adjacency = compute_voronoi_adjacency(seed_pts, spacing=spacing * 0.5)
-    edge_list = _edge_list_from_adjacency(adjacency)
-
-    return {
-        "seed_points": seed_pts,
-        "edge_list": edge_list,
-        "cells": cells,
-        "bbox_min": bbox_min,
-        "bbox_max": bbox_max,
-        "debug": debug,
+    res["debug"] = {
+        "seed_count": len(res.get("seed_points", [])),
+        "infill_type": spec.get("pattern", "voronoi"),
+        # Derive the mode from the structure returned by ``build_hex_lattice``.
+        "mode": "uniform" if isinstance(res.get("cells"), dict) else "organic",
     }
+
+    return res
