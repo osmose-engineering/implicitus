@@ -41,3 +41,6 @@ extension-module = ["pyo3/extension-module"]
 [lib]
 name = "core_engine"
 crate-type = ["cdylib", "rlib"]
+
+[dev-dependencies]
+ordered-float = "4"

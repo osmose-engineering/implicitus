@@ -344,6 +344,7 @@ pub fn parse_infill(
     fn collect(
         v: &Value,
         seeds: &mut Vec<(f64, f64, f64)>,
+        seed_set: &mut HashSet<(i64, i64, i64)>,
         pattern: &mut Option<String>,
         wall: &mut Option<f64>,
         mode: &mut Option<String>,
@@ -403,22 +404,34 @@ pub fn parse_infill(
                     for pt in arr {
                         if let Some(coords) = pt.as_array() {
                             if coords.len() == 3 {
-                                seeds.push((
+                                let sp = (
                                     coords[0].as_f64().unwrap_or(0.0),
                                     coords[1].as_f64().unwrap_or(0.0),
                                     coords[2].as_f64().unwrap_or(0.0),
-                                ));
+                                );
+                                let key = (
+                                    (sp.0 * 1e6).round() as i64,
+                                    (sp.1 * 1e6).round() as i64,
+                                    (sp.2 * 1e6).round() as i64,
+                                );
+                                if seed_set.insert(key) {
+                                    seeds.push(sp);
+                                }
                             }
                         }
                     }
                 }
             }
             for val in obj.values() {
-                collect(val, seeds, pattern, wall, mode, bbox_min, bbox_max);
+                collect(
+                    val, seeds, seed_set, pattern, wall, mode, bbox_min, bbox_max,
+                );
             }
         } else if let Some(arr) = v.as_array() {
             for val in arr {
-                collect(val, seeds, pattern, wall, mode, bbox_min, bbox_max);
+                collect(
+                    val, seeds, seed_set, pattern, wall, mode, bbox_min, bbox_max,
+                );
             }
         }
     }
@@ -426,6 +439,7 @@ pub fn parse_infill(
     let value = serde_json::to_value(model).unwrap_or_else(|_| Value::Null);
 
     let mut seeds = Vec::new();
+    let mut seed_set: HashSet<(i64, i64, i64)> = HashSet::new();
     let mut pattern: Option<String> = None;
     let mut wall: Option<f64> = None;
     let mut mode: Option<String> = None;
@@ -435,6 +449,7 @@ pub fn parse_infill(
     collect(
         &value,
         &mut seeds,
+        &mut seed_set,
         &mut pattern,
         &mut wall,
         &mut mode,
@@ -450,24 +465,38 @@ pub fn parse_infill(
         for (i, j) in edges {
             if seen.insert(*i) {
                 if let Some(v) = verts.get(*i) {
-                    info!(
-                        request_id = request_id,
-                        seed_point = ?v,
-                        edge_indices = ?(*i, *j),
-                        "derived_seed_from_edge"
+                    let key = (
+                        (v.0 * 1e6).round() as i64,
+                        (v.1 * 1e6).round() as i64,
+                        (v.2 * 1e6).round() as i64,
                     );
-                    seeds.push(*v);
+                    if seed_set.insert(key) {
+                        info!(
+                            request_id = request_id,
+                            seed_point = ?v,
+                            edge_indices = ?(*i, *j),
+                            "derived_seed_from_edge",
+                        );
+                        seeds.push(*v);
+                    }
                 }
             }
             if seen.insert(*j) {
                 if let Some(v) = verts.get(*j) {
-                    info!(
-                        request_id = request_id,
-                        seed_point = ?v,
-                        edge_indices = ?(*i, *j),
-                        "derived_seed_from_edge"
+                    let key = (
+                        (v.0 * 1e6).round() as i64,
+                        (v.1 * 1e6).round() as i64,
+                        (v.2 * 1e6).round() as i64,
                     );
-                    seeds.push(*v);
+                    if seed_set.insert(key) {
+                        info!(
+                            request_id = request_id,
+                            seed_point = ?v,
+                            edge_indices = ?(*i, *j),
+                            "derived_seed_from_edge",
+                        );
+                        seeds.push(*v);
+                    }
                 }
             }
         }
@@ -498,9 +527,7 @@ pub fn parse_infill(
         if out_of_bounds {
             warn!(
                 request_id = request_id,
-
                 "parse_infill: seed points outside bbox_min={:?} bbox_max={:?}", bmin, bmax
-
             );
         }
     }
@@ -593,7 +620,6 @@ mod tests {
         assert!(logs.contains("edge_indices"), "logs: {}", logs);
     }
 
-
     #[test]
     fn writes_log_file_in_home_dir() {
         use std::fs;
@@ -616,5 +642,4 @@ mod tests {
         let contents = fs::read_to_string(log_path).expect("log file exists");
         assert!(contents.contains("file logging test"));
     }
-
 }
