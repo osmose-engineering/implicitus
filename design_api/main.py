@@ -206,6 +206,10 @@ async def slice_model(
     if not model:
         raise HTTPException(status_code=404, detail="Model not found")
 
+    # Default missing spec versions to the current version so validation succeeds
+    if model.get("version") is None:
+        model["version"] = SPEC_VERSION
+
     def _extract_lattice_data(
         obj: Any,
     ) -> tuple[Optional[list], Optional[list], Optional[list]]:
