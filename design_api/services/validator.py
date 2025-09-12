@@ -71,14 +71,32 @@ def _validate_edge_indices(obj: Any) -> None:
         verts = obj.get("cell_vertices")
         if isinstance(edges, list) and isinstance(verts, list):
             n = len(verts)
+            seen = set()
+            degree = [0] * n
             for edge in edges:
-                if not isinstance(edge, (list, tuple)):
-                    continue
-                for idx in edge:
-                    if not isinstance(idx, int) or idx < 0 or idx >= n:
+                if not isinstance(edge, (list, tuple)) or len(edge) != 2:
+                    raise ValidationError("Edges must be 2-tuples of vertex indices")
+                i, j = edge
+                if not all(isinstance(idx, int) for idx in (i, j)):
+                    raise ValidationError("Edge indices must be integers")
+                for idx in (i, j):
+                    if idx < 0 or idx >= n:
                         raise ValidationError(
                             f"Edge index {idx} out of bounds for cell_vertices of length {n}"
                         )
+                if i == j:
+                    raise ValidationError("Edge cannot reference the same vertex twice")
+                key = (i, j) if i < j else (j, i)
+                if key in seen:
+                    raise ValidationError(f"Duplicate edge detected: {key}")
+                seen.add(key)
+                degree[i] += 1
+                degree[j] += 1
+            for idx, cnt in enumerate(degree):
+                if cnt not in (0, 2):
+                    raise ValidationError(
+                        f"Vertex {idx} participates in {cnt} edges; expected 0 or 2 for closed loops"
+                    )
         for v in obj.values():
             _validate_edge_indices(v)
     elif isinstance(obj, list):
