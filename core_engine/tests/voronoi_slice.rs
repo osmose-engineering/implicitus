@@ -42,6 +42,7 @@ fn voronoi_infill_slice_matches_expected() {
         mode: None,
         bbox_min: None,
         bbox_max: None,
+        cells: None,
     };
 
     let result = slice_model(&model, &config);
