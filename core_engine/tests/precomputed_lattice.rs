@@ -99,6 +99,7 @@ async fn seed_points_edge_list_and_cells_are_unique() {
         bbox_max: None,
         cell_vertices: Some(vec![(0.0, 0.0, 0.0), (1.0, 1.0, 1.0), (2.0, 2.0, 2.0)]),
         edge_list: Some(vec![(0usize, 1usize), (1, 2)]),
+
         cells: Some(vec![Cell3D {
             vertices: vec![
                 Point3D {
@@ -114,6 +115,7 @@ async fn seed_points_edge_list_and_cells_are_unique() {
             ],
             faces: vec![],
         }]),
+
     };
 
     let body = serde_json::to_vec(&req).unwrap();

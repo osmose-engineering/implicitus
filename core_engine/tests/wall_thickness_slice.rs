@@ -35,6 +35,7 @@ fn wall_thickness_shifts_contours() {
         mode: None,
         bbox_min: None,
         bbox_max: None,
+        cells: None,
     };
 
     let thin = slice_model(&model, &config);

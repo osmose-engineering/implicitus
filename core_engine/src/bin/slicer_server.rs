@@ -2,7 +2,7 @@
 
 use bytes::Bytes;
 use core_engine::implicitus::Model;
-use core_engine::slice::{slice_model, SliceConfig};
+use core_engine::slice::{slice_model, Cell, SliceConfig};
 
 use serde::{Deserialize, Serialize};
 use serde_json::Value;
@@ -229,6 +229,16 @@ pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejecti
         return Err(warp::reject::custom(InvalidBody));
     }
 
+    let cells = req.cells.as_ref().map(|cells| {
+        cells
+            .iter()
+            .map(|c| Cell {
+                vertices: c.vertices.iter().map(|p| (p.x, p.y, p.z)).collect(),
+                faces: c.faces.iter().map(|f| f.vertex_indices.clone()).collect(),
+            })
+            .collect::<Vec<_>>()
+    });
+
     let config = SliceConfig {
         z: req.layer,
         x_min: req.x_min.unwrap_or(-1.0),
@@ -244,6 +254,7 @@ pub async fn handle_slice(body: Bytes) -> Result<impl warp::Reply, warp::Rejecti
         mode,
         bbox_min: req.bbox_min.or(bbox_min),
         bbox_max: req.bbox_max.or(bbox_max),
+        cells,
     };
 
     info!(
