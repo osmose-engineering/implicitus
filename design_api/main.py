@@ -249,8 +249,10 @@ async def slice_model(
                     cell_verts = o.pop("cell_vertices")
                 if edges is None and isinstance(o.get("edge_list"), list):
                     edges = o.pop("edge_list")
-                if cells is None and isinstance(o.get("cells"), list):
+                if cells is None and isinstance(o.get("cells"), (list, dict)):
                     raw = o.pop("cells")
+                    if isinstance(raw, dict):
+                        raw = list(raw.values())
                     try:
                         cells = to_proto_cells(raw)
                     except Exception:
