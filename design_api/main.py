@@ -48,6 +48,31 @@ LOG_DIR = Path(__file__).parent
 CONVERSATION_LOG = LOG_DIR / "conversation_log.jsonl"
 SEED_DEBUG_LOG = LOG_DIR / "seed_debug.log"
 
+# Directory for persisted rendered specs
+RENDERED_SPEC_DIR = ROOT / "rendered_specs"
+RENDERED_SPEC_DIR.mkdir(exist_ok=True)
+
+
+def save_rendered_spec(session_id: str, spec: Any, suffix: str = "") -> None:
+    """Persist the rendered JSON spec for later debugging.
+
+    Specs are saved under ``rendered_specs`` at the repository root using the
+    session id as the filename. An optional ``suffix`` allows saving additional
+    variants (e.g., locked models).
+    """
+
+    try:
+        path = RENDERED_SPEC_DIR / f"{session_id}{suffix}.json"
+        with open(path, "w") as f:
+            json.dump(
+                spec,
+                f,
+                indent=2,
+                default=lambda o: o.tolist() if hasattr(o, "tolist") else o,
+            )
+    except Exception:
+        logging.exception("Failed to save spec for session %s", session_id)
+
 @dataclass
 class DesignState:
     draft_spec: list
@@ -498,6 +523,7 @@ async def review(req: dict, sid: Optional[str] = Query(None)):
 
         spec = _sanitize(spec)
         design_states[sid].draft_spec = spec
+        save_rendered_spec(sid, spec)
 
         log_turn(sid, "review", req.get("raw", ""), spec, summary=summary)
         return {"sid": sid, "spec": spec, "summary": summary}
@@ -613,6 +639,7 @@ async def update(req: UpdateRequest, sid: str = Query(...)):
 
     new_spec = _sanitize(new_spec)
     design_states[sid].draft_spec = new_spec
+    save_rendered_spec(sid, new_spec)
     log_turn(sid, "update", req.raw, new_spec)
     return {"sid": sid, "spec": new_spec, "summary": new_summary}
 
@@ -699,6 +726,7 @@ async def submit(req: dict, sid: str = Query(...)):
     validated = validate_proto(proto_dict)
     # Store locked model
     design_states[sid].locked_model = proto_dict
+    save_rendered_spec(sid, proto_dict, suffix="_locked")
     return {"sid": sid, "locked_model": proto_dict}
 
 if __name__ == "__main__":
