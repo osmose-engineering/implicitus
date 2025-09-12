@@ -143,6 +143,7 @@ def test_unknown_version_rejected():
 def test_accepts_bbox_enclosing_primitive():
     spec = {
         "id": "abc",
+        "version": 1,
         "root": {
             "primitive": {"sphere": {"radius": 1.0}},
             "modifiers": {
