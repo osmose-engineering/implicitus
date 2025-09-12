@@ -38,6 +38,12 @@ stub_voro_pkg.voronoi_gen = stub_voro_core
 sys.modules["design_api.services.voronoi_gen"] = stub_voro_pkg
 _services.voronoi_gen = stub_voro_pkg
 
+# Stub protobuf runtime version check expected by generated modules
+stub_runtime_version = types.ModuleType("google.protobuf.runtime_version")
+stub_runtime_version.Domain = types.SimpleNamespace(PUBLIC=0)
+stub_runtime_version.ValidateProtobufRuntimeVersion = lambda *args, **kwargs: None
+sys.modules["google.protobuf.runtime_version"] = stub_runtime_version
+
 from design_api.main import app, models, design_states
 
 

@@ -301,10 +301,54 @@ async def slice_model(
         walk(obj)
         return bbox_min, bbox_max
 
+    def _find_infill_spec(obj: Any) -> Optional[dict]:
+        """Return the first infill specification found in ``obj``."""
+        if isinstance(obj, dict):
+            infill = obj.get("modifiers", {}).get("infill")
+            if isinstance(infill, dict):
+                return infill
+            for v in obj.values():
+                found = _find_infill_spec(v)
+                if found is not None:
+                    return found
+        elif isinstance(obj, list):
+            for item in obj:
+                found = _find_infill_spec(item)
+                if found is not None:
+                    return found
+        return None
+
     # Extract auxiliary lattice data before validation so that unknown fields do
     # not cause protobuf parsing to fail.
     cell_vertices, edge_list, cells = _extract_lattice_data(model)
     bbox_min, bbox_max = _extract_bbox(model)
+
+    infill_spec = _find_infill_spec(model)
+    if infill_spec and (
+        cell_vertices is None or edge_list is None or cells is None
+    ):
+        pattern = infill_spec.get("pattern")
+        lattice: Optional[dict] = None
+        try:
+            if pattern == "voronoi":
+                lattice = generate_voronoi(infill_spec)
+            elif pattern in {"hex", "honeycomb"}:
+                lattice = generate_hex_lattice(infill_spec)
+        except Exception:
+            logging.exception(
+                "Failed to generate lattice data for pattern %s", pattern
+            )
+        if lattice:
+            cell_vertices = lattice.get("cell_vertices") or lattice.get("vertices")
+            edge_list = lattice.get("edge_list")
+            cells = lattice.get("cells")
+            infill_spec.pop("seed_points", None)
+            if bbox_min is None and lattice.get("bbox_min") is not None:
+                bbox_min = lattice.get("bbox_min")
+            if bbox_max is None and lattice.get("bbox_max") is not None:
+                bbox_max = lattice.get("bbox_max")
+        if cell_vertices is None or edge_list is None or cells is None:
+            raise HTTPException(status_code=400, detail="Incomplete infill data")
 
     def _trim_large_arrays(obj: Any, limit: int = 10) -> Any:
         if isinstance(obj, list):
