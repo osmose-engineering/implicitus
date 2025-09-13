@@ -396,21 +396,39 @@ async def slice_model(
         preserving_proto_field_name=True,
     )
 
+    def _ensure_modifier(mod: dict) -> None:
+        """Ensure modifier dictionaries contain expected list fields."""
+
+        mod.setdefault("constraints", [])
+        for nested in mod.get("modifiers", []):
+            if isinstance(nested, dict):
+                _ensure_modifier(nested)
+        for value in mod.values():
+            if isinstance(value, dict):
+                for nested in value.get("modifiers", []) if isinstance(value.get("modifiers"), list) else []:
+                    if isinstance(nested, dict):
+                        _ensure_modifier(nested)
+
     def _ensure_lists(obj: Any) -> None:
         """Recursively add missing list fields to ``obj``.
 
         Nodes in the model are expected to always include ``children``,
         ``modifiers`` and ``constraints`` keys even when empty. Older models or
         intermediate conversions may omit them, so we insert empty lists for
-        consistency before forwarding the payload to the slicer.
+        consistency before forwarding the payload to the slicer. Modifier
+        dictionaries also receive an empty ``constraints`` list and are checked
+        recursively for nested modifiers.
         """
 
         if isinstance(obj, dict):
             obj.setdefault("children", [])
-            obj.setdefault("modifiers", [])
+            modifiers = obj.setdefault("modifiers", [])
             obj.setdefault("constraints", [])
             for child in obj.get("children", []):
                 _ensure_lists(child)
+            for mod in modifiers:
+                if isinstance(mod, dict):
+                    _ensure_modifier(mod)
         elif isinstance(obj, list):
             for item in obj:
                 _ensure_lists(item)

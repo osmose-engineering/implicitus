@@ -164,6 +164,56 @@ def test_slice_sets_empty_constraints(client, monkeypatch):
     assert root["children"][0]["constraints"] == []
 
 
+def test_slice_sets_modifier_constraints(client, monkeypatch):
+    capture = {}
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: DummyClient(capture))
+    monkeypatch.setattr("design_api.main.validate_proto", lambda m, **k: m)
+    def _msg_to_dict(m, **k):
+        import copy
+
+        def _convert(o):
+            if isinstance(o, dict) and isinstance(o.get("modifiers"), dict):
+                o["modifiers"] = [{k: v} for k, v in o["modifiers"].items()]
+                for mod in o["modifiers"]:
+                    _convert(mod)
+            elif isinstance(o, dict):
+                for v in o.values():
+                    _convert(v)
+            elif isinstance(o, list):
+                for item in o:
+                    _convert(item)
+
+        res = copy.deepcopy(m)
+        _convert(res)
+        return res
+
+    monkeypatch.setattr("design_api.main.MessageToDict", _msg_to_dict)
+    monkeypatch.setattr(
+        "design_api.main.generate_hex_lattice",
+        lambda spec: {"cell_vertices": [[0, 0, 0]], "edge_list": [], "cells": []},
+    )
+    model = {
+        "id": "abc",
+        "version": SPEC_VERSION,
+        "root": {
+            "modifiers": {
+                "infill": {
+                    "pattern": "hex",
+                    "modifiers": {"shell": {"thickness": 1.0}},
+                }
+            }
+        },
+    }
+    client.post("/models", json=model)
+
+    resp = client.get("/models/abc/slices?layer=0")
+    assert resp.status_code == 200
+    mod = capture["json"]["model"]["root"]["modifiers"][0]
+    assert mod["constraints"] == []
+    nested = mod["infill"]["modifiers"][0]
+    assert nested["constraints"] == []
+
+
 def test_slice_error_cors_headers(client):
     resp = client.get(
         "/models/missing/slices?layer=0",
