@@ -397,9 +397,10 @@ async def slice_model(
     )
 
     def _ensure_children(obj: Any) -> None:
-        """Recursively add missing ``children`` lists to ``obj``."""
+        """Recursively add missing ``children`` and ``modifiers`` lists to ``obj``."""
         if isinstance(obj, dict):
             obj.setdefault("children", [])
+            obj.setdefault("modifiers", [])
             for child in obj.get("children", []):
                 _ensure_children(child)
         elif isinstance(obj, list):
@@ -826,7 +827,8 @@ async def submit(req: dict, sid: str = Query(...)):
     proto_dict = {
         'id': str(uuid.uuid4()),
         'root': {
-            'children': children
+            'children': children,
+            'modifiers': [],
         }
     }
     # Validate against protobuf
