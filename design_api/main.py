@@ -394,8 +394,19 @@ async def slice_model(
     model = MessageToDict(
         proto_model,
         preserving_proto_field_name=True,
-        including_default_value_fields=True,
     )
+
+    def _ensure_children(obj: Any) -> None:
+        """Recursively add missing ``children`` lists to ``obj``."""
+        if isinstance(obj, dict):
+            obj.setdefault("children", [])
+            for child in obj.get("children", []):
+                _ensure_children(child)
+        elif isinstance(obj, list):
+            for item in obj:
+                _ensure_children(item)
+
+    _ensure_children(model.get("root"))
     logging.debug(
         "slice_model: bbox_min=%s bbox_max=%s cell_vertices[:3]=%s edge_list[:3]=%s cells_len=%s",
         bbox_min,

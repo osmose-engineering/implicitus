@@ -120,3 +120,12 @@ def test_slice_empty_children_round_trip(client, monkeypatch):
     resp = client.get("/models/abc/slices?layer=0")
     assert resp.status_code == 200
     assert capture["json"]["model"]["root"]["children"] == []
+
+
+def test_slice_error_cors_headers(client):
+    resp = client.get(
+        "/models/missing/slices?layer=0",
+        headers={"Origin": "http://localhost:3000"},
+    )
+    assert resp.status_code == 404
+    assert resp.headers["access-control-allow-origin"] == "http://localhost:3000"
