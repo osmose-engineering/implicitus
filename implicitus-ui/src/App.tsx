@@ -93,6 +93,7 @@ import VoronoiCanvas, { EDGE_Z_VARIATION_TOLERANCE } from './components/VoronoiC
 import { Checkbox } from './components/UI';
 import { Tabs, TabList, Tab, TabPanel } from 'react-tabs';
 import 'react-tabs/style/react-tabs.css';
+import { postJsonWithSid } from './api';
 
 const API_BASE = import.meta.env.VITE_API_BASE_URL || 'http://localhost:8000';
 // Simple debounce helper
@@ -149,13 +150,7 @@ function App() {
   const fetchVoronoiMesh = async (pts: [number, number, number][]) => {
     if (!pts || pts.length === 0) return;
     try {
-      const resp = await fetch(`${API_BASE}/design/mesh`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ seed_points: pts }),
-      });
-      if (!resp.ok) return;
-      const data = await resp.json();
+      const data = await postJsonWithSid(API_BASE, '/design/mesh', { seed_points: pts });
       setMeshVertices(Array.isArray(data.vertices) ? data.vertices : []);
       setMeshEdges(Array.isArray(data.edges) ? data.edges : []);
     } catch (err) {
@@ -169,16 +164,7 @@ function App() {
   const fetchSlice = async (model: { id: string; version: number; [key: string]: any }) => {
     if (!model) return;
     try {
-      const postResp = await fetch(`${API_BASE}/models`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(model),
-      });
-      if (!postResp.ok) {
-        setError(`Model upload failed: ${postResp.status} ${postResp.statusText}`);
-        return;
-      }
-      const postData = await postResp.json().catch(() => null);
+      const postData = await postJsonWithSid(API_BASE, '/models', model);
       const modelId = postData?.id;
       if (!modelId) {
         setError('Model upload response missing id');
@@ -231,19 +217,12 @@ function App() {
     setLoading(true);
     try {
       const parsed = JSON.parse(specText);
-      // include sessionId if available
-      const validateBody: any = { spec: parsed };
-      if (sessionId) validateBody.sid = sessionId;
-      const response = await fetch(`${API_BASE}/design/review`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify(validateBody),
-      });
-      const rawText = await response.text();
-      if (!response.ok) {
-        throw new Error(`Validation error: ${rawText}`);
-      }
-      const data = JSON.parse(rawText);
+      const data = await postJsonWithSid(
+        API_BASE,
+        '/design/review',
+        { spec: parsed },
+        sessionId || undefined
+      );
       setSummary(data.summary || 'Validation successful.');
       setMessages(prev => [...prev, { speaker: 'assistant', text: `Validation: ${data.summary}` }]);
     } catch (err: any) {
@@ -275,7 +254,6 @@ function App() {
     if (sessionId) {
       bodyData.raw = prompt;
       bodyData.spec = spec;
-      bodyData.sid = sessionId;
     } else if (prompt.trim()) {
       // New design request: send only the raw prompt
       bodyData.raw = prompt;
@@ -302,27 +280,8 @@ function App() {
       const isUpdate = Boolean(sessionId) || (spec.length > 0 && prompt.trim().length > 0);
       const endpoint = isUpdate ? '/design/update' : '/design/review';
       console.log('[UI] using endpoint →', endpoint);
-      const response = await fetch(`${API_BASE}${endpoint}`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify(bodyData),
-      });
-      // read raw text and debug
-      const rawText = await response.text();
-      console.log('[UI] raw response text:', rawText);
-      if (!response.ok) {
-        throw new Error(`Server error: ${response.status} ${response.statusText} - ${rawText}`);
-      }
-      let data: any;
-      try {
-        data = JSON.parse(rawText);
-        console.log('[UI] API spec:', data.spec);
-      } catch (parseError) {
-        console.error('[UI] JSON parse error:', parseError);
-        throw new Error(`Failed to parse JSON spec: ${parseError}`);
-      }
+      const data = await postJsonWithSid(API_BASE, endpoint, bodyData, sessionId || undefined);
+      console.log('[UI] API spec:', data.spec);
       // Handle updated spec with nested modifiers
       if (data.spec) {
         const specArray = getSpecArray(data);
@@ -414,18 +373,12 @@ function App() {
     setLoading(true);
     try {
       const parsed = JSON.parse(specText);
-      const response = await fetch(`${API_BASE}/design/submit`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ spec: parsed, sid: sessionId, raw: "" }),
-      });
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Server error: ${response.status} ${response.statusText} - ${text}`);
-      }
-      const data = await response.json();
+      const data = await postJsonWithSid(
+        API_BASE,
+        '/design/submit',
+        { spec: parsed, raw: '' },
+        sessionId || undefined
+      );
       console.log('API spec:', data.spec);
       console.log('[UI] Confirm response data:', data);
       if (data.debug) {
@@ -466,18 +419,12 @@ function App() {
         }
         return node;
       });
-      const response = await fetch(`${API_BASE}/design/update`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({ spec: specToSend, sid: sessionId, raw: '' }),
-      });
-      if (!response.ok) {
-        const text = await response.text();
-        throw new Error(`Server error: ${response.status} ${response.statusText} - ${text}`);
-      }
-      const data = await response.json();
+      const data = await postJsonWithSid(
+        API_BASE,
+        '/design/update',
+        { spec: specToSend, raw: '' },
+        sessionId || undefined
+      );
       const specArray = getSpecArray(data);
       const sanitizedSpec = Array.isArray(specArray) ? sanitizeInfillCells(specArray) : null;
       if (Array.isArray(sanitizedSpec)) {
@@ -538,14 +485,12 @@ function App() {
     });
     setLoading(true);
     try {
-      const response = await fetch(`${API_BASE}/design/update`, {
-        method: 'POST',
-        headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ spec: specToSend, sid: sessionId, raw: "" }),
-      });
-      const rawText = await response.text();
-      if (!response.ok) throw new Error(rawText);
-      const data = JSON.parse(rawText);
+      const data = await postJsonWithSid(
+        API_BASE,
+        '/design/update',
+        { spec: specToSend, raw: '' },
+        sessionId || undefined
+      );
       const specArray = getSpecArray(data);
       const sanitizedSpec = Array.isArray(specArray) ? sanitizeInfillCells(specArray) : null;
       if (Array.isArray(sanitizedSpec)) {
