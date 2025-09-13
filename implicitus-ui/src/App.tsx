@@ -221,8 +221,11 @@ function App() {
         API_BASE,
         '/design/review',
         { spec: parsed },
-        sessionId || undefined
+        sessionId
       );
+      if (data.sid && !sessionId) {
+        setSessionId(data.sid);
+      }
       setSummary(data.summary || 'Validation successful.');
       setMessages(prev => [...prev, { speaker: 'assistant', text: `Validation: ${data.summary}` }]);
     } catch (err: any) {
