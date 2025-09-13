@@ -275,6 +275,26 @@ def validate_model_spec(spec_dict: dict, ignore_unknown_fields: bool = False) ->
     _validate_edge_indices(spec_dict)
     _validate_bbox_contains_primitive(spec_dict)
 
+    def _strip_constraints(obj: Any) -> None:
+        """Remove ``constraints`` keys until protobuf definitions support them.
+
+        The current protobuf schema used for validation does not define a
+        ``constraints`` field on ``Node``. Downstream components expect models to
+        include this key (defaulting to an empty list), so the validation step
+        temporarily strips it to avoid parse errors. Once the schema is updated,
+        this helper can be removed.
+        """
+
+        if isinstance(obj, dict):
+            obj.pop("constraints", None)
+            for v in obj.values():
+                _strip_constraints(v)
+        elif isinstance(obj, list):
+            for item in obj:
+                _strip_constraints(item)
+
+    _strip_constraints(spec_dict)
+
     logging.debug("Normalized spec: %s", reprlib.repr(spec_dict))
 
     model = Model()

@@ -143,6 +143,27 @@ def test_slice_sets_empty_modifiers(client, monkeypatch):
     assert root["children"][0]["modifiers"] == []
 
 
+def test_slice_sets_empty_constraints(client, monkeypatch):
+    capture = {}
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: DummyClient(capture))
+    model = {
+        "id": "abc",
+        "version": SPEC_VERSION,
+        "root": {
+            "children": [
+                {"primitive": {"box": {"size": {"x": 1, "y": 1, "z": 1}}}}
+            ]
+        },
+    }
+    client.post("/models", json=model)
+
+    resp = client.get("/models/abc/slices?layer=0")
+    assert resp.status_code == 200
+    root = capture["json"]["model"]["root"]
+    assert root["constraints"] == []
+    assert root["children"][0]["constraints"] == []
+
+
 def test_slice_error_cors_headers(client):
     resp = client.get(
         "/models/missing/slices?layer=0",
