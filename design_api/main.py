@@ -239,9 +239,15 @@ async def slice_model(
                 for f in c.get("faces", []):
                     face = msg.faces.add()
                     face.vertex_indices.extend(int(i) for i in f)
-                proto.append(
-                    MessageToDict(msg, preserving_proto_field_name=True)
+                cell_dict = MessageToDict(
+                    msg, preserving_proto_field_name=True
                 )
+                for vert in cell_dict.get("vertices", []):
+                    vert.setdefault("x", 0.0)
+                    vert.setdefault("y", 0.0)
+                    vert.setdefault("z", 0.0)
+                cell_dict.setdefault("faces", [])
+                proto.append(cell_dict)
             return proto
 
         def walk(o: Any) -> None:
