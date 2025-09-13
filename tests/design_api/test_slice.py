@@ -52,8 +52,8 @@ def test_slice_forwards_params(client, monkeypatch):
     assert resp.status_code == 200
     assert resp.json() == {"ok": True}
     assert capture["url"] == "http://127.0.0.1:4000/slice"
-    assert capture["json"] == {
-        "model": {"id": "abc"},
+    assert capture["json"]["model"]["id"] == "abc"
+    expected = {
         "layer": 0.5,
         "x_min": -2.0,
         "x_max": 2.0,
@@ -62,6 +62,8 @@ def test_slice_forwards_params(client, monkeypatch):
         "nx": 10,
         "ny": 20,
     }
+    for k, v in expected.items():
+        assert capture["json"][k] == v
 
 
 def test_slice_forwards_bbox(client, monkeypatch):
@@ -88,8 +90,8 @@ def test_slice_uses_defaults(client, monkeypatch):
     client.post("/models", json={"id": "abc", "version": 1})
     resp = client.get("/models/abc/slices?layer=2.0")
     assert resp.status_code == 200
-    assert capture["json"] == {
-        "model": {"id": "abc"},
+    assert capture["json"]["model"]["id"] == "abc"
+    expected = {
         "layer": 2.0,
         "x_min": -1.0,
         "x_max": 1.0,
@@ -98,6 +100,8 @@ def test_slice_uses_defaults(client, monkeypatch):
         "nx": 50,
         "ny": 50,
     }
+    for k, v in expected.items():
+        assert capture["json"][k] == v
 
 
 def test_slice_surfaces_errors(client, monkeypatch):

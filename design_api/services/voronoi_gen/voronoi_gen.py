@@ -419,6 +419,22 @@ def build_hex_lattice(
                 pts, bbox_min, bbox_max, **cell_kwargs
             )
             cell_vertices = verts
+
+        def _attach_faces(cell_data):
+            if isinstance(cell_data, dict):
+                verts = cell_data.get("vertices", cell_data)
+                faces = cell_data.get("faces")
+                if faces is None:
+                    faces = [list(range(len(verts)))]
+                return {"vertices": verts, "faces": faces}
+            verts = cell_data
+            return {"vertices": verts, "faces": [list(range(len(verts)))]}
+
+        if isinstance(cells, dict):
+            cells = {k: _attach_faces(v) for k, v in cells.items()}
+        else:
+            cells = [_attach_faces(v) for v in cells]
+
         return pts, cell_vertices, edge_list, cells
 
     # Ensure edges are bidirectional

@@ -60,7 +60,6 @@ def _map_base_shape(spec: dict) -> dict:
         'id': id_str,
         'root': {'primitive': primitive, 'children': [], 'modifiers': [], 'constraints': []},
         'constraints': [],
-        'modifiers': [],
     }
 
 def map_primitive(node: dict, request_id: str | None = None) -> dict:
@@ -151,7 +150,6 @@ def map_primitive(node: dict, request_id: str | None = None) -> dict:
     # compatibility with the spec format.
     mapped['version'] = 1
     mapped.setdefault('constraints', [])
-    mapped.setdefault('modifiers', [])
     logger.debug("map_primitive output mapped", extra={"request_id": request_id, "mapped": mapped})
     return mapped
 

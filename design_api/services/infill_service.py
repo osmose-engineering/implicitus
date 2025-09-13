@@ -99,12 +99,14 @@ def generate_voronoi(spec: Dict[str, Any]) -> Dict[str, Any]:
     spacing = spec.get("spacing") or spec.get("min_dist") or 2.0
     adjacency = compute_voronoi_adjacency(pts, spacing=spacing * 0.5)
     edge_list = _edge_list_from_adjacency(adjacency)
+    raw_cells = spec.get("cells")
+    cells = _normalize_cells(raw_cells)
 
     res = {
         "seed_points": pts,
         "vertices": pts,
         "edge_list": edge_list,
-        "cells": spec.get("cells"),
+        "cells": cells,
         "bbox_min": spec.get("bbox_min"),
         "bbox_max": spec.get("bbox_max"),
     }
@@ -112,7 +114,7 @@ def generate_voronoi(spec: Dict[str, Any]) -> Dict[str, Any]:
     res["debug"] = {
         "seed_count": len(res.get("seed_points", [])),
         "infill_type": spec.get("pattern", "voronoi"),
-        "mode": "uniform" if isinstance(res.get("cells"), dict) else "organic",
+        "mode": "uniform" if isinstance(raw_cells, dict) else "organic",
     }
 
     return res
