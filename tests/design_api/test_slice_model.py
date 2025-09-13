@@ -101,3 +101,22 @@ def test_slice_generates_lattice_when_missing(client, monkeypatch):
     assert resp.status_code == 200
     assert capture["json"]["cell_vertices"] == [[0, 0, 0]]
     assert capture["json"]["edge_list"] == [[0, 0]]
+
+
+def test_slice_empty_children_round_trip(client, monkeypatch):
+    capture = {}
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: DummyClient(capture))
+    model = {
+        "id": "abc",
+        "version": SPEC_VERSION,
+        "root": {"children": []},
+    }
+    client.post("/models", json=model)
+
+    resp = client.get("/models/abc")
+    assert resp.status_code == 200
+    assert resp.json()["root"]["children"] == []
+
+    resp = client.get("/models/abc/slices?layer=0")
+    assert resp.status_code == 200
+    assert capture["json"]["model"]["root"]["children"] == []

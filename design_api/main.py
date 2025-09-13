@@ -394,6 +394,7 @@ async def slice_model(
     model = MessageToDict(
         proto_model,
         preserving_proto_field_name=True,
+        including_default_value_fields=True,
     )
     logging.debug(
         "slice_model: bbox_min=%s bbox_max=%s cell_vertices[:3]=%s edge_list[:3]=%s cells_len=%s",
