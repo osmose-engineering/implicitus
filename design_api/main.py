@@ -33,7 +33,10 @@ from dataclasses import dataclass, field
 from design_api.services.json_cleaner import clean_llm_output
 from design_api.services.llm_service import generate_design_spec
 from design_api.services.mapping import map_primitive as map_to_proto_dict
-from design_api.services.validator import validate_model_spec as validate_proto
+from design_api.services.validator import (
+    validate_model_spec as validate_proto,
+    ensure_repeated_fields,
+)
 from google.protobuf.json_format import MessageToDict
 from ai_adapter.schema.implicitus_pb2 import Cell3D
 from ai_adapter.csg_adapter import review_request, generate_summary, update_request
@@ -353,8 +356,12 @@ async def slice_model(
                 bbox_min = lattice.get("bbox_min")
             if bbox_max is None and lattice.get("bbox_max") is not None:
                 bbox_max = lattice.get("bbox_max")
-        if cell_vertices is None or edge_list is None or cells is None:
-            raise HTTPException(status_code=400, detail="Incomplete infill data")
+        if cell_vertices is None:
+            cell_vertices = []
+        if edge_list is None:
+            edge_list = []
+        if cells is None:
+            cells = []
 
     def _trim_large_arrays(obj: Any, limit: int = 10) -> Any:
         if isinstance(obj, list):
@@ -402,48 +409,31 @@ async def slice_model(
         preserving_proto_field_name=True,
     )
 
-    # Ensure top-level lists exist for downstream consumers
-    model.setdefault("constraints", [])
-    model.setdefault("modifiers", [])
+    ensure_repeated_fields(model)
 
-    def _ensure_modifier(mod: dict) -> None:
-        """Ensure modifier dictionaries contain expected list fields."""
-
-        mod.setdefault("constraints", [])
-        for nested in mod.get("modifiers", []):
-            if isinstance(nested, dict):
-                _ensure_modifier(nested)
-        for value in mod.values():
-            if isinstance(value, dict):
-                for nested in value.get("modifiers", []) if isinstance(value.get("modifiers"), list) else []:
-                    if isinstance(nested, dict):
-                        _ensure_modifier(nested)
-
-    def _ensure_lists(obj: Any) -> None:
-        """Recursively add missing list fields to ``obj``.
-
-        Nodes in the model are expected to always include ``children``,
-        ``modifiers`` and ``constraints`` keys even when empty. Older models or
-        intermediate conversions may omit them, so we insert empty lists for
-        consistency before forwarding the payload to the slicer. Modifier
-        dictionaries also receive an empty ``constraints`` list and are checked
-        recursively for nested modifiers.
-        """
+    def _ensure_constraints(obj: Any) -> None:
+        """Recursively add missing ``constraints`` lists."""
 
         if isinstance(obj, dict):
-            obj.setdefault("children", [])
-            modifiers = obj.setdefault("modifiers", [])
             obj.setdefault("constraints", [])
             for child in obj.get("children", []):
-                _ensure_lists(child)
-            for mod in modifiers:
+                _ensure_constraints(child)
+            for mod in obj.get("modifiers", []):
                 if isinstance(mod, dict):
-                    _ensure_modifier(mod)
+                    _ensure_constraints(mod)
+            for key, val in obj.items():
+                if key == "constraints":
+                    continue
+                if isinstance(val, dict):
+                    _ensure_constraints(val)
+                elif isinstance(val, list):
+                    for item in val:
+                        _ensure_constraints(item)
         elif isinstance(obj, list):
             for item in obj:
-                _ensure_lists(item)
+                _ensure_constraints(item)
 
-    _ensure_lists(model.get("root"))
+    _ensure_constraints(model.get("root"))
     logging.debug(
         "slice_model: bbox_min=%s bbox_max=%s cell_vertices[:3]=%s edge_list[:3]=%s cells_len=%s",
         bbox_min,

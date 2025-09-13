@@ -425,10 +425,10 @@ def build_hex_lattice(
                 verts = cell_data.get("vertices", cell_data)
                 faces = cell_data.get("faces")
                 if faces is None:
-                    faces = [list(range(len(verts)))]
+                    faces = []
                 return {"vertices": verts, "faces": faces}
             verts = cell_data
-            return {"vertices": verts, "faces": [list(range(len(verts)))]}
+            return {"vertices": verts, "faces": []}
 
         if isinstance(cells, dict):
             cells = {k: _attach_faces(v) for k, v in cells.items()}

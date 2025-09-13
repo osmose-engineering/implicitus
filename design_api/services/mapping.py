@@ -1,7 +1,14 @@
 import uuid
 from ai_adapter.schema.implicitus_pb2 import Primitive
-from ai_adapter.schema.implicitus_pb2 import Modifier, Infill, Shell, BooleanOp, VoronoiLattice
+from ai_adapter.schema.implicitus_pb2 import (
+    Modifier,
+    Infill,
+    Shell,
+    BooleanOp,
+    VoronoiLattice,
+)
 import logging
+from design_api.services.validator import ensure_repeated_fields
 
 logger = logging.getLogger(__name__)
 
@@ -150,6 +157,7 @@ def map_primitive(node: dict, request_id: str | None = None) -> dict:
     # compatibility with the spec format.
     mapped['version'] = 1
     mapped.setdefault('constraints', [])
+    ensure_repeated_fields(mapped)
     logger.debug("map_primitive output mapped", extra={"request_id": request_id, "mapped": mapped})
     return mapped
 
@@ -204,13 +212,15 @@ def map_to_proto_dict(spec, request_id: str | None = None):
             "modifiers": [],
         }
         _ensure_node_lists(root)
-        return {
+        res = {
             "id": model_id,
             "version": 1,
             "root": root,
             "constraints": [],
             "modifiers": [],
         }
+        ensure_repeated_fields(res)
+        return res
     # Log uniform seed points and associated lattice data when present
     infill = spec.get("modifiers", {}).get("infill", {}) if isinstance(spec, dict) else {}
     seeds = infill.get("seed_points") or []
@@ -233,4 +243,5 @@ def map_to_proto_dict(spec, request_id: str | None = None):
     _ensure_node_lists(mapped.get("root"))
     mapped.setdefault("constraints", [])
     mapped.setdefault("modifiers", [])
+    ensure_repeated_fields(mapped)
     return mapped
