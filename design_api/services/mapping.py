@@ -15,6 +15,26 @@ class SomeMappingError(Exception):
     """Raised when mapping a primitive spec fails due to unknown shape."""
     pass
 
+
+def _ensure_node_lists(node: dict | list) -> None:
+    """Recursively add empty list fields to mapping results.
+
+    Every node in the JSON representation is expected to include ``children``,
+    ``modifiers`` and ``constraints`` keys. When mapping primitives and
+    composing boolean operations, some nodes might omit these fields. This
+    helper mutates ``node`` in place to guarantee the lists exist.
+    """
+
+    if isinstance(node, dict):
+        node.setdefault("children", [])
+        node.setdefault("modifiers", [])
+        node.setdefault("constraints", [])
+        for child in node.get("children", []):
+            _ensure_node_lists(child)
+    elif isinstance(node, list):
+        for item in node:
+            _ensure_node_lists(item)
+
 def _map_base_shape(spec: dict) -> dict:
     """
     Internal: map a simple shape spec to the proto dict structure.
@@ -35,10 +55,10 @@ def _map_base_shape(spec: dict) -> dict:
         primitive = {'cylinder': {'radius': spec['radius_mm'], 'height': spec['height_mm']}}
     else:
         raise SomeMappingError(f"Unknown shape: {shape}")
-    # Ensure leaf nodes include an explicit empty children list for consistency
+    # Ensure leaf nodes include explicit empty lists for consistency
     return {
         'id': id_str,
-        'root': {'primitive': primitive, 'children': [], 'modifiers': []},
+        'root': {'primitive': primitive, 'children': [], 'modifiers': [], 'constraints': []},
     }
 
 def map_primitive(node: dict, request_id: str | None = None) -> dict:
@@ -123,7 +143,7 @@ def map_primitive(node: dict, request_id: str | None = None) -> dict:
         }
 
     # Return final wrapped dict with version information
-    root.setdefault('modifiers', [])
+    _ensure_node_lists(root)
     mapped['root'] = root
     # Attach a top-level version so downstream consumers can assert
     # compatibility with the spec format.
@@ -176,14 +196,16 @@ def map_to_proto_dict(spec, request_id: str | None = None):
     # If map_primitive returned a list, wrap in a union op
     if isinstance(mapped, list):
         model_id = str(uuid.uuid4())
+        root = {
+            "booleanOp": {"union": {}},
+            "children": mapped,
+            "modifiers": [],
+        }
+        _ensure_node_lists(root)
         return {
             "id": model_id,
             "version": 1,
-            "root": {
-                "booleanOp": {"union": {}},
-                "children": mapped,
-                "modifiers": [],
-            }
+            "root": root,
         }
     # Log uniform seed points and associated lattice data when present
     infill = spec.get("modifiers", {}).get("infill", {}) if isinstance(spec, dict) else {}
@@ -204,4 +226,5 @@ def map_to_proto_dict(spec, request_id: str | None = None):
             )
 
     # Otherwise it's already a single-node dict
+    _ensure_node_lists(mapped.get("root"))
     return mapped

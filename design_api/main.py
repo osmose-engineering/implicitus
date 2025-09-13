@@ -396,18 +396,26 @@ async def slice_model(
         preserving_proto_field_name=True,
     )
 
-    def _ensure_children(obj: Any) -> None:
-        """Recursively add missing ``children`` and ``modifiers`` lists to ``obj``."""
+    def _ensure_lists(obj: Any) -> None:
+        """Recursively add missing list fields to ``obj``.
+
+        Nodes in the model are expected to always include ``children``,
+        ``modifiers`` and ``constraints`` keys even when empty. Older models or
+        intermediate conversions may omit them, so we insert empty lists for
+        consistency before forwarding the payload to the slicer.
+        """
+
         if isinstance(obj, dict):
             obj.setdefault("children", [])
             obj.setdefault("modifiers", [])
+            obj.setdefault("constraints", [])
             for child in obj.get("children", []):
-                _ensure_children(child)
+                _ensure_lists(child)
         elif isinstance(obj, list):
             for item in obj:
-                _ensure_children(item)
+                _ensure_lists(item)
 
-    _ensure_children(model.get("root"))
+    _ensure_lists(model.get("root"))
     logging.debug(
         "slice_model: bbox_min=%s bbox_max=%s cell_vertices[:3]=%s edge_list[:3]=%s cells_len=%s",
         bbox_min,

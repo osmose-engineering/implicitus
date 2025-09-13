@@ -8,6 +8,7 @@ def test_map_sphere_minimal():
     out = map_primitive(inp)
     assert out["root"]["primitive"]["sphere"]["radius"] == 5.0
     assert out["root"]["children"] == []
+    assert out["root"]["constraints"] == []
 
 def test_map_box_nonuniform():
     inp = {"shape":"box","size_mm":[10,20,30]}
