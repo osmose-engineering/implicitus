@@ -59,6 +59,8 @@ def _map_base_shape(spec: dict) -> dict:
     return {
         'id': id_str,
         'root': {'primitive': primitive, 'children': [], 'modifiers': [], 'constraints': []},
+        'constraints': [],
+        'modifiers': [],
     }
 
 def map_primitive(node: dict, request_id: str | None = None) -> dict:
@@ -148,6 +150,8 @@ def map_primitive(node: dict, request_id: str | None = None) -> dict:
     # Attach a top-level version so downstream consumers can assert
     # compatibility with the spec format.
     mapped['version'] = 1
+    mapped.setdefault('constraints', [])
+    mapped.setdefault('modifiers', [])
     logger.debug("map_primitive output mapped", extra={"request_id": request_id, "mapped": mapped})
     return mapped
 
@@ -206,6 +210,8 @@ def map_to_proto_dict(spec, request_id: str | None = None):
             "id": model_id,
             "version": 1,
             "root": root,
+            "constraints": [],
+            "modifiers": [],
         }
     # Log uniform seed points and associated lattice data when present
     infill = spec.get("modifiers", {}).get("infill", {}) if isinstance(spec, dict) else {}
@@ -227,4 +233,6 @@ def map_to_proto_dict(spec, request_id: str | None = None):
 
     # Otherwise it's already a single-node dict
     _ensure_node_lists(mapped.get("root"))
+    mapped.setdefault("constraints", [])
+    mapped.setdefault("modifiers", [])
     return mapped

@@ -164,6 +164,22 @@ def test_slice_sets_empty_constraints(client, monkeypatch):
     assert root["children"][0]["constraints"] == []
 
 
+def test_slice_top_level_empty_constraints(client, monkeypatch):
+    capture = {}
+    monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: DummyClient(capture))
+    model = {
+        "id": "abc",
+        "version": SPEC_VERSION,
+        "root": {"children": []},
+        "constraints": [],
+    }
+    client.post("/models", json=model)
+
+    resp = client.get("/models/abc/slices?layer=0")
+    assert resp.status_code == 200
+    assert capture["json"]["model"]["constraints"] == []
+
+
 def test_slice_sets_modifier_constraints(client, monkeypatch):
     capture = {}
     monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: DummyClient(capture))

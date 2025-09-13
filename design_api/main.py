@@ -396,6 +396,10 @@ async def slice_model(
         preserving_proto_field_name=True,
     )
 
+    # Ensure top-level lists exist for downstream consumers
+    model.setdefault("constraints", [])
+    model.setdefault("modifiers", [])
+
     def _ensure_modifier(mod: dict) -> None:
         """Ensure modifier dictionaries contain expected list fields."""
 
