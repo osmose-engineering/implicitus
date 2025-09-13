@@ -43,11 +43,9 @@ def test_slice_defaults_version(client, monkeypatch):
     assert models["abc"]["version"] == SPEC_VERSION
 
 
-def test_slice_incomplete_lattice_returns_400(client, monkeypatch):
+def test_slice_incomplete_lattice_allowed(client, monkeypatch):
     capture = {}
     monkeypatch.setattr(httpx, "AsyncClient", lambda *args, **kwargs: DummyClient(capture))
-    # Bypass heavy validation
-    monkeypatch.setattr("design_api.main.validate_proto", lambda m, **k: m)
     model = {
         "id": "abc",
         "version": SPEC_VERSION,
@@ -62,8 +60,8 @@ def test_slice_incomplete_lattice_returns_400(client, monkeypatch):
     }
     client.post("/models", json=model)
     resp = client.get("/models/abc/slices?layer=0")
-    assert resp.status_code == 400
-    assert capture == {}
+    assert resp.status_code == 200
+    assert capture["json"]["model"]["root"]["children"][0]["modifiers"][0]["infill"]["seed_points"] == []
 
 
 def test_slice_generates_lattice_when_missing(client, monkeypatch):

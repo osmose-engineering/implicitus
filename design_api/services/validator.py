@@ -1,6 +1,8 @@
 from ai_adapter.schema.implicitus_pb2 import Model
+from ai_adapter.schema import implicitus_pb2 as pb
 from google.protobuf.json_format import ParseDict, MessageToDict, ParseError
 from google.protobuf.message import DecodeError
+from google.protobuf.descriptor import FieldDescriptor, Descriptor
 import logging
 import reprlib
 import re
@@ -12,6 +14,55 @@ SUPPORTED_VERSIONS = {1}
 class ValidationError(Exception):
     """Raised when the JSON spec cannot be parsed into the protobuf schema."""
     pass
+
+
+_EXTRA_MESSAGE_DESCRIPTORS: dict[str, Descriptor] = {
+    # ``booleanOp`` appears on ``Node`` even though the protobuf schema only
+    # defines boolean operations as modifiers. Treat the value as a BooleanOp
+    # message so its repeated fields (e.g., ``nodes``) are populated.
+    "booleanOp": pb.BooleanOp.DESCRIPTOR,
+    # ``lattice`` is used as a primitive wrapper for infill parameters and maps
+    # to the ``Infill`` message descriptor.
+    "lattice": pb.Infill.DESCRIPTOR,
+    # Support explicit Voronoi lattice modifiers.
+    "voronoi_lattice": pb.VoronoiLattice.DESCRIPTOR,
+    "voronoiLattice": pb.VoronoiLattice.DESCRIPTOR,
+}
+
+def ensure_repeated_fields(
+    obj: Any, descriptor: Descriptor = pb.Model.DESCRIPTOR
+) -> None:
+    """Recursively insert empty lists for missing repeated protobuf fields."""
+
+    if not isinstance(obj, dict):
+        return
+
+    for field in descriptor.fields:
+        if field.label == FieldDescriptor.LABEL_REPEATED:
+            obj.setdefault(field.name, [])
+        if field.type == FieldDescriptor.TYPE_MESSAGE:
+            if field.label == FieldDescriptor.LABEL_REPEATED:
+                for item in obj.get(field.name, []):
+                    if isinstance(item, dict):
+                        ensure_repeated_fields(item, field.message_type)
+            else:
+                child = obj.get(field.name)
+                if isinstance(child, dict):
+                    ensure_repeated_fields(child, field.message_type)
+
+    # Handle ad-hoc fields that correspond to known message types but are not
+    # declared in ``descriptor`` (e.g., ``booleanOp`` on ``Node``).
+    for key, value in obj.items():
+        desc = _EXTRA_MESSAGE_DESCRIPTORS.get(key)
+        if desc is None:
+            continue
+        if isinstance(value, dict):
+            ensure_repeated_fields(value, desc)
+        elif isinstance(value, list):
+            for item in value:
+                if isinstance(item, dict):
+                    ensure_repeated_fields(item, desc)
+
 
 
 def _validate_seed_points(obj: Any) -> None:
